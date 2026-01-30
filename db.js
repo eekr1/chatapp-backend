@@ -3,10 +3,10 @@ const { Pool } = require('pg');
 const connectionString = process.env.DATABASE_URL || 'postgresql://chatapp_reports_user:praxPsnoB7jV3sqj1VjG4OUCyzIhcs3x@dpg-d5udd494tr6s73crvtng-a.frankfurt-postgres.render.com/chatapp_reports?ssl=true';
 
 const pool = new Pool({
-    connectionString,
-    ssl: {
-        rejectUnauthorized: false
-    } // Render postgres requires SSL
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false
+  } // Render postgres requires SSL
 });
 
 // Tablo oluşturma sorguları
@@ -44,26 +44,33 @@ const createTablesQuery = `
   CREATE TABLE IF NOT EXISTS bans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users_anon(id),
-    ban_type TEXT NOT NULL, -- 'temp' | 'perm'
+    ban_type TEXT NOT NULL, -- 'temp' | 'perm' | 'shadow'
     ban_until TIMESTAMPTZ,
     reason TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     created_by TEXT DEFAULT 'auto'
   );
+
+  CREATE TABLE IF NOT EXISTS blocks (
+    blocker_id UUID REFERENCES users_anon(id),
+    blocked_id UUID REFERENCES users_anon(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (blocker_id, blocked_id)
+  );
 `;
 
 const ensureTables = async () => {
-    try {
-        const client = await pool.connect();
-        await client.query(createTablesQuery);
-        console.log('Database tables ensured.');
-        client.release();
-    } catch (err) {
-        console.error('Error creating tables:', err);
-    }
+  try {
+    const client = await pool.connect();
+    await client.query(createTablesQuery);
+    console.log('Database tables ensured.');
+    client.release();
+  } catch (err) {
+    console.error('Error creating tables:', err);
+  }
 };
 
 module.exports = {
-    pool,
-    ensureTables
+  pool,
+  ensureTables
 };
