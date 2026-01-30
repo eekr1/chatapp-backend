@@ -3,6 +3,7 @@ const { WebSocketServer, WebSocket } = require('ws');
 const http = require('http');
 const { v4: uuidv4 } = require('uuid');
 const { pool, ensureTables } = require('./db');
+const { validateUsername } = require('./moderation');
 const adminRoutes = require('./admin');
 
 // Ensure DB Tables
@@ -29,7 +30,7 @@ let waitingQueue = []; // [{ clientId, ws, username, dbUserId }]
 const rooms = new Map(); // roomId -> { users: [...], sockets: {...}, conversationId: uuid }
 const userRoomMap = new Map(); // clientId (socket uuid) -> roomId
 
-// Connected clients mapping: clientId -> { ws, dbUserId, deviceId }
+// Connected clients mapping: clientId -> { ws, dbUserId, deviceId, isShadowBanned }
 const activeClients = new Map();
 
 // Config
@@ -95,13 +96,36 @@ async function checkBan(userId) {
         const res = await pool.query(`
             SELECT * FROM bans 
             WHERE user_id = $1 
-            AND (ban_type = 'perm' OR ban_until > NOW())
+            AND (ban_type = 'perm' OR ban_type = 'shadow' OR ban_until > NOW())
         `, [userId]);
         return res.rows[0]; // Returns ban record or undefined
     } catch (e) {
         console.error('DB Error checkBan:', e);
         return null;
     }
+}
+
+async function checkBlock(userAId, userBId) {
+    try {
+        const res = await pool.query(`
+            SELECT 1 FROM blocks 
+            WHERE (blocker_id = $1 AND blocked_id = $2) 
+               OR (blocker_id = $2 AND blocked_id = $1)
+        `, [userAId, userBId]);
+        return res.rows.length > 0;
+    } catch (e) {
+        return false;
+    }
+}
+
+async function blockUser(blockerId, blockedId) {
+    if (blockerId === blockedId) return;
+    try {
+        await pool.query(
+            'INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [blockerId, blockedId]
+        );
+    } catch (e) { console.error(e); }
 }
 
 async function createConversation(userAId, userBId) {
@@ -176,6 +200,13 @@ const joinQueue = async (ws, username) => {
     // DB Ban Check (Double check before queue)
     const ban = await checkBan(clientData.dbUserId);
     if (ban) {
+        // SHADOWBAN LOGIC:
+        if (ban.ban_type === 'shadow') {
+            // Fake queue join
+            sendJson(ws, { type: 'queued' });
+            return; // Never actually added to waitingQueue
+        }
+
         return sendError(ws, 'BANNED', `Yasaklandınız. Sebep: ${ban.reason}`);
     }
 
@@ -183,21 +214,40 @@ const joinQueue = async (ws, username) => {
     removeFromQueue(ws.clientId);
 
     if (waitingQueue.length > 0) {
-        const peer = waitingQueue.shift();
-        if (peer.clientId === ws.clientId) {
-            waitingQueue.push({ clientId: ws.clientId, ws, username, dbUserId: clientData.dbUserId });
-            sendJson(ws, { type: 'queued' });
-            return;
+        // Try to find a valid peer (Blocking Logic)
+        let peerIndex = -1;
+        let peer = null;
+
+        // Simple linear search for non-blocked peer (usually queue is small, mostly size 0 or 1)
+        for (let i = 0; i < waitingQueue.length; i++) {
+            const p = waitingQueue[i];
+            // Don't match self
+            if (p.clientId === ws.clientId) continue;
+
+            const blocked = await checkBlock(clientData.dbUserId, p.dbUserId);
+            if (!blocked) {
+                peerIndex = i;
+                peer = p;
+                break;
+            }
         }
 
-        const roomId = uuidv4();
-        // DB Conversation Create
-        const conversationId = await createConversation(clientData.dbUserId, peer.dbUserId);
+        if (peer && peerIndex !== -1) {
+            // Remove peer from queue
+            waitingQueue.splice(peerIndex, 1);
 
-        createRoom(roomId, conversationId,
-            { clientId: ws.clientId, ws, username, dbUserId: clientData.dbUserId },
-            peer
-        );
+            const roomId = uuidv4();
+            const conversationId = await createConversation(clientData.dbUserId, peer.dbUserId);
+
+            createRoom(roomId, conversationId,
+                { clientId: ws.clientId, ws, username, dbUserId: clientData.dbUserId },
+                peer
+            );
+        } else {
+            // No valid peer found, join queue
+            waitingQueue.push({ clientId: ws.clientId, ws, username, dbUserId: clientData.dbUserId });
+            sendJson(ws, { type: 'queued' });
+        }
     } else {
         waitingQueue.push({ clientId: ws.clientId, ws, username, dbUserId: clientData.dbUserId });
         sendJson(ws, { type: 'queued' });
@@ -234,17 +284,13 @@ const leaveRoom = (clientId, reason = 'leave') => {
 
     const room = rooms.get(roomId);
     if (room) {
-        // End conversation in DB
         endConversation(room.conversationId, reason);
 
-        // Cache for reporting
         recentRooms.set(roomId, {
             users: [...room.users],
             timestamp: Date.now(),
             conversationId: room.conversationId
         });
-
-        const peerObj = room.users.find(u => u.clientId !== clientId);
 
         room.users.forEach(u => {
             const id = u.clientId;
@@ -260,14 +306,13 @@ const leaveRoom = (clientId, reason = 'leave') => {
 
 
 wss.on('connection', (ws, req) => {
-    ws.clientId = uuidv4(); // Temporary Socket ID
+    ws.clientId = uuidv4();
     ws.isAlive = true;
     ws.username = "Anonim";
     ws.on('pong', heartbeat);
 
     broadcastOnlineCount();
 
-    // Handshake Request (Wait for deviceId from client)
     sendJson(ws, { type: 'hello', clientId: ws.clientId });
 
     ws.on('message', async (raw) => {
@@ -276,37 +321,42 @@ wss.on('connection', (ws, req) => {
 
         if (!checkRateLimit(ws.clientId)) return sendError(ws, 'RATE_LIMIT', 'Hız sınırı aşıldı.');
 
-        // 1. Handshake Response with Device ID
-        if (data.type === 'hello_ack') { // Client sends { type: 'hello_ack', deviceId: '...' }
+        if (data.type === 'hello_ack') {
             const deviceId = data.deviceId;
             const ip = req.socket.remoteAddress;
             const dbUser = await getOrCreateUser(deviceId, ip);
 
             if (!dbUser) return sendError(ws, 'DB_ERROR', 'Sunucu hatası.');
 
-            // Check Ban Immediately
             const ban = await checkBan(dbUser.id);
             if (ban) {
-                sendError(ws, 'BANNED', `Yasaklandınız. Bitiş: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'Tersiz'}. Sebep: ${ban.reason}`);
-                ws.close();
-                return;
+                if (ban.ban_type === 'shadow') {
+                    // Allowed to connect, but marked
+                    activeClients.set(ws.clientId, { ws, dbUserId: dbUser.id, deviceId, isShadowBanned: true });
+                } else {
+                    sendError(ws, 'BANNED', `Yasaklandınız. Bitiş: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'Süresiz'}. Sebep: ${ban.reason}`);
+                    ws.close();
+                    return;
+                }
+            } else {
+                activeClients.set(ws.clientId, { ws, dbUserId: dbUser.id, deviceId });
             }
-
-            activeClients.set(ws.clientId, { ws, dbUserId: dbUser.id, deviceId });
             return;
         }
 
-        // All other events require Auth
         const clientData = activeClients.get(ws.clientId);
-        if (!clientData && data.type !== 'hello_ack') {
-            // If client forgot hello_ack or packet lost, ignore or request again.
-            return;
-        }
+        if (!clientData && data.type !== 'hello_ack') return;
 
         switch (data.type) {
             case 'joinQueue':
                 let uname = (data.username || "Anonim").trim().substring(0, 15);
-                if (!uname) uname = "Anonim";
+
+                // Moderation Check
+                const check = validateUsername(uname);
+                if (!check.valid) {
+                    return sendError(ws, 'INVALID_USERNAME', check.reason);
+                }
+
                 ws.username = uname;
                 await joinQueue(ws, uname);
                 break;
@@ -343,14 +393,18 @@ wss.on('connection', (ws, req) => {
                     handleReport(ws.clientId, data.roomId, data.reason);
                 }
                 break;
+
+            case 'block':
+                // Personal Block Request (V5)
+                if (data.roomId) {
+                    handleBlock(ws.clientId, data.roomId);
+                }
+                break;
         }
     });
 
     ws.on('close', () => {
-        const clientData = activeClients.get(ws.clientId);
-        if (clientData) {
-            activeClients.delete(ws.clientId);
-        }
+        if (activeClients.has(ws.clientId)) activeClients.delete(ws.clientId);
         removeFromQueue(ws.clientId);
         leaveRoom(ws.clientId, 'disconnect');
         broadcastOnlineCount();
@@ -358,16 +412,14 @@ wss.on('connection', (ws, req) => {
 });
 
 const handleReport = async (reporterClientId, roomId, reason) => {
+    // ... Logic same as before
     let users = null;
     let conversationId = null;
-
-    // Check active room
     const room = rooms.get(roomId);
     if (room) {
         users = room.users;
         conversationId = room.conversationId;
     } else {
-        // Check cache
         const recent = recentRooms.get(roomId);
         if (recent) {
             users = recent.users;
@@ -382,20 +434,39 @@ const handleReport = async (reporterClientId, roomId, reason) => {
 
     if (!reporterObj || !reportedObj) return;
 
-    console.log(`REPORT: ${reporterObj.dbUserId} reported ${reportedObj.dbUserId} for ${reason}`);
-
+    // Log Report
     const result = await logReport(reporterObj.dbUserId, reportedObj.dbUserId, conversationId, reason);
 
     if (result.banned) {
-        // Kick immediately if online
-        // We need to find their socket. 'reportedObj.clientId' is the socket ID of that session.
-        // But check if they are still connected with that socket
         const clientData = activeClients.get(reportedObj.clientId);
         if (clientData && clientData.ws && clientData.ws.readyState === WebSocket.OPEN) {
             sendError(clientData.ws, 'BANNED', 'Yasaklandınız. (Auto-Ban)');
             clientData.ws.close();
         }
     }
+
+    // Auto-Block on Report (Optional but good UX)
+    // await blockUser(reporterObj.dbUserId, reportedObj.dbUserId);
+};
+
+const handleBlock = async (blockerClientId, roomId) => {
+    let users = null;
+    const room = rooms.get(roomId);
+    if (room) users = room.users;
+    else {
+        const recent = recentRooms.get(roomId);
+        if (recent) users = recent.users;
+    }
+
+    if (!users) return;
+
+    const blockerObj = users.find(u => u.clientId === blockerClientId);
+    const blockedObj = users.find(u => u.clientId !== blockerClientId);
+
+    if (!blockerObj || !blockedObj) return;
+
+    await blockUser(blockerObj.dbUserId, blockedObj.dbUserId);
+    console.log(`BLOCK: ${blockerObj.dbUserId} blocked ${blockedObj.dbUserId}`);
 };
 
 // Intervals
