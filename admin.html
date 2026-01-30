@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnonChat Admin</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f2f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #333; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
+        th { background: #f8f9fa; }
+        button { cursor: pointer; padding: 5px 10px; border: none; border-radius: 4px; color: white; margin-right: 5px; }
+        .btn-ban { background: #e74c3c; }
+        .btn-perm { background: #c0392b; }
+        .btn-unban { background: #2ecc71; }
+        .tab-btn { padding: 10px 20px; cursor: pointer; background: #ddd; border: none; }
+        .tab-btn.active { background: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AnonChat Admin Panel</h1>
+        
+        <div class="card">
+            <h2>Statistics</h2>
+            <div id="stats">Loading...</div>
+        </div>
+
+        <div class="card">
+            <div>
+                <button class="tab-btn active" onclick="loadTab('reports')">Latest Reports</button>
+                <button class="tab-btn" onclick="loadTab('bans')">Active Bans</button>
+            </div>
+            <div id="content" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <script>
+        async function loadStats() {
+            const res = await fetch('/admin/stats');
+            const data = await res.json();
+            document.getElementById('stats').innerHTML = 
+                `Total Users: ${data.totalUsers} | Total Bans: ${data.totalBans} | Reports (24h): ${data.reports24h}`;
+        }
+
+        async function loadTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            const res = await fetch(`/admin/data?type=${tab}`);
+            const data = await res.json();
+            
+            let html = '<table><thead><tr>';
+            if (tab === 'reports') {
+                html += '<th>Time</th><th>Reporter</th><th>Reported User</th><th>Reason</th><th>Actions</th>';
+            } else {
+                html += '<th>User</th><th>Type</th><th>Until</th><th>Reason</th><th>Actions</th>';
+            }
+            html += '</tr></thead><tbody>';
+
+            data.items.forEach(item => {
+                html += '<tr>';
+                if (tab === 'reports') {
+                    html += `
+                        <td>${new Date(item.created_at).toLocaleString()}</td>
+                        <td>${item.reporter_device?.substring(0,8)}...</td>
+                        <td>${item.reported_device?.substring(0,8)}...</td>
+                        <td>${item.reason}</td>
+                        <td>
+                            <button class="btn-ban" onclick="banUser('${item.reported_user_id}', 1, 'Report: ${item.reason}')">Ban 24h</button>
+                            <button class="btn-perm" onclick="banUser('${item.reported_user_id}', 0, 'Report: ${item.reason}')">Perm Ban</button>
+                        </td>
+                    `;
+                } else {
+                        html += `
+                        <td>${item.device_id?.substring(0,8)}...</td>
+                        <td>${item.ban_type}</td>
+                        <td>${item.ban_until ? new Date(item.ban_until).toLocaleString() : 'Permanent'}</td>
+                        <td>${item.reason}</td>
+                        <td>
+                            <button class="btn-unban" onclick="unbanUser('${item.user_id}')">Unban</button>
+                        </td>
+                    `;
+                }
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            document.getElementById('content').innerHTML = html;
+        }
+
+        async function banUser(userId, days, reason) {
+            if(!confirm('Are you sure?')) return;
+            await fetch('/admin/ban', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ userId, days, reason })
+            });
+            loadTab('reports');
+            loadStats();
+        }
+
+        async function unbanUser(userId) {
+            if(!confirm('Unban user?')) return;
+            await fetch('/admin/unban', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ userId })
+            });
+            loadTab('bans');
+            loadStats();
+        }
+
+        loadStats();
+        loadTab('reports');
+    </script>
+</body>
+</html>
