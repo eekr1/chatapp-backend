@@ -353,6 +353,9 @@ wss.on('connection', (ws, req) => {
             // V6: Auto-Login response
             if (dbUser.nickname) {
                 sendJson(ws, { type: 'welcome', nickname: dbUser.nickname });
+            } else {
+                // HOTFIX: Tell client we need a nickname to stop 'connecting' Spinner
+                sendJson(ws, { type: 'need_nickname' });
             }
             return;
         }
