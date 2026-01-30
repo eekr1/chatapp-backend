@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnonChat Admin V5</title>
+    <title>AnonChat Admin V6</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -170,34 +170,57 @@
             background: #e74c3c;
         }
 
-        /* Red */
         .btn-perm {
             background: #c0392b;
         }
 
-        /* Dark Red */
         .btn-shadow {
             background: #34495e;
         }
 
-        /* Dark Blue/Gray */
         .btn-unban {
             background: #2ecc71;
         }
 
-        /* Green */
-        .btn-info {
+        .btn-details {
             background: #3498db;
         }
 
-        /* Blue */
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            width: 600px;
+            max-width: 90%;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .close-btn {
+            float: right;
+            cursor: pointer;
+            font-size: 1.5em;
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
         <div class="header">
-            <h1>AnonChat Admin Board</h1>
+            <h1>AnonChat Admin Board V6</h1>
             <div>
                 <button onclick="loadStats(); loadContent();"
                     style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer;">Refresh</button>
@@ -210,17 +233,13 @@
                 <span class="stat-value" id="s_users">-</span>
             </div>
             <div class="stat-card">
-                <span class="stat-title">Active Conversations</span>
-                <span class="stat-value" id="s_convos">-</span>
+                <span class="stat-title">Active Chats</span>
+                <span class="stat-value" id="s_active">-</span>
             </div>
             <div class="stat-card">
                 <span class="stat-title">Reports (24h)</span>
                 <span class="stat-value" id="s_reports">-</span>
                 <span class="stat-sub" id="s_bans">- Active Bans</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-title">Total Matches</span>
-                <span class="stat-value" id="s_matches">-</span>
             </div>
         </div>
 
@@ -228,8 +247,19 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('reports')">Reports</button>
                 <button class="tab-btn" onclick="switchTab('bans')">Bans & Shadowbans</button>
+                <button class="tab-btn" onclick="switchTab('profiles')">Profiles</button>
             </div>
             <div id="content">Loading...</div>
+        </div>
+    </div>
+
+    <!-- Details Modal -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2 id="m_title">User Details</h2>
+            <h3>Blocked Users</h3>
+            <div id="m_blocks">Loading...</div>
         </div>
     </div>
 
@@ -241,10 +271,9 @@
                 const res = await fetch('/admin/stats');
                 const data = await res.json();
                 document.getElementById('s_users').innerText = data.totalUsers;
-                document.getElementById('s_convos').innerText = data.activeConversations || 0; // Backend supports this?
+                document.getElementById('s_active').innerText = data.activeConversations || 0;
                 document.getElementById('s_reports').innerText = data.reports24h;
                 document.getElementById('s_bans').innerText = data.totalBans + ' Active Bans';
-                document.getElementById('s_matches').innerText = data.totalMatches;
             } catch (e) { console.error(e); }
         }
 
@@ -264,9 +293,11 @@
 
             let html = '<table><thead><tr>';
             if (currentTab === 'reports') {
-                html += '<th>Time</th><th>Reporter ID</th><th>Reported ID</th><th>Reason</th><th>Actions</th>';
+                html += '<th>Time</th><th>Reporter</th><th>Reported</th><th>Reason</th><th>Actions</th>';
+            } else if (currentTab === 'bans') {
+                html += '<th>User</th><th>Type</th><th>Until</th><th>Reason</th><th>Actions</th>';
             } else {
-                html += '<th>User ID</th><th>Type</th><th>Until</th><th>Reason</th><th>Actions</th>';
+                html += '<th>Nickname</th><th>Device ID</th><th>Last Seen</th><th>Actions</th>';
             }
             html += '</tr></thead><tbody>';
 
@@ -279,8 +310,8 @@
                         const reported = item.reported_user_id;
                         html += `
                             <td>${new Date(item.created_at).toLocaleString()}</td>
-                            <td title="${item.reporter_device}">${item.reporter_device?.substring(0, 6)}...</td>
-                            <td title="${item.reported_device}">${item.reported_device?.substring(0, 6)}...</td>
+                            <td>${item.reporter || 'Anonim'}</td>
+                            <td>${item.reported || 'Anonim'}</td>
                             <td>${item.reason}</td>
                             <td class="actions">
                                 <button class="btn-ban" onclick="actionBan('${reported}', 1, 'Report: ${item.reason}')">24h</button>
@@ -288,14 +319,25 @@
                                 <button class="btn-shadow" onclick="actionShadow('${reported}', 'Report: ${item.reason}')">Shadow</button>
                             </td>
                         `;
-                    } else {
+                    } else if (currentTab === 'bans') {
                         html += `
-                            <td title="${item.device_id}">${item.device_id?.substring(0, 8)}...</td>
+                            <td>${item.nickname || item.device_id?.substring(0, 8)}</td>
                             <td><span class="badge ${item.ban_type}">${item.ban_type.toUpperCase()}</span></td>
                             <td>${item.ban_until ? new Date(item.ban_until).toLocaleString() : 'PERMANENT'}</td>
                             <td>${item.reason}</td>
                             <td class="actions">
                                 <button class="btn-unban" onclick="actionUnban('${item.user_id}')">Unban</button>
+                            </td>
+                        `;
+                    } else {
+                        // Profile
+                        html += `
+                            <td><strong>${item.nickname}</strong></td>
+                            <td title="${item.device_id}">${item.device_id?.substring(0, 8)}...</td>
+                            <td>${new Date(item.last_seen_at).toLocaleString()}</td>
+                            <td class="actions">
+                                <button class="btn-details" onclick="openDetails('${item.id}', '${item.nickname}')">View Blocks</button>
+                                <button class="btn-ban" onclick="actionBan('${item.id}', 1, 'Admin Action')">Ban</button>
                             </td>
                         `;
                     }
@@ -307,19 +349,52 @@
             document.getElementById('content').innerHTML = html;
         }
 
+        async function openDetails(userId, nickname) {
+            document.getElementById('modal').style.display = 'flex';
+            document.getElementById('m_title').innerText = `Details: ${nickname}`;
+
+            const res = await fetch(`/admin/user-blocks/${userId}`);
+            const data = await res.json();
+
+            let html = '<ul>';
+            if (data.items.length === 0) html += '<li>No blocked users.</li>';
+            else {
+                data.items.forEach(b => {
+                    html += `
+                        <li style="margin-bottom: 10px; display: flex; justify-content: space-between;">
+                            <span>${b.nickname || 'Anonim User'}</span>
+                            <button class="btn-unban" onclick="actionUnblock('${userId}', '${b.blocked_id}')">Unblock</button>
+                        </li>
+                    `;
+                });
+            }
+            html += '</ul>';
+            document.getElementById('m_blocks').innerHTML = html;
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
         async function actionBan(userId, days, reason) {
             if (!confirm('Ban User?')) return;
             await api('/admin/ban', { userId, days, reason });
         }
 
         async function actionShadow(userId, reason) {
-            if (!confirm('Shadowban User? (They will be ghosted)')) return;
+            if (!confirm('Shadowban User?')) return;
             await api('/admin/ban', { userId, days: 0, type: 'shadow', reason });
         }
 
         async function actionUnban(userId) {
             if (!confirm('Unban User?')) return;
             await api('/admin/unban', { userId });
+        }
+
+        async function actionUnblock(blockerId, blockedId) {
+            if (!confirm('Unblock this pair?')) return;
+            await api('/admin/unblock', { blockerId, blockedId });
+            closeModal(); // Close to refresh
         }
 
         async function api(url, body) {
