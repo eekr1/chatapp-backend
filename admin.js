@@ -29,16 +29,14 @@ router.get('/stats', async (req, res) => {
         const users = await pool.query('SELECT COUNT(*) FROM users_anon');
         const bans = await pool.query('SELECT COUNT(*) FROM bans');
         const reports = await pool.query('SELECT COUNT(*) FROM reports WHERE created_at > NOW() - INTERVAL \'24 hours\'');
-        const matches = await pool.query('SELECT COUNT(*) FROM conversations');
-
-        // Active conversations estimate: Those started less than 1 hour ago and not ended?
-        // Or specific query if we want real-time. For now, simple stats.
+        // V6 Fix: Count only active conversations (not ended)
+        const active = await pool.query('SELECT COUNT(*) FROM conversations WHERE ended_at IS NULL');
 
         res.json({
             totalUsers: users.rows[0].count,
             totalBans: bans.rows[0].count,
             reports24h: reports.rows[0].count,
-            totalMatches: matches.rows[0].count
+            activeConversations: active.rows[0].count
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -48,35 +46,57 @@ router.get('/data', async (req, res) => {
     try {
         if (type === 'reports') {
             const result = await pool.query(`
-                SELECT r.*, u1.device_id as reporter_device, u2.device_id as reported_device 
+                SELECT r.*, u1.nickname as reporter, u2.nickname as reported
                 FROM reports r
                 LEFT JOIN users_anon u1 ON r.reporter_user_id = u1.id
                 LEFT JOIN users_anon u2 ON r.reported_user_id = u2.id
                 ORDER BY r.created_at DESC LIMIT 50
             `);
             res.json({ items: result.rows });
-        } else {
+        } else if (type === 'bans') {
             const result = await pool.query(`
-                SELECT b.*, u.device_id 
+                SELECT b.*, u.nickname 
                 FROM bans b
                 LEFT JOIN users_anon u ON b.user_id = u.id
                 WHERE (b.ban_until > NOW()) OR (b.ban_type IN ('perm', 'shadow'))
                 ORDER BY b.created_at DESC
             `);
             res.json({ items: result.rows });
+        } else if (type === 'profiles') {
+            // V6: List profiles
+            const result = await pool.query(`
+                SELECT id, nickname, device_id, last_seen_at 
+                FROM users_anon 
+                WHERE nickname IS NOT NULL 
+                ORDER BY last_seen_at DESC LIMIT 100
+            `);
+            res.json({ items: result.rows });
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Get user specific blocks
+router.get('/user-blocks/:userId', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT b.blocked_id, u.nickname 
+            FROM blocks b
+            LEFT JOIN users_anon u ON b.blocked_id = u.id
+            WHERE b.blocker_id = $1
+        `, [req.params.userId]);
+        res.json({ items: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/ban', async (req, res) => {
-    const { userId, days, reason, type } = req.body; // type optional: 'shadow'
+    const { userId, days, reason, type } = req.body;
     try {
         let banType = 'temp';
         let banUntil = null;
 
         if (type === 'shadow') {
             banType = 'shadow';
-            banUntil = null; // Infinite shadow
+            banUntil = null;
         } else if (days === 0) {
             banType = 'perm';
             banUntil = null;
@@ -97,6 +117,15 @@ router.post('/unban', async (req, res) => {
     const { userId } = req.body;
     try {
         await pool.query('DELETE FROM bans WHERE user_id = $1', [userId]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Unblock Action
+router.post('/unblock', async (req, res) => {
+    const { blockerId, blockedId } = req.body;
+    try {
+        await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [blockerId, blockedId]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
