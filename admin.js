@@ -29,11 +29,16 @@ router.get('/stats', async (req, res) => {
         const users = await pool.query('SELECT COUNT(*) FROM users_anon');
         const bans = await pool.query('SELECT COUNT(*) FROM bans');
         const reports = await pool.query('SELECT COUNT(*) FROM reports WHERE created_at > NOW() - INTERVAL \'24 hours\'');
+        const matches = await pool.query('SELECT COUNT(*) FROM conversations');
+
+        // Active conversations estimate: Those started less than 1 hour ago and not ended?
+        // Or specific query if we want real-time. For now, simple stats.
 
         res.json({
             totalUsers: users.rows[0].count,
             totalBans: bans.rows[0].count,
-            reports24h: reports.rows[0].count
+            reports24h: reports.rows[0].count,
+            totalMatches: matches.rows[0].count
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -55,7 +60,7 @@ router.get('/data', async (req, res) => {
                 SELECT b.*, u.device_id 
                 FROM bans b
                 LEFT JOIN users_anon u ON b.user_id = u.id
-                WHERE (b.ban_type = 'perm') OR (b.ban_until > NOW())
+                WHERE (b.ban_until > NOW()) OR (b.ban_type IN ('perm', 'shadow'))
                 ORDER BY b.created_at DESC
             `);
             res.json({ items: result.rows });
@@ -64,10 +69,21 @@ router.get('/data', async (req, res) => {
 });
 
 router.post('/ban', async (req, res) => {
-    const { userId, days, reason } = req.body;
+    const { userId, days, reason, type } = req.body; // type optional: 'shadow'
     try {
-        const banType = days === 0 ? 'perm' : 'temp';
-        const banUntil = days === 0 ? null : new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        let banType = 'temp';
+        let banUntil = null;
+
+        if (type === 'shadow') {
+            banType = 'shadow';
+            banUntil = null; // Infinite shadow
+        } else if (days === 0) {
+            banType = 'perm';
+            banUntil = null;
+        } else {
+            banType = 'temp';
+            banUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        }
 
         await pool.query(
             'INSERT INTO bans (user_id, ban_type, ban_until, reason, created_by) VALUES ($1, $2, $3, $4, $5)',
