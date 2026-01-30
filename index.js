@@ -25,12 +25,14 @@ const wss = new WebSocketServer({ server });
 /**
  * Global State (Only Transients)
  * DB handles presistence. Memory only for active connections.
+ * 
+ * V6 UPDATE: 'username' is now fetched from DB for connected users if available.
  */
-let waitingQueue = []; // [{ clientId, ws, username, dbUserId }]
+let waitingQueue = []; // [{ clientId, ws, nickname, dbUserId }]
 const rooms = new Map(); // roomId -> { users: [...], sockets: {...}, conversationId: uuid }
 const userRoomMap = new Map(); // clientId (socket uuid) -> roomId
 
-// Connected clients mapping: clientId -> { ws, dbUserId, deviceId, isShadowBanned }
+// Connected clients mapping: clientId -> { ws, dbUserId, deviceId, isShadowBanned, nickname }
 const activeClients = new Map();
 
 // Config
@@ -91,6 +93,13 @@ async function getOrCreateUser(deviceId, ip) {
     }
 }
 
+async function setDbNickname(userId, nickname) {
+    try {
+        await pool.query('UPDATE users_anon SET nickname = $1, nickname_set_at = NOW() WHERE id = $2', [nickname, userId]);
+        return true;
+    } catch (e) { console.error(e); return false; }
+}
+
 async function checkBan(userId) {
     try {
         const res = await pool.query(`
@@ -98,7 +107,7 @@ async function checkBan(userId) {
             WHERE user_id = $1 
             AND (ban_type = 'perm' OR ban_type = 'shadow' OR ban_until > NOW())
         `, [userId]);
-        return res.rows[0]; // Returns ban record or undefined
+        return res.rows[0];
     } catch (e) {
         console.error('DB Error checkBan:', e);
         return null;
@@ -166,7 +175,6 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
         );
 
         // Auto Ban Logic
-        // 1. Last 24h reports count from different reporters
         const reports24h = await pool.query(`
             SELECT COUNT(DISTINCT reporter_user_id) as cnt 
             FROM reports 
@@ -174,7 +182,6 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
         `, [reportedId]);
 
         if (parseInt(reports24h.rows[0].cnt) >= 3) {
-            // Auto Ban 24h
             await pool.query(
                 'INSERT INTO bans (user_id, ban_type, ban_until, reason, created_by) VALUES ($1, $2, NOW() + INTERVAL \'24 hours\', $3, $4)',
                 [reportedId, 'temp', 'Auto-Ban: Too many reports (3 unique in 24h)', 'system']
@@ -193,38 +200,44 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
 
 // --- Main Logic ---
 
-const joinQueue = async (ws, username) => {
+const joinQueue = async (ws) => {
     const clientData = activeClients.get(ws.clientId);
     if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR', 'Kimlik doğrulanamadı.');
 
-    // DB Ban Check (Double check before queue)
+    // Require nickname (V6)
+    if (!clientData.nickname) {
+        return sendError(ws, 'NO_NICKNAME', 'Lütfen önce kullanıcı adı belirleyin.');
+    }
+
+    // Ban Check
     const ban = await checkBan(clientData.dbUserId);
     if (ban) {
-        // SHADOWBAN LOGIC:
         if (ban.ban_type === 'shadow') {
-            // Fake queue join
             sendJson(ws, { type: 'queued' });
-            return; // Never actually added to waitingQueue
+            return;
         }
-
         return sendError(ws, 'BANNED', `Yasaklandınız. Sebep: ${ban.reason}`);
     }
 
     leaveRoom(ws.clientId);
     removeFromQueue(ws.clientId);
 
+    const me = {
+        clientId: ws.clientId,
+        ws,
+        nickname: clientData.nickname,
+        dbUserId: clientData.dbUserId
+    };
+
     if (waitingQueue.length > 0) {
-        // Try to find a valid peer (Blocking Logic)
         let peerIndex = -1;
         let peer = null;
 
-        // Simple linear search for non-blocked peer (usually queue is small, mostly size 0 or 1)
         for (let i = 0; i < waitingQueue.length; i++) {
             const p = waitingQueue[i];
-            // Don't match self
-            if (p.clientId === ws.clientId) continue;
+            if (p.clientId === me.clientId) continue;
 
-            const blocked = await checkBlock(clientData.dbUserId, p.dbUserId);
+            const blocked = await checkBlock(me.dbUserId, p.dbUserId);
             if (!blocked) {
                 peerIndex = i;
                 peer = p;
@@ -233,23 +246,18 @@ const joinQueue = async (ws, username) => {
         }
 
         if (peer && peerIndex !== -1) {
-            // Remove peer from queue
             waitingQueue.splice(peerIndex, 1);
 
             const roomId = uuidv4();
-            const conversationId = await createConversation(clientData.dbUserId, peer.dbUserId);
+            const conversationId = await createConversation(me.dbUserId, peer.dbUserId);
 
-            createRoom(roomId, conversationId,
-                { clientId: ws.clientId, ws, username, dbUserId: clientData.dbUserId },
-                peer
-            );
+            createRoom(roomId, conversationId, me, peer);
         } else {
-            // No valid peer found, join queue
-            waitingQueue.push({ clientId: ws.clientId, ws, username, dbUserId: clientData.dbUserId });
+            waitingQueue.push(me);
             sendJson(ws, { type: 'queued' });
         }
     } else {
-        waitingQueue.push({ clientId: ws.clientId, ws, username, dbUserId: clientData.dbUserId });
+        waitingQueue.push(me);
         sendJson(ws, { type: 'queued' });
     }
 };
@@ -261,8 +269,8 @@ const removeFromQueue = (clientId) => {
 const createRoom = (roomId, conversationId, userA, userB) => {
     rooms.set(roomId, {
         users: [
-            { clientId: userA.clientId, username: userA.username, dbUserId: userA.dbUserId },
-            { clientId: userB.clientId, username: userB.username, dbUserId: userB.dbUserId }
+            { clientId: userA.clientId, nickname: userA.nickname, dbUserId: userA.dbUserId },
+            { clientId: userB.clientId, nickname: userB.nickname, dbUserId: userB.dbUserId }
         ],
         sockets: {
             [userA.clientId]: userA.ws,
@@ -274,8 +282,8 @@ const createRoom = (roomId, conversationId, userA, userB) => {
     userRoomMap.set(userA.clientId, roomId);
     userRoomMap.set(userB.clientId, roomId);
 
-    sendJson(userA.ws, { type: 'matched', roomId, peerUsername: userB.username });
-    sendJson(userB.ws, { type: 'matched', roomId, peerUsername: userA.username });
+    sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname }); // V6: peerUsername -> peerNickname
+    sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname });
 };
 
 const leaveRoom = (clientId, reason = 'leave') => {
@@ -308,11 +316,9 @@ const leaveRoom = (clientId, reason = 'leave') => {
 wss.on('connection', (ws, req) => {
     ws.clientId = uuidv4();
     ws.isAlive = true;
-    ws.username = "Anonim";
     ws.on('pong', heartbeat);
 
     broadcastOnlineCount();
-
     sendJson(ws, { type: 'hello', clientId: ws.clientId });
 
     ws.on('message', async (raw) => {
@@ -329,17 +335,24 @@ wss.on('connection', (ws, req) => {
             if (!dbUser) return sendError(ws, 'DB_ERROR', 'Sunucu hatası.');
 
             const ban = await checkBan(dbUser.id);
-            if (ban) {
-                if (ban.ban_type === 'shadow') {
-                    // Allowed to connect, but marked
-                    activeClients.set(ws.clientId, { ws, dbUserId: dbUser.id, deviceId, isShadowBanned: true });
-                } else {
-                    sendError(ws, 'BANNED', `Yasaklandınız. Bitiş: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'Süresiz'}. Sebep: ${ban.reason}`);
-                    ws.close();
-                    return;
-                }
-            } else {
-                activeClients.set(ws.clientId, { ws, dbUserId: dbUser.id, deviceId });
+            if (ban && ban.ban_type !== 'shadow') {
+                sendError(ws, 'BANNED', `Yasaklandınız. Bitiş: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'Süresiz'}. Sebep: ${ban.reason}`);
+                ws.close();
+                return;
+            }
+
+            const isShadow = ban && ban.ban_type === 'shadow';
+            activeClients.set(ws.clientId, {
+                ws,
+                dbUserId: dbUser.id,
+                deviceId,
+                isShadowBanned: isShadow,
+                nickname: dbUser.nickname
+            });
+
+            // V6: Auto-Login response
+            if (dbUser.nickname) {
+                sendJson(ws, { type: 'welcome', nickname: dbUser.nickname });
             }
             return;
         }
@@ -348,17 +361,21 @@ wss.on('connection', (ws, req) => {
         if (!clientData && data.type !== 'hello_ack') return;
 
         switch (data.type) {
-            case 'joinQueue':
-                let uname = (data.username || "Anonim").trim().substring(0, 15);
-
-                // Moderation Check
+            case 'setNickname':
+                // V6: Persistent Nickname Registration
+                let uname = (data.nickname || "").trim();
                 const check = validateUsername(uname);
                 if (!check.valid) {
-                    return sendError(ws, 'INVALID_USERNAME', check.reason);
+                    return sendError(ws, 'INVALID_NICKNAME', check.reason);
                 }
 
-                ws.username = uname;
-                await joinQueue(ws, uname);
+                await setDbNickname(clientData.dbUserId, uname);
+                clientData.nickname = uname; // Update memory
+                sendJson(ws, { type: 'welcome', nickname: uname });
+                break;
+
+            case 'joinQueue':
+                await joinQueue(ws);
                 break;
 
             case 'message':
@@ -381,7 +398,7 @@ wss.on('connection', (ws, req) => {
 
             case 'next':
                 leaveRoom(ws.clientId, 'next');
-                await joinQueue(ws, ws.username);
+                await joinQueue(ws); // Join with existing nickname
                 break;
 
             case 'leave':
@@ -395,7 +412,6 @@ wss.on('connection', (ws, req) => {
                 break;
 
             case 'block':
-                // Personal Block Request (V5)
                 if (data.roomId) {
                     handleBlock(ws.clientId, data.roomId);
                 }
@@ -412,7 +428,6 @@ wss.on('connection', (ws, req) => {
 });
 
 const handleReport = async (reporterClientId, roomId, reason) => {
-    // ... Logic same as before
     let users = null;
     let conversationId = null;
     const room = rooms.get(roomId);
@@ -434,7 +449,6 @@ const handleReport = async (reporterClientId, roomId, reason) => {
 
     if (!reporterObj || !reportedObj) return;
 
-    // Log Report
     const result = await logReport(reporterObj.dbUserId, reportedObj.dbUserId, conversationId, reason);
 
     if (result.banned) {
@@ -444,16 +458,17 @@ const handleReport = async (reporterClientId, roomId, reason) => {
             clientData.ws.close();
         }
     }
-
-    // Auto-Block on Report (Optional but good UX)
-    // await blockUser(reporterObj.dbUserId, reportedObj.dbUserId);
 };
 
 const handleBlock = async (blockerClientId, roomId) => {
     let users = null;
-    const room = rooms.get(roomId);
-    if (room) users = room.users;
-    else {
+    let roomActive = false;
+    const room = rooms.get(roomId); // Only check active room for termination
+    if (room) {
+        users = room.users;
+        roomActive = true;
+    } else {
+        // Fallback for logging block even if room is gone (from recent)
         const recent = recentRooms.get(roomId);
         if (recent) users = recent.users;
     }
@@ -467,6 +482,11 @@ const handleBlock = async (blockerClientId, roomId) => {
 
     await blockUser(blockerObj.dbUserId, blockedObj.dbUserId);
     console.log(`BLOCK: ${blockerObj.dbUserId} blocked ${blockedObj.dbUserId}`);
+
+    // Terminate chat if active (V6 Fix)
+    if (roomActive) {
+        leaveRoom(blockerClientId, 'blocked');
+    }
 };
 
 // Intervals
