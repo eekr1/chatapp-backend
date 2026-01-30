@@ -16,7 +16,9 @@ const createTablesQuery = `
   CREATE TABLE IF NOT EXISTS users_anon (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id TEXT UNIQUE NOT NULL,
-    username TEXT,
+    username TEXT, -- Old field, keeping for safety but moving to nickname
+    nickname TEXT, -- V6: Persistent display name
+    nickname_set_at TIMESTAMPTZ, -- V6
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ DEFAULT NOW(),
     last_ip TEXT
@@ -57,6 +59,16 @@ const createTablesQuery = `
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (blocker_id, blocked_id)
   );
+
+  -- Migration for existing tables (if nickname column missing)
+  DO $$
+  BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users_anon' AND column_name='nickname') THEN
+          ALTER TABLE users_anon ADD COLUMN nickname TEXT;
+          ALTER TABLE users_anon ADD COLUMN nickname_set_at TIMESTAMPTZ;
+      END IF;
+  END
+  $$;
 `;
 
 const ensureTables = async () => {
