@@ -1,19 +1,42 @@
 const express = require('express');
+const path = require('path');
 const { WebSocketServer, WebSocket } = require('ws');
 const http = require('http');
 const { v4: uuidv4 } = require('uuid');
 const { pool, ensureTables } = require('./db');
 const { validateUsername } = require('./moderation');
 const adminRoutes = require('./admin');
+const authRoutes = require('./routes/auth');
+const profileRoutes = require('./routes/profile');
+const friendsRoutes = require('./routes/friends');
 
 // Ensure DB Tables
+// Ensure DB Tables
 ensureTables();
+
+// Global State (Only Transients)
+// Connected clients mapping: clientId -> { ws, dbUserId, deviceId, isShadowBanned, nickname }
+const activeClients = new Map();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Middleware to expose online status
+app.use((req, res, next) => {
+    req.isUserOnline = (userId) => {
+        for (const [clientId, client] of activeClients) {
+            if (client.dbUserId === userId) return true;
+        }
+        return false;
+    };
+    next();
+});
+
 app.use(express.json()); // JSON body parser for admin API
 app.use('/admin', adminRoutes);
+app.use('/auth', authRoutes);
+app.use('/api', profileRoutes); // Mounting profile under /api since it's logical API (e.g. /api/me)
+app.use('/friends', friendsRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ ok: true });
@@ -32,8 +55,6 @@ let waitingQueue = []; // [{ clientId, ws, nickname, dbUserId }]
 const rooms = new Map(); // roomId -> { users: [...], sockets: {...}, conversationId: uuid }
 const userRoomMap = new Map(); // clientId (socket uuid) -> roomId
 
-// Connected clients mapping: clientId -> { ws, dbUserId, deviceId, isShadowBanned, nickname }
-const activeClients = new Map();
 
 // Config
 const RATE_LIMIT_WINDOW = 1000;
@@ -269,8 +290,8 @@ const removeFromQueue = (clientId) => {
 const createRoom = (roomId, conversationId, userA, userB) => {
     rooms.set(roomId, {
         users: [
-            { clientId: userA.clientId, nickname: userA.nickname, dbUserId: userA.dbUserId },
-            { clientId: userB.clientId, nickname: userB.nickname, dbUserId: userB.dbUserId }
+            { clientId: userA.clientId, nickname: userA.nickname, username: userA.username, dbUserId: userA.dbUserId },
+            { clientId: userB.clientId, nickname: userB.nickname, username: userB.username, dbUserId: userB.dbUserId }
         ],
         sockets: {
             [userA.clientId]: userA.ws,
@@ -282,8 +303,8 @@ const createRoom = (roomId, conversationId, userA, userB) => {
     userRoomMap.set(userA.clientId, roomId);
     userRoomMap.set(userB.clientId, roomId);
 
-    sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname }); // V6: peerUsername -> peerNickname
-    sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname });
+    sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname, peerUsername: userB.username }); // V6: peerUsername -> peerNickname
+    sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname, peerUsername: userA.username });
 };
 
 const leaveRoom = (clientId, reason = 'leave') => {
@@ -329,11 +350,55 @@ wss.on('connection', (ws, req) => {
 
         if (data.type === 'hello_ack') {
             const deviceId = data.deviceId;
-            const ip = req.socket.remoteAddress;
-            const dbUser = await getOrCreateUser(deviceId, ip);
+            let dbUser = null;
+            let isAnon = false;
+
+            if (data.token) {
+                // Token Auth
+                const { hashToken } = require('./utils/security');
+                const tokenHash = hashToken(data.token);
+                try {
+                    const sessionRes = await pool.query(`
+                        SELECT s.*, u.id as user_id, u.username, u.status, p.display_name
+                        FROM sessions s
+                        JOIN users u ON s.user_id = u.id
+                        LEFT JOIN profiles p ON u.id = p.user_id
+                        WHERE s.token_hash = $1 AND s.expires_at > NOW()
+                     `, [tokenHash]);
+
+                    if (sessionRes.rows.length > 0) {
+                        const session = sessionRes.rows[0];
+                        dbUser = {
+                            id: session.user_id,
+                            username: session.username,
+                            nickname: session.display_name || session.username, // Use Display Name as nickname in chat
+                            status: session.status
+                        };
+                    }
+                } catch (e) { console.error('Token Auth Error', e); }
+            }
+
+            // Fallback to Anon (Legacy / Guest) if no token or token invalid
+            if (!dbUser) {
+                // For now, allow anon fallback if we supported it. 
+                // But since UI enforces login, this might mean "Session Expired"
+                // Let's send AUTH_ERROR if token was provided but failed.
+                if (data.token) {
+                    return sendError(ws, 'AUTH_ERROR', 'Oturum süresi doldu.');
+                }
+                // If no token was provided at all (legacy client?), use getOrCreateUser
+                dbUser = await getOrCreateUser(deviceId, req.socket.remoteAddress);
+                isAnon = true;
+            }
 
             if (!dbUser) return sendError(ws, 'DB_ERROR', 'Sunucu hatası.');
 
+            // Check Status
+            if (dbUser.status && dbUser.status !== 'active') {
+                return sendError(ws, 'BANNED', 'Hesabınız askıya alınmış.');
+            }
+
+            // Check Bans
             const ban = await checkBan(dbUser.id);
             if (ban && ban.ban_type !== 'shadow') {
                 sendError(ws, 'BANNED', `Yasaklandınız. Bitiş: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'Süresiz'}. Sebep: ${ban.reason}`);
@@ -345,18 +410,12 @@ wss.on('connection', (ws, req) => {
             activeClients.set(ws.clientId, {
                 ws,
                 dbUserId: dbUser.id,
-                deviceId,
+                deviceId: isAnon ? deviceId : 'auth_user',
                 isShadowBanned: isShadow,
-                nickname: dbUser.nickname
+                nickname: dbUser.nickname // Display Name
             });
 
-            // V6: Auto-Login response
-            if (dbUser.nickname) {
-                sendJson(ws, { type: 'welcome', nickname: dbUser.nickname });
-            } else {
-                // HOTFIX: Tell client we need a nickname to stop 'connecting' Spinner
-                sendJson(ws, { type: 'need_nickname' });
-            }
+            sendJson(ws, { type: 'welcome', nickname: dbUser.nickname });
             return;
         }
 
@@ -414,9 +473,65 @@ wss.on('connection', (ws, req) => {
                 }
                 break;
 
-            case 'block':
-                if (data.roomId) {
-                    handleBlock(ws.clientId, data.roomId);
+            case 'joinDirect':
+                if (data.targetUsername) {
+                    const targetUname = data.targetUsername.toLowerCase().trim();
+                    const meId = clientData.dbUserId;
+
+                    // 1. Find Target User ID
+                    let targetUser = null;
+                    try {
+                        const tRes = await pool.query('SELECT id FROM users WHERE username = $1', [targetUname]);
+                        targetUser = tRes.rows[0];
+                    } catch (e) { console.error(e); }
+
+                    if (!targetUser) return sendError(ws, 'NOT_FOUND', 'Kullanıcı bulunamadı.');
+
+                    // 2. Check Friendship
+                    let isFriend = false;
+                    try {
+                        const fRes = await pool.query(
+                            'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
+                            [meId, targetUser.id]
+                        );
+                        isFriend = fRes.rows.length > 0;
+                    } catch (e) { console.error(e); }
+
+                    if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Bu kullanıcı arkadaşınız değil.');
+
+                    // 3. Check if Target is Online
+                    let targetClient = null;
+                    // Need to scan activeClients for this user id
+                    // Optimized: We could maintain a map dbUserId -> clientId, but loop is fine for <10k users.
+                    for (const [cid, cData] of activeClients) {
+                        if (cData.dbUserId === targetUser.id) {
+                            targetClient = cData;
+                            break;
+                        }
+                    }
+
+                    if (!targetClient) return sendError(ws, 'OFFLINE', 'Kullanıcı şu an çevrimdışı.');
+
+                    // 4. Create Room Directly
+                    leaveRoom(ws.clientId, 'join_direct'); // Leave current room if any
+                    leaveRoom(targetClient.ws.clientId, 'join_direct'); // Target leaves their room? 
+                    // Verify: Should we force pull the target out of a conversation? 
+                    // Only if they are idle? Or queued? 
+                    // Ideally, we prompt them. But "Direct Chat" usually implies "Call".
+                    // Let's force it for V1 speed or check if they are busy.
+                    // If they are in a room, maybe just error "User is busy".
+                    if (userRoomMap.has(targetClient.ws.clientId)) {
+                        return sendError(ws, 'BUSY', 'Kullanıcı şu an başka bir sohbetre.');
+                    }
+
+                    // Proceed
+                    const roomId = uuidv4();
+                    const conversationId = await createConversation(meId, targetUser.id);
+
+                    createRoom(roomId, conversationId,
+                        { ...clientData, clientId: ws.clientId }, // helper object
+                        { ...targetClient, clientId: targetClient.ws.clientId }
+                    );
                 }
                 break;
         }
@@ -508,6 +623,12 @@ setInterval(() => {
         if (now - data.timestamp > REPORT_TTL) recentRooms.delete(roomId);
     }
 }, 60000);
+
+// Serve Frontend Static Files (Production)
+app.use(express.static(path.join(__dirname, '../chatapp-frontend/dist')));
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../chatapp-frontend/dist/index.html'));
+});
 
 server.listen(port, () => {
     console.log(`Backend running on ${port}`);

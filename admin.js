@@ -24,9 +24,10 @@ router.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
+
 router.get('/stats', async (req, res) => {
     try {
-        const users = await pool.query('SELECT COUNT(*) FROM users_anon');
+        const users = await pool.query('SELECT COUNT(*) FROM users');
         const bans = await pool.query('SELECT COUNT(*) FROM bans');
         const reports = await pool.query('SELECT COUNT(*) FROM reports WHERE created_at > NOW() - INTERVAL \'24 hours\'');
         // V6 Fix: Count only active conversations (not ended)
@@ -45,30 +46,34 @@ router.get('/data', async (req, res) => {
     const type = req.query.type;
     try {
         if (type === 'reports') {
+            // Need to link to users table for names
             const result = await pool.query(`
-                SELECT r.*, u1.nickname as reporter, u2.nickname as reported
+                SELECT r.*, 
+                       COALESCE(u1.username, 'Anon') as reporter, 
+                       COALESCE(u2.username, 'Anon') as reported
                 FROM reports r
-                LEFT JOIN users_anon u1 ON r.reporter_user_id = u1.id
-                LEFT JOIN users_anon u2 ON r.reported_user_id = u2.id
+                LEFT JOIN users u1 ON r.reporter_user_id = u1.id
+                LEFT JOIN users u2 ON r.reported_user_id = u2.id
                 ORDER BY r.created_at DESC LIMIT 50
             `);
             res.json({ items: result.rows });
         } else if (type === 'bans') {
             const result = await pool.query(`
-                SELECT b.*, u.nickname 
+                SELECT b.*, u.username as nickname 
                 FROM bans b
-                LEFT JOIN users_anon u ON b.user_id = u.id
+                LEFT JOIN users u ON b.user_id = u.id
                 WHERE (b.ban_until > NOW()) OR (b.ban_type IN ('perm', 'shadow'))
                 ORDER BY b.created_at DESC
             `);
             res.json({ items: result.rows });
         } else if (type === 'profiles') {
-            // V6: List profiles
+            // V6: List profiles (Joined users + profiles)
             const result = await pool.query(`
-                SELECT id, nickname, device_id, last_seen_at 
-                FROM users_anon 
-                WHERE nickname IS NOT NULL 
-                ORDER BY last_seen_at DESC LIMIT 100
+                SELECT u.id, u.username, u.created_at, u.last_seen_at,
+                       p.display_name, p.avatar_url, p.bio
+                FROM users u
+                LEFT JOIN profiles p ON u.id = p.user_id
+                ORDER BY u.last_seen_at DESC LIMIT 100
             `);
             res.json({ items: result.rows });
         }
@@ -79,9 +84,9 @@ router.get('/data', async (req, res) => {
 router.get('/user-blocks/:userId', async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT b.blocked_id, u.nickname 
+            SELECT b.blocked_id, u.username as nickname 
             FROM blocks b
-            LEFT JOIN users_anon u ON b.blocked_id = u.id
+            LEFT JOIN users u ON b.blocked_id = u.id
             WHERE b.blocker_id = $1
         `, [req.params.userId]);
         res.json({ items: result.rows });

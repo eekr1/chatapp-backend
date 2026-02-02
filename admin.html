@@ -297,7 +297,7 @@
             } else if (currentTab === 'bans') {
                 html += '<th>User</th><th>Type</th><th>Until</th><th>Reason</th><th>Actions</th>';
             } else {
-                html += '<th>Nickname</th><th>Device ID</th><th>Last Seen</th><th>Actions</th>';
+                html += '<th>Username</th><th>Display Name</th><th>Last Seen</th><th>Actions</th>';
             }
             html += '</tr></thead><tbody>';
 
@@ -307,11 +307,12 @@
                 items.forEach(item => {
                     html += '<tr>';
                     if (currentTab === 'reports') {
+                        // ... code ...
                         const reported = item.reported_user_id;
                         html += `
                             <td>${new Date(item.created_at).toLocaleString()}</td>
-                            <td>${item.reporter || 'Anonim'}</td>
-                            <td>${item.reported || 'Anonim'}</td>
+                            <td>${item.reporter || 'Anon'}</td>
+                            <td>${item.reported || 'Anon'}</td>
                             <td>${item.reason}</td>
                             <td class="actions">
                                 <button class="btn-ban" onclick="actionBan('${reported}', 1, 'Report: ${item.reason}')">24h</button>
@@ -321,7 +322,7 @@
                         `;
                     } else if (currentTab === 'bans') {
                         html += `
-                            <td>${item.nickname || item.device_id?.substring(0, 8)}</td>
+                            <td>${item.nickname || 'Unknown'}</td>
                             <td><span class="badge ${item.ban_type}">${item.ban_type.toUpperCase()}</span></td>
                             <td>${item.ban_until ? new Date(item.ban_until).toLocaleString() : 'PERMANENT'}</td>
                             <td>${item.reason}</td>
@@ -332,11 +333,11 @@
                     } else {
                         // Profile
                         html += `
-                            <td><strong>${item.nickname}</strong></td>
-                            <td title="${item.device_id}">${item.device_id?.substring(0, 8)}...</td>
+                            <td><strong>${item.username}</strong></td>
+                            <td>${item.display_name || '-'}</td>
                             <td>${new Date(item.last_seen_at).toLocaleString()}</td>
                             <td class="actions">
-                                <button class="btn-details" onclick="openDetails('${item.id}', '${item.nickname}')">View Blocks</button>
+                                <button class="btn-details" onclick="openDetails('${item.id}', '${item.username}')">Details</button>
                                 <button class="btn-ban" onclick="actionBan('${item.id}', 1, 'Admin Action')">Ban</button>
                             </td>
                         `;

@@ -13,12 +13,50 @@ const pool = new Pool({
 const createTablesQuery = `
   CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+  -- V2 Auth Tables
+  CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    status TEXT DEFAULT 'active'
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    device_id TEXT, 
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS profiles (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    display_name TEXT,
+    avatar_url TEXT,
+    bio TEXT,
+    tags JSONB DEFAULT '[]',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS friendships (
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    friend_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending', 
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, friend_user_id)
+  );
+
+  -- Legacy Tables
   CREATE TABLE IF NOT EXISTS users_anon (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id TEXT UNIQUE NOT NULL,
-    username TEXT, -- Old field, keeping for safety but moving to nickname
-    nickname TEXT, -- V6: Persistent display name
-    nickname_set_at TIMESTAMPTZ, -- V6
+    username TEXT,
+    nickname TEXT,
+    nickname_set_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ DEFAULT NOW(),
     last_ip TEXT
@@ -26,8 +64,8 @@ const createTablesQuery = `
 
   CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_a_id UUID REFERENCES users_anon(id),
-    user_b_id UUID REFERENCES users_anon(id),
+    user_a_id UUID, 
+    user_b_id UUID,
     started_at TIMESTAMPTZ DEFAULT NOW(),
     ended_at TIMESTAMPTZ,
     ended_reason TEXT
@@ -35,9 +73,9 @@ const createTablesQuery = `
 
   CREATE TABLE IF NOT EXISTS reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reporter_user_id UUID REFERENCES users_anon(id),
-    reported_user_id UUID REFERENCES users_anon(id),
-    conversation_id UUID REFERENCES conversations(id),
+    reporter_user_id UUID,
+    reported_user_id UUID,
+    conversation_id UUID,
     reason TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     meta JSONB
@@ -45,8 +83,8 @@ const createTablesQuery = `
 
   CREATE TABLE IF NOT EXISTS bans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users_anon(id),
-    ban_type TEXT NOT NULL, -- 'temp' | 'perm' | 'shadow'
+    user_id UUID,
+    ban_type TEXT NOT NULL,
     ban_until TIMESTAMPTZ,
     reason TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -54,22 +92,26 @@ const createTablesQuery = `
   );
 
   CREATE TABLE IF NOT EXISTS blocks (
-    blocker_id UUID REFERENCES users_anon(id),
-    blocked_id UUID REFERENCES users_anon(id),
+    blocker_id UUID,
+    blocked_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (blocker_id, blocked_id)
   );
 
-  -- Migration for existing tables (if nickname column missing)
+  -- Migration
   DO $$
   BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users_anon' AND column_name='nickname') THEN
           ALTER TABLE users_anon ADD COLUMN nickname TEXT;
           ALTER TABLE users_anon ADD COLUMN nickname_set_at TIMESTAMPTZ;
       END IF;
+      
+      CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
+      CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_user_id);
   END
   $$;
 `;
+
 
 const ensureTables = async () => {
   try {
