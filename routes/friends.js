@@ -3,12 +3,6 @@ const router = express.Router();
 const { pool } = require('../db');
 const { hashToken } = require('../utils/security');
 
-// Re-use auth middleware logic or import it if I made it reusable.
-// I will copy-paste for now to keep files self-contained or I can move it to `middleware/auth.js`.
-// Let's create `middleware/auth.js` first to avoid duplication (DRY).
-// Actually, I'll just use the same logic inline or move it in next step.
-// For speed, I'll create a quick helper here.
-
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ error: 'Oturum gerekli.' });
@@ -49,21 +43,11 @@ router.post('/request', async (req, res) => {
         if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
         if (target.id === myId) return res.status(400).json({ error: 'Kendine istek atamazsın.' });
 
-        // Check existing request
-        // We order IDs to ensure uniqueness if we used a single row per relation, 
-        // BUT my schema definition was (user_id, friend_user_id).
-        // Let's see how I defined PK: PRIMARY KEY (user_id, friend_user_id).
-        // Typically for friendship we check both directions or use canonical order.
-        // Milestone plan: "friendships (user_id, friend_user_id, status: pending/accepted)".
-        // Meaning user_id is the requester usually.
-
-        // Check if I blocked them or they blocked me
         const blockCheck = await pool.query(`
             SELECT * FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)
         `, [myId, target.id]);
         if (blockCheck.rows.length > 0) return res.status(403).json({ error: 'Bu kullanıcı ile etkileşime geçemezsiniz.' });
 
-        // Check if friendship exists
         const exists = await pool.query(`
             SELECT * FROM friendships WHERE (user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)
         `, [myId, target.id]);
@@ -77,7 +61,6 @@ router.post('/request', async (req, res) => {
             }
         }
 
-        // Create Request
         await pool.query(
             'INSERT INTO friendships (user_id, friend_user_id, status) VALUES ($1, $2, $3)',
             [myId, target.id, 'pending']
@@ -102,19 +85,34 @@ router.get('/list', async (req, res) => {
                 u.username,
                 p.display_name, 
                 p.avatar_url,
-                -- Verify who sent the request
                 CASE WHEN f.user_id = $1 THEN 'outgoing' ELSE 'incoming' END as direction
             FROM friendships f
             JOIN users u ON (f.user_id = u.id OR f.friend_user_id = u.id)
             LEFT JOIN profiles p ON u.id = p.user_id
             WHERE (f.user_id = $1 OR f.friend_user_id = $1)
-            AND u.id != $1 -- Filter out myself
+            AND u.id != $1
         `, [myId]);
 
-        const friends = result.rows.filter(r => r.status === 'accepted');
-        const requests = result.rows.filter(r => r.status === 'pending'); // Both directions usually shown in different UI tabs
+        const unreadRes = await pool.query(`
+             SELECT m.sender_id, COUNT(*) as cnt
+             FROM messages m
+             JOIN conversations c ON m.conversation_id = c.id
+             WHERE m.sender_id != $1 
+             AND m.is_read = FALSE
+             AND ((c.user_a_id = $1 OR c.user_b_id = $1))
+             GROUP BY m.sender_id
+        `, [myId]);
 
-        // Incoming requests: status=pending AND direction=incoming
+        const unreadMap = {};
+        unreadRes.rows.forEach(r => { unreadMap[r.sender_id] = parseInt(r.cnt); });
+
+        const friends = result.rows.filter(r => r.status === 'accepted').map(f => ({
+            ...f,
+            unread_count: unreadMap[f.user_id] || 0,
+            is_online: req.isUserOnline ? req.isUserOnline(f.user_id) : false
+        }));
+        const requests = result.rows.filter(r => r.status === 'pending');
+
         const incoming = requests.filter(r => r.direction === 'incoming');
         const outgoing = requests.filter(r => r.direction === 'outgoing');
 
@@ -128,7 +126,7 @@ router.get('/list', async (req, res) => {
 
 // Accept Request
 router.post('/accept', async (req, res) => {
-    const { request_user_id } = req.body; // The user who sent the request
+    const { request_user_id } = req.body;
     const myId = req.user.user_id;
 
     try {
@@ -137,7 +135,7 @@ router.post('/accept', async (req, res) => {
             SET status = 'accepted', updated_at = NOW()
             WHERE user_id = $1 AND friend_user_id = $2 AND status = 'pending'
             RETURNING *
-        `, [request_user_id, myId]); // I am friend_user_id (recipient)
+        `, [request_user_id, myId]);
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'İstek bulunamadı.' });
 
@@ -148,13 +146,12 @@ router.post('/accept', async (req, res) => {
     }
 });
 
-// Reject Request (or Delete Friend)
+// Reject Request
 router.post('/reject', async (req, res) => {
     const { target_user_id } = req.body;
     const myId = req.user.user_id;
 
     try {
-        // Delete record regardless of who initiated
         const result = await pool.query(`
             DELETE FROM friendships 
             WHERE ((user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1))
@@ -167,33 +164,51 @@ router.post('/reject', async (req, res) => {
     }
 });
 
-// GET /history/:friendId - Fetch chat history with a friend
+// GET /history/:friendId
 router.get('/history/:friendId', async (req, res) => {
     const myId = req.user.user_id;
     const friendId = req.params.friendId;
 
     try {
-        // Fetch all direct messages between these two users regardless of conversation_id
-        // to ensure history is contiguous even if conversation records were fragmented.
         const msgRes = await pool.query(`
-            SELECT m.sender_id, m.text, m.msg_type, m.created_at 
+            SELECT m.id, m.sender_id, m.text, m.msg_type, m.created_at, m.is_read, m.media_id
             FROM messages m
             JOIN conversations c ON m.conversation_id = c.id
             WHERE ((c.user_a_id = $1 AND c.user_b_id = $2) OR (c.user_a_id = $2 AND c.user_b_id = $1))
-            AND m.msg_type = 'direct'
+            AND m.msg_type IN ('direct', 'image') 
             ORDER BY m.created_at ASC
         `, [myId, friendId]);
 
-        // Transform for frontend
-        const messages = msgRes.rows.map(m => ({
-            from: m.sender_id === myId ? 'me' : 'peer',
-            text: m.text,
-            msgType: m.msg_type,
-            createdAt: m.created_at,
-            timestamp: new Date(m.created_at).getTime()
+        const messages = await Promise.all(msgRes.rows.map(async m => {
+            let mediaExpired = false;
+            if (m.msg_type === 'image' && m.media_id) {
+                const check = await pool.query('SELECT 1 FROM ephemeral_media WHERE id = $1', [m.media_id]);
+                mediaExpired = check.rows.length === 0;
+            }
+            return {
+                from: m.sender_id === myId ? 'me' : 'peer',
+                text: m.text,
+                msgType: m.msg_type,
+                mediaId: m.media_id,
+                mediaExpired,
+                createdAt: m.created_at,
+                timestamp: new Date(m.created_at).getTime(),
+                isRead: m.is_read
+            };
         }));
 
         res.json({ success: true, messages });
+
+        pool.query(`
+            UPDATE messages 
+            SET is_read = TRUE 
+            WHERE conversation_id IN (
+                SELECT id FROM conversations WHERE (user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1)
+            ) 
+            AND sender_id = $2
+            AND is_read = FALSE
+        `, [myId, friendId]).catch(e => console.error('Mark read error', e));
+
     } catch (e) {
         console.error('History API error:', e);
         res.status(500).json({ error: 'Geçmiş yüklenemedi.' });

@@ -540,8 +540,16 @@ wss.on('connection', (ws, req) => {
                 const dmTargetUserId = data.targetUserId;
                 const dmSenderId = clientData.dbUserId;
 
-                // 1. Verify Friendship (Optional but safe)
-                // Skip for speed or implement as needed. Assuming UI only allows friends.
+                // 1. Verify Friendship (Strict Security)
+                try {
+                    const fCheck = await pool.query(
+                        'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
+                        [dmSenderId, dmTargetUserId]
+                    );
+                    if (fCheck.rows.length === 0) {
+                        return sendJson(ws, { type: 'error', message: 'Sadece arkadaşlarınıza mesaj atabilirsiniz.' });
+                    }
+                } catch (e) { return; }
 
                 // 2. Find Target Client
                 let dmTargetClient = null;
@@ -576,15 +584,33 @@ wss.on('connection', (ws, req) => {
 
             case 'typing':
             case 'stop_typing':
-                const tRoomId = userRoomMap.get(ws.clientId);
-                if (tRoomId) {
-                    const room = rooms.get(tRoomId);
-                    if (room) {
-                        const peerObj = room.users.find(u => u.clientId !== ws.clientId);
-                        if (peerObj && room.sockets[peerObj.clientId]) {
-                            sendJson(room.sockets[peerObj.clientId], {
-                                type: data.type
-                            });
+                if (data.targetUserId) {
+                    // Friend Typing
+                    let tClient = null;
+                    for (const [cid, cData] of activeClients) {
+                        if (cData.dbUserId === data.targetUserId) {
+                            tClient = cData;
+                            break;
+                        }
+                    }
+                    if (tClient) {
+                        sendJson(tClient.ws, {
+                            type: data.type,
+                            fromUserId: clientData.dbUserId
+                        });
+                    }
+                } else {
+                    // Anon Typing
+                    const tRoomId = userRoomMap.get(ws.clientId);
+                    if (tRoomId) {
+                        const room = rooms.get(tRoomId);
+                        if (room) {
+                            const peerObj = room.users.find(u => u.clientId !== ws.clientId);
+                            if (peerObj && room.sockets[peerObj.clientId]) {
+                                sendJson(room.sockets[peerObj.clientId], {
+                                    type: data.type
+                                });
+                            }
                         }
                     }
                 }
@@ -705,8 +731,8 @@ wss.on('connection', (ws, req) => {
                     // Persist as message in conversation
                     const dConvId = await findOrCreatePersistentConversation(distSenderId, distTargetUserId);
                     await pool.query(
-                        'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
-                        [dConvId, distSenderId, '📸 Fotoğraf', 'image']
+                        'INSERT INTO messages (conversation_id, sender_id, text, msg_type, media_id) VALUES ($1, $2, $3, $4, $5)',
+                        [dConvId, distSenderId, '📸 Fotoğraf', 'image', dMediaId]
                     );
 
                     // Find Target Client

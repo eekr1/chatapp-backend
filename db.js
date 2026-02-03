@@ -105,6 +105,8 @@ const createTablesQuery = `
     sender_id UUID REFERENCES users(id),
     text TEXT NOT NULL,
     msg_type TEXT DEFAULT 'text',
+    is_read BOOLEAN DEFAULT FALSE,
+    media_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW()
   );
 
@@ -125,6 +127,14 @@ const createTablesQuery = `
       
       CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
       CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_user_id);
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_read') THEN
+          ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT FALSE;
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='media_id') THEN
+          ALTER TABLE messages ADD COLUMN media_id UUID;
+      END IF;
   END
   $$;
 `;
