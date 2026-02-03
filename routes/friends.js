@@ -167,4 +167,45 @@ router.post('/reject', async (req, res) => {
     }
 });
 
+// GET /history/:friendId - Fetch chat history with a friend
+router.get('/history/:friendId', async (req, res) => {
+    const myId = req.user.user_id;
+    const friendId = req.params.friendId;
+
+    try {
+        // 1. Verify Friendship & Get Conversation ID
+        const convRes = await pool.query(`
+            SELECT id FROM conversations 
+            WHERE (user_a_id = $1 AND user_b_id = $2) 
+               OR (user_a_id = $2 AND user_b_id = $1)
+            ORDER BY started_at DESC LIMIT 1
+        `, [myId, friendId]);
+
+        if (convRes.rows.length === 0) return res.json({ success: true, messages: [] });
+
+        const conversationId = convRes.rows[0].id;
+
+        // 2. Fetch Messages
+        const msgRes = await pool.query(`
+            SELECT sender_id, text, msg_type, created_at 
+            FROM messages 
+            WHERE conversation_id = $1 
+            ORDER BY created_at ASC
+        `, [conversationId]);
+
+        // Transform for frontend
+        const messages = msgRes.rows.map(m => ({
+            from: m.sender_id === myId ? 'me' : 'peer',
+            text: m.text,
+            msgType: m.msg_type,
+            createdAt: m.created_at
+        }));
+
+        res.json({ success: true, messages });
+    } catch (e) {
+        console.error('History API error:', e);
+        res.status(500).json({ error: 'Geçmiş yüklenemedi.' });
+    }
+});
+
 module.exports = router;
