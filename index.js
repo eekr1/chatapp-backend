@@ -689,9 +689,68 @@ wss.on('connection', (ws, req) => {
                 } catch (e) { console.error(e); }
                 break;
 
+            case 'direct_image_send':
+                if (!data.targetUserId || !data.imageData) return;
+                const distSenderId = clientData.dbUserId;
+                const distTargetUserId = data.targetUserId;
+
+                try {
+                    // Store in ephemeral_media
+                    const dInsertRes = await pool.query(
+                        'INSERT INTO ephemeral_media (sender_id, receiver_id, media_data) VALUES ($1, $2, $3) RETURNING id',
+                        [distSenderId, distTargetUserId, data.imageData]
+                    );
+                    const dMediaId = dInsertRes.rows[0].id;
+
+                    // Persist as message in conversation
+                    const dConvId = await findOrCreatePersistentConversation(distSenderId, distTargetUserId);
+                    await pool.query(
+                        'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
+                        [dConvId, distSenderId, '📸 Fotoğraf', 'image']
+                    );
+
+                    // Find Target Client
+                    let dTargetClient = null;
+                    for (const [cid, cData] of activeClients) {
+                        if (cData.dbUserId === distTargetUserId) {
+                            dTargetClient = cData;
+                            break;
+                        }
+                    }
+
+                    if (dTargetClient) {
+                        sendJson(dTargetClient.ws, {
+                            type: 'direct_message',
+                            fromUserId: distSenderId,
+                            fromUsername: clientData.username,
+                            fromNickname: clientData.nickname,
+                            msgType: 'image',
+                            mediaId: dMediaId,
+                            text: '📸 Fotoğraf',
+                            conversationId: dConvId
+                        });
+                    }
+
+                    // Echo back to sender
+                    sendJson(ws, {
+                        type: 'image_sent',
+                        mediaId: dMediaId,
+                        targetUserId: distTargetUserId
+                    });
+
+                } catch (e) { console.error('direct_image_send error', e); }
+                break;
+
+
             case 'report':
-                if (data.roomId && data.reason) {
-                    handleReport(ws.clientId, data.roomId, data.reason);
+                if (data.reason) {
+                    if (data.roomId) {
+                        handleReport(ws.clientId, data.roomId, data.reason);
+                    } else if (data.targetUserId) {
+                        // Friend report (V13 Extension)
+                        logReport(clientData.dbUserId, data.targetUserId, data.conversationId || null, data.reason);
+                        sendJson(ws, { type: 'success', message: 'Raporunuz iletildi.' });
+                    }
                 }
                 break;
 
