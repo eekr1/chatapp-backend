@@ -182,14 +182,15 @@ async function blockUser(blockerId, blockedId) {
 
 async function createConversation(userAId, userBId) {
     try {
+        const newId = uuidv4();
         const res = await pool.query(
-            'INSERT INTO conversations (user_a_id, user_b_id) VALUES ($1, $2) RETURNING id',
-            [userAId, userBId]
+            'INSERT INTO conversations (id, user_a_id, user_b_id) VALUES ($1, $2, $3) RETURNING id',
+            [newId, userAId, userBId]
         );
         return res.rows[0].id;
     } catch (e) {
         console.error('DB Error createConversation:', e);
-        return null;
+        throw e; // Propagate error to caller
     }
 }
 
@@ -212,7 +213,12 @@ async function findOrCreatePersistentConversation(userAId, userBId) {
         return await createConversation(userAId, userBId);
     } catch (e) {
         console.error('findOrCreatePersistentConversation error:', e);
-        return await createConversation(userAId, userBId);
+        // Retry creation if query failed (e.g. connection glitch), but if createConversation throws, it propagates
+        try {
+            return await createConversation(userAId, userBId);
+        } catch (creationError) {
+            throw creationError;
+        }
     }
 }
 
@@ -578,15 +584,22 @@ wss.on('connection', (ws, req) => {
 
                 // 3. Persist
                 // Use persistent conversation for direct messages
+                let convId = null;
                 try {
-                    const convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
+                    convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
                     sendJson(ws, { type: 'debug', msg: '5. Conversation ID Used', convId });
+                } catch (e) {
+                    sendJson(ws, { type: 'debug', msg: '5. Conversation Creation FAILED', error: e.message, code: e.code, detail: e.detail });
+                    console.error('[CRITICAL] Conv Create Error:', e);
+                    return sendJson(ws, { type: 'error', message: 'Sohbet oluşturulamadı: ' + e.message });
+                }
 
-                    if (!convId) {
-                        console.error('[CRITICAL] Failed to get conversation ID for DM persistence.');
-                        return sendJson(ws, { type: 'error', message: 'Mesaj kaydedilemedi (Sunucu Hatası).' });
-                    }
+                if (!convId) {
+                    console.error('[CRITICAL] Failed to get conversation ID for DM persistence.');
+                    return sendJson(ws, { type: 'error', message: 'Mesaj kaydedilemedi (ID Alınamadı).' });
+                }
 
+                try {
                     await pool.query(
                         'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
                         [convId, dmSenderId, data.text, 'direct']
