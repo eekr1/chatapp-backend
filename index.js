@@ -1,4 +1,6 @@
+require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const path = require('path');
 const { WebSocketServer, WebSocket } = require('ws');
 const http = require('http');
@@ -33,6 +35,7 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json()); // JSON body parser for admin API
+app.use(cors()); // Enable CORS for ALL origins (Production should be stricter, but this is for simplicity)
 
 // Security: Rate Limiters
 const rateLimit = require('express-rate-limit');
@@ -356,6 +359,7 @@ const leaveRoom = (clientId, reason = 'leave') => {
 wss.on('connection', (ws, req) => {
     ws.clientId = uuidv4();
     ws.isAlive = true;
+    ws.limiter = { count: 0, lastReset: Date.now() }; // Security: Rate Limiter Init
     ws.on('pong', heartbeat);
 
     broadcastOnlineCount();
