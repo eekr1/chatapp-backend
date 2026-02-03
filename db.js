@@ -135,6 +135,14 @@ const createTablesQuery = `
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='media_id') THEN
           ALTER TABLE messages ADD COLUMN media_id UUID;
       END IF;
+
+      -- V13 Fix: Drop legacy FK constraints on conversations to allow Auth Users
+      BEGIN
+        ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_user_a_id_fkey;
+        ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_user_b_id_fkey;
+      EXCEPTION WHEN OTHERS THEN 
+        RAISE NOTICE 'Constraint drop failed or already gone %', SQLERRM;
+      END;
   END
   $$;
 `;
