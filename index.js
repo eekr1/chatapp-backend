@@ -195,17 +195,20 @@ async function createConversation(userAId, userBId) {
 
 async function findOrCreatePersistentConversation(userAId, userBId) {
     try {
-        // Find existing conversation between these two
+        // Find ANY existing conversation between these two (History is continuous)
         const res = await pool.query(`
             SELECT id FROM conversations 
             WHERE ((user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1))
-            AND ended_at IS NULL
             ORDER BY started_at DESC LIMIT 1
         `, [userAId, userBId]);
 
-        if (res.rows.length > 0) return res.rows[0].id;
+        if (res.rows.length > 0) {
+            console.log(`[DB] Found existing conversation ${res.rows[0].id} for ${userAId}<->${userBId}`);
+            return res.rows[0].id;
+        }
 
         // Create new one if none exists
+        console.log(`[DB] Creating NEW conversation for ${userAId}<->${userBId}`);
         return await createConversation(userAId, userBId);
     } catch (e) {
         console.error('findOrCreatePersistentConversation error:', e);
