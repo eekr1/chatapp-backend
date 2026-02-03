@@ -269,6 +269,7 @@ const joinQueue = async (ws) => {
         clientId: ws.clientId,
         ws,
         nickname: clientData.nickname,
+        username: clientData.username, // V13: Pass username
         dbUserId: clientData.dbUserId
     };
 
@@ -447,7 +448,8 @@ wss.on('connection', (ws, req) => {
                 dbUserId: dbUser.id,
                 deviceId: isAnon ? deviceId : 'auth_user',
                 isShadowBanned: isShadow,
-                nickname: dbUser.nickname // Display Name
+                nickname: dbUser.nickname, // Display Name
+                username: dbUser.username  // V13: Store unique username
             });
 
             sendJson(ws, { type: 'welcome', nickname: dbUser.nickname });
