@@ -325,8 +325,8 @@ const createRoom = (roomId, conversationId, userA, userB) => {
     userRoomMap.set(userA.clientId, roomId);
     userRoomMap.set(userB.clientId, roomId);
 
-    sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname, peerUsername: userB.username }); // V6: peerUsername -> peerNickname
-    sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname, peerUsername: userA.username });
+    sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
+    sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
 };
 
 const leaveRoom = (clientId, reason = 'leave') => {
