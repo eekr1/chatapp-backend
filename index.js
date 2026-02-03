@@ -193,6 +193,26 @@ async function createConversation(userAId, userBId) {
     }
 }
 
+async function findOrCreatePersistentConversation(userAId, userBId) {
+    try {
+        // Find existing conversation between these two
+        const res = await pool.query(`
+            SELECT id FROM conversations 
+            WHERE ((user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1))
+            AND ended_at IS NULL
+            ORDER BY started_at DESC LIMIT 1
+        `, [userAId, userBId]);
+
+        if (res.rows.length > 0) return res.rows[0].id;
+
+        // Create new one if none exists
+        return await createConversation(userAId, userBId);
+    } catch (e) {
+        console.error('findOrCreatePersistentConversation error:', e);
+        return await createConversation(userAId, userBId);
+    }
+}
+
 async function endConversation(conversationId, reason) {
     if (!conversationId) return;
     try {
@@ -533,11 +553,8 @@ wss.on('connection', (ws, req) => {
                 }
 
                 // 3. Persist
-                // We need a conversationId. If not provided, we should find or create one.
-                let convId = data.conversationId;
-                if (!convId) {
-                    convId = await createConversation(dmSenderId, dmTargetUserId);
-                }
+                // Use persistent conversation for direct messages
+                const convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
 
                 await pool.query(
                     'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
@@ -716,7 +733,7 @@ wss.on('connection', (ws, req) => {
                     if (targetClient) {
                         // V13: Do NOT force leaveRoom anymore.
                         // Establece que una sesión directa PUEDE existir.
-                        const conversationId = await createConversation(meId, targetUser.id);
+                        const conversationId = await findOrCreatePersistentConversation(meId, targetUser.id);
 
                         sendJson(ws, {
                             type: 'direct_matched',

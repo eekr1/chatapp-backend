@@ -173,32 +173,24 @@ router.get('/history/:friendId', async (req, res) => {
     const friendId = req.params.friendId;
 
     try {
-        // 1. Verify Friendship & Get Conversation ID
-        const convRes = await pool.query(`
-            SELECT id FROM conversations 
-            WHERE (user_a_id = $1 AND user_b_id = $2) 
-               OR (user_a_id = $2 AND user_b_id = $1)
-            ORDER BY started_at DESC LIMIT 1
-        `, [myId, friendId]);
-
-        if (convRes.rows.length === 0) return res.json({ success: true, messages: [] });
-
-        const conversationId = convRes.rows[0].id;
-
-        // 2. Fetch Messages
+        // Fetch all direct messages between these two users regardless of conversation_id
+        // to ensure history is contiguous even if conversation records were fragmented.
         const msgRes = await pool.query(`
-            SELECT sender_id, text, msg_type, created_at 
-            FROM messages 
-            WHERE conversation_id = $1 
-            ORDER BY created_at ASC
-        `, [conversationId]);
+            SELECT m.sender_id, m.text, m.msg_type, m.created_at 
+            FROM messages m
+            JOIN conversations c ON m.conversation_id = c.id
+            WHERE ((c.user_a_id = $1 AND c.user_b_id = $2) OR (c.user_a_id = $2 AND c.user_b_id = $1))
+            AND m.msg_type = 'direct'
+            ORDER BY m.created_at ASC
+        `, [myId, friendId]);
 
         // Transform for frontend
         const messages = msgRes.rows.map(m => ({
             from: m.sender_id === myId ? 'me' : 'peer',
             text: m.text,
             msgType: m.msg_type,
-            createdAt: m.created_at
+            createdAt: m.created_at,
+            timestamp: new Date(m.created_at).getTime()
         }));
 
         res.json({ success: true, messages });
