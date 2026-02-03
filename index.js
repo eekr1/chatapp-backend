@@ -513,6 +513,50 @@ wss.on('connection', (ws, req) => {
                 }
                 break;
 
+            case 'direct_message':
+                // New logic for Friend Messaging (Non-blocking)
+                if (!data.targetUserId || !data.text) return;
+
+                const dmTargetUserId = data.targetUserId;
+                const dmSenderId = clientData.dbUserId;
+
+                // 1. Verify Friendship (Optional but safe)
+                // Skip for speed or implement as needed. Assuming UI only allows friends.
+
+                // 2. Find Target Client
+                let dmTargetClient = null;
+                for (const [cid, cData] of activeClients) {
+                    if (cData.dbUserId === dmTargetUserId) {
+                        dmTargetClient = cData;
+                        break;
+                    }
+                }
+
+                // 3. Persist
+                // We need a conversationId. If not provided, we should find or create one.
+                let convId = data.conversationId;
+                if (!convId) {
+                    convId = await createConversation(dmSenderId, dmTargetUserId);
+                }
+
+                await pool.query(
+                    'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
+                    [convId, dmSenderId, data.text, 'direct']
+                ).catch(e => console.error('DM Persist error', e));
+
+                // 4. Send to target if online
+                if (dmTargetClient) {
+                    sendJson(dmTargetClient.ws, {
+                        type: 'direct_message',
+                        fromUsername: clientData.username,
+                        fromNickname: clientData.nickname,
+                        fromUserId: dmSenderId,
+                        text: data.text,
+                        conversationId: convId
+                    });
+                }
+                break;
+
             case 'typing':
             case 'stop_typing':
                 const tRoomId = userRoomMap.get(ws.clientId);
@@ -662,8 +706,6 @@ wss.on('connection', (ws, req) => {
 
                     // 3. Check if Target is Online
                     let targetClient = null;
-                    // Need to scan activeClients for this user id
-                    // Optimized: We could maintain a map dbUserId -> clientId, but loop is fine for <10k users.
                     for (const [cid, cData] of activeClients) {
                         if (cData.dbUserId === targetUser.id) {
                             targetClient = cData;
@@ -671,28 +713,21 @@ wss.on('connection', (ws, req) => {
                         }
                     }
 
-                    if (!targetClient) return sendError(ws, 'OFFLINE', 'Kullanıcı şu an çevrimdışı.');
+                    if (targetClient) {
+                        // V13: Do NOT force leaveRoom anymore.
+                        // Establece que una sesión directa PUEDE existir.
+                        const conversationId = await createConversation(meId, targetUser.id);
 
-                    // 4. Create Room Directly
-                    leaveRoom(ws.clientId, 'join_direct'); // Leave current room if any
-                    leaveRoom(targetClient.ws.clientId, 'join_direct'); // Target leaves their room? 
-                    // Verify: Should we force pull the target out of a conversation? 
-                    // Only if they are idle? Or queued? 
-                    // Ideally, we prompt them. But "Direct Chat" usually implies "Call".
-                    // Let's force it for V1 speed or check if they are busy.
-                    // If they are in a room, maybe just error "User is busy".
-                    if (userRoomMap.has(targetClient.ws.clientId)) {
-                        return sendError(ws, 'BUSY', 'Kullanıcı şu an başka bir sohbetre.');
+                        sendJson(ws, {
+                            type: 'direct_matched',
+                            targetUsername: targetClient.nickname,
+                            targetUserId: targetUser.id,
+                            conversationId
+                        });
+                        return;
+                    } else {
+                        return sendError(ws, 'OFFLINE', 'Kullanıcı şu an çevrimdışı.');
                     }
-
-                    // Proceed
-                    const roomId = uuidv4();
-                    const conversationId = await createConversation(meId, targetUser.id);
-
-                    createRoom(roomId, conversationId,
-                        { ...clientData, clientId: ws.clientId }, // helper object
-                        { ...targetClient, clientId: targetClient.ws.clientId }
-                    );
                 }
                 break;
         }
