@@ -540,6 +540,8 @@ wss.on('connection', (ws, req) => {
                 const dmTargetUserId = data.targetUserId;
                 const dmSenderId = clientData.dbUserId;
 
+                console.log(`[DEBUG] direct_message from ${clientData.nickname} (${dmSenderId}) to ${dmTargetUserId}`);
+
                 // 1. Verify Friendship (Strict Security)
                 try {
                     const fCheck = await pool.query(
@@ -563,6 +565,12 @@ wss.on('connection', (ws, req) => {
                 // 3. Persist
                 // Use persistent conversation for direct messages
                 const convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
+                console.log(`[DEBUG] Using/Creating conversation ${convId} for DM`);
+
+                if (!convId) {
+                    console.error('[CRITICAL] Failed to get conversation ID for DM persistence.');
+                    return sendJson(ws, { type: 'error', message: 'Mesaj kaydedilemedi (Sunucu Hatası).' });
+                }
 
                 await pool.query(
                     'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
@@ -571,6 +579,7 @@ wss.on('connection', (ws, req) => {
 
                 // 4. Send to target if online
                 if (dmTargetClient) {
+                    console.log(`[DEBUG] Target is online. Sending DM to ${dmTargetClient.nickname}`);
                     sendJson(dmTargetClient.ws, {
                         type: 'direct_message',
                         fromUsername: clientData.username,
@@ -579,6 +588,8 @@ wss.on('connection', (ws, req) => {
                         text: data.text,
                         conversationId: convId
                     });
+                } else {
+                    console.log(`[DEBUG] Target ${dmTargetUserId} is offline.`);
                 }
                 break;
 
@@ -594,10 +605,13 @@ wss.on('connection', (ws, req) => {
                         }
                     }
                     if (tClient) {
+                        console.log(`[DEBUG] Relay typing event '${data.type}' from ${clientData.nickname} to ${tClient.nickname}`);
                         sendJson(tClient.ws, {
                             type: data.type,
                             fromUserId: clientData.dbUserId
                         });
+                    } else {
+                        console.log(`[DEBUG] Typing target ${data.targetUserId} not found/online.`);
                     }
                 } else {
                     // Anon Typing

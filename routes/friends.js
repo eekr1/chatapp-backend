@@ -179,6 +179,8 @@ router.get('/history/:friendId', async (req, res) => {
             ORDER BY m.created_at ASC
         `, [myId, friendId]);
 
+        console.log(`[DEBUG] History for ${myId}<->${friendId} found ${msgRes.rows.length} messages.`);
+
         const messages = await Promise.all(msgRes.rows.map(async m => {
             let mediaExpired = false;
             if (m.msg_type === 'image' && m.media_id) {
