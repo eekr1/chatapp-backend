@@ -538,7 +538,12 @@ wss.on('connection', (ws, req) => {
 
             case 'direct_message':
                 // New logic for Friend Messaging (Non-blocking)
-                if (!data.targetUserId || !data.text) return;
+                sendJson(ws, { type: 'debug', msg: '1. Received DM Request', data });
+
+                if (!data.targetUserId || !data.text) {
+                    sendJson(ws, { type: 'debug', msg: '2. Validation Failed', data });
+                    return;
+                }
 
                 const dmTargetUserId = data.targetUserId;
                 const dmSenderId = clientData.dbUserId;
@@ -551,10 +556,15 @@ wss.on('connection', (ws, req) => {
                         'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
                         [dmSenderId, dmTargetUserId]
                     );
+                    sendJson(ws, { type: 'debug', msg: '3. Friendship Check Result', rows: fCheck.rows.length });
+
                     if (fCheck.rows.length === 0) {
                         return sendJson(ws, { type: 'error', message: 'Sadece arkadaşlarınıza mesaj atabilirsiniz.' });
                     }
-                } catch (e) { return; }
+                } catch (e) {
+                    sendJson(ws, { type: 'debug', msg: '3. Friendship Check ERROR', error: e.message });
+                    return;
+                }
 
                 // 2. Find Target Client
                 let dmTargetClient = null;
@@ -564,21 +574,28 @@ wss.on('connection', (ws, req) => {
                         break;
                     }
                 }
+                sendJson(ws, { type: 'debug', msg: '4. Target Client Found?', found: !!dmTargetClient });
 
                 // 3. Persist
                 // Use persistent conversation for direct messages
-                const convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
-                console.log(`[DEBUG] Using/Creating conversation ${convId} for DM`);
+                try {
+                    const convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
+                    sendJson(ws, { type: 'debug', msg: '5. Conversation ID Used', convId });
 
-                if (!convId) {
-                    console.error('[CRITICAL] Failed to get conversation ID for DM persistence.');
-                    return sendJson(ws, { type: 'error', message: 'Mesaj kaydedilemedi (Sunucu Hatası).' });
+                    if (!convId) {
+                        console.error('[CRITICAL] Failed to get conversation ID for DM persistence.');
+                        return sendJson(ws, { type: 'error', message: 'Mesaj kaydedilemedi (Sunucu Hatası).' });
+                    }
+
+                    await pool.query(
+                        'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
+                        [convId, dmSenderId, data.text, 'direct']
+                    );
+                    sendJson(ws, { type: 'debug', msg: '6. DB Insert Success' });
+                } catch (e) {
+                    sendJson(ws, { type: 'debug', msg: '6. DB Insert ERROR', error: e.message });
+                    console.error('DM Persist error', e);
                 }
-
-                await pool.query(
-                    'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
-                    [convId, dmSenderId, data.text, 'direct']
-                ).catch(e => console.error('DM Persist error', e));
 
                 // 4. Send to target if online
                 if (dmTargetClient) {
@@ -589,7 +606,7 @@ wss.on('connection', (ws, req) => {
                         fromNickname: clientData.nickname,
                         fromUserId: dmSenderId,
                         text: data.text,
-                        conversationId: convId
+                        conversationId: typeof convId !== 'undefined' ? convId : null
                     });
                 } else {
                     console.log(`[DEBUG] Target ${dmTargetUserId} is offline.`);
