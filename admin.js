@@ -25,12 +25,32 @@ router.get('/', (req, res) => {
 });
 
 
+// SSE Clients for Live Logs
+let logClients = [];
+
+router.logToAdmin = (data) => {
+    const msg = `data: ${JSON.stringify(data)}\n\n`;
+    logClients.forEach(res => res.write(msg));
+};
+
+router.get('/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    logClients.push(res);
+
+    req.on('close', () => {
+        logClients = logClients.filter(c => c !== res);
+    });
+});
+
 router.get('/stats', async (req, res) => {
     try {
         const users = await pool.query('SELECT COUNT(*) FROM users');
         const bans = await pool.query('SELECT COUNT(*) FROM bans');
         const reports = await pool.query('SELECT COUNT(*) FROM reports WHERE created_at > NOW() - INTERVAL \'24 hours\'');
-        // V6 Fix: Count only active conversations (not ended)
         const active = await pool.query('SELECT COUNT(*) FROM conversations WHERE ended_at IS NULL');
 
         res.json({
@@ -44,9 +64,10 @@ router.get('/stats', async (req, res) => {
 
 router.get('/data', async (req, res) => {
     const type = req.query.type;
+    const search = req.query.q || ''; // Search query
+
     try {
         if (type === 'reports') {
-            // Need to link to users table for names
             const result = await pool.query(`
                 SELECT r.*, 
                        COALESCE(u1.username, 'Anon') as reporter, 
@@ -67,14 +88,23 @@ router.get('/data', async (req, res) => {
             `);
             res.json({ items: result.rows });
         } else if (type === 'profiles') {
-            // V6: List profiles (Joined users + profiles)
-            const result = await pool.query(`
+            // V6: List profiles with Search
+            let query = `
                 SELECT u.id, u.username, u.created_at, u.last_seen_at,
                        p.display_name, p.avatar_url, p.bio
                 FROM users u
                 LEFT JOIN profiles p ON u.id = p.user_id
-                ORDER BY u.last_seen_at DESC LIMIT 100
-            `);
+            `;
+            const params = [];
+
+            if (search) {
+                query += ` WHERE u.username ILIKE $1 OR p.display_name ILIKE $1`;
+                params.push(`%${search}%`);
+            }
+
+            query += ` ORDER BY u.last_seen_at DESC LIMIT 100`;
+
+            const result = await pool.query(query, params);
             res.json({ items: result.rows });
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -90,6 +120,60 @@ router.get('/user-blocks/:userId', async (req, res) => {
             WHERE b.blocker_id = $1
         `, [req.params.userId]);
         res.json({ items: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Get user friends
+router.get('/user-friends/:userId', async (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const result = await pool.query(`
+            SELECT u.id, u.username, u.created_at 
+            FROM friendships f
+            JOIN users u ON (f.user_id = u.id OR f.friend_user_id = u.id)
+            WHERE (f.user_id = $1 OR f.friend_user_id = $1) 
+              AND f.status = 'accepted'
+              AND u.id != $1
+        `, [userId]);
+        res.json({ items: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Deep Stats: Reports
+router.get('/user-reports/:userId', async (req, res) => {
+    try {
+        const userId = req.params.userId;
+
+        // Received Reports
+        const receivedRes = await pool.query(`
+            SELECT r.*, u.username as reporter_name
+            FROM reports r
+            LEFT JOIN users u ON r.reporter_user_id = u.id
+            WHERE r.reported_user_id = $1
+            ORDER BY r.created_at DESC LIMIT 20
+        `, [userId]);
+
+        // Sent Reports
+        const sentRes = await pool.query(`
+            SELECT r.*, u.username as reported_name
+            FROM reports r
+            LEFT JOIN users u ON r.reported_user_id = u.id
+            WHERE r.reporter_user_id = $1
+            ORDER BY r.created_at DESC LIMIT 20
+        `, [userId]);
+
+        // Counts
+        const receivedCount = await pool.query('SELECT COUNT(*) FROM reports WHERE reported_user_id=$1', [userId]);
+        const sentCount = await pool.query('SELECT COUNT(*) FROM reports WHERE reporter_user_id=$1', [userId]);
+
+        res.json({
+            received: receivedRes.rows,
+            sent: sentRes.rows,
+            stats: {
+                receivedCount: receivedCount.rows[0].count,
+                sentCount: sentCount.rows[0].count
+            }
+        });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -131,6 +215,19 @@ router.post('/unblock', async (req, res) => {
     const { blockerId, blockedId } = req.body;
     try {
         await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [blockerId, blockedId]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Remove Friend Action
+router.post('/remove-friend', async (req, res) => {
+    const { userId, friendId } = req.body;
+    try {
+        await pool.query(`
+            DELETE FROM friendships 
+            WHERE (user_id = $1 AND friend_user_id = $2) 
+               OR (user_id = $2 AND friend_user_id = $1)
+        `, [userId, friendId]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

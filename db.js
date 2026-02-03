@@ -91,6 +91,14 @@ const createTablesQuery = `
     created_by TEXT DEFAULT 'auto'
   );
 
+  CREATE TABLE IF NOT EXISTS ephemeral_media (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    media_data TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
   CREATE TABLE IF NOT EXISTS blocks (
     blocker_id UUID,
     blocked_id UUID,

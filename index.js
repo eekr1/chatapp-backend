@@ -33,6 +33,25 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json()); // JSON body parser for admin API
+
+// Security: Rate Limiters
+const rateLimit = require('express-rate-limit');
+
+const authLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 50, // 50 requests per IP
+    message: { error: 'Çok fazla deneme. Lütfen bekleyin.' }
+});
+
+const apiLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 300, // 300 requests per IP
+});
+
+app.use('/auth', authLimiter);
+app.use('/api', apiLimiter);
+app.use('/friends', apiLimiter);
+
 app.use('/admin', adminRoutes);
 app.use('/auth', authRoutes);
 app.use('/api', profileRoutes); // Mounting profile under /api since it's logical API (e.g. /api/me)
@@ -346,7 +365,19 @@ wss.on('connection', (ws, req) => {
         let data;
         try { data = JSON.parse(raw); } catch { return; }
 
-        if (!checkRateLimit(ws.clientId)) return sendError(ws, 'RATE_LIMIT', 'Hız sınırı aşıldı.');
+        // Security: WebSocket Rate Limiting
+        const now = Date.now();
+        if (now - ws.limiter.lastReset > 1000) {
+            ws.limiter.count = 0;
+            ws.limiter.lastReset = now;
+        }
+        ws.limiter.count++;
+
+        if (ws.limiter.count > 5) {
+            if (ws.limiter.count > 10) return ws.close(); // Hard Limit
+            sendJson(ws, { type: 'error', message: 'Çok hızlı mesaj atıyorsunuz! 🐢' });
+            return;
+        }
 
         if (data.type === 'hello_ack') {
             const deviceId = data.deviceId;
@@ -447,11 +478,37 @@ wss.on('connection', (ws, req) => {
                     if (room) {
                         const peerObj = room.users.find(u => u.clientId !== ws.clientId);
                         if (peerObj && room.sockets[peerObj.clientId]) {
+                            // Admin Log
+                            if (adminRoutes.logToAdmin) {
+                                adminRoutes.logToAdmin({
+                                    type: 'msg',
+                                    from: clientData.nickname || 'User',
+                                    to: peerObj.nickname || 'Peer',
+                                    content: data.content
+                                });
+                            }
+
                             sendJson(room.sockets[peerObj.clientId], {
                                 type: 'message',
                                 roomId,
                                 from: 'peer',
                                 text: data.text
+                            });
+                        }
+                    }
+                }
+                break;
+
+            case 'typing':
+            case 'stop_typing':
+                const tRoomId = userRoomMap.get(ws.clientId);
+                if (tRoomId) {
+                    const room = rooms.get(tRoomId);
+                    if (room) {
+                        const peerObj = room.users.find(u => u.clientId !== ws.clientId);
+                        if (peerObj && room.sockets[peerObj.clientId]) {
+                            sendJson(room.sockets[peerObj.clientId], {
+                                type: data.type
                             });
                         }
                     }
@@ -465,6 +522,96 @@ wss.on('connection', (ws, req) => {
 
             case 'leave':
                 leaveRoom(ws.clientId, 'leave');
+                break;
+
+            case 'image_send':
+                if (!data.roomId || !data.imageData) return;
+                const iRoomId = userRoomMap.get(ws.clientId);
+                if (iRoomId !== data.roomId) return;
+                const iRoom = rooms.get(iRoomId);
+                if (!iRoom) return;
+
+                const iSender = iRoom.users.find(u => u.clientId === ws.clientId);
+                const iReceiver = iRoom.users.find(u => u.clientId !== ws.clientId);
+
+                if (!iSender || !iReceiver) return;
+
+                // Check Friendship
+                let isFriend = false;
+                try {
+                    const fRes = await pool.query(
+                        'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
+                        [iSender.dbUserId, iReceiver.dbUserId]
+                    );
+                    isFriend = fRes.rows.length > 0;
+                } catch (e) { }
+
+                if (!isFriend) return sendJson(ws, { type: 'error', message: 'Sadece arkadaşlarınıza fotoğraf gönderebilirsiniz.' });
+
+                // Store
+                try {
+                    const insertRes = await pool.query(
+                        'INSERT INTO ephemeral_media (sender_id, receiver_id, media_data) VALUES ($1, $2, $3) RETURNING id',
+                        [iSender.dbUserId, iReceiver.dbUserId, data.imageData]
+                    );
+                    const mediaId = insertRes.rows[0].id;
+
+                    // Notify Receiver
+                    if (iRoom.sockets[iReceiver.clientId]) {
+                        sendJson(iRoom.sockets[iReceiver.clientId], {
+                            type: 'message',
+                            roomId: iRoomId,
+                            senderNickname: iSender.nickname, // Standardize with normal message
+                            from: 'peer',
+                            msgType: 'image',
+                            mediaId: mediaId,
+                            text: '📸 Fotoğraf' // Placeholder text
+                        });
+                        // Admin Log
+                        if (adminRoutes.logToAdmin) {
+                            adminRoutes.logToAdmin({
+                                type: 'msg',
+                                from: iSender.nickname || 'User',
+                                to: iReceiver.nickname || 'Peer',
+                                content: '[PHOTO SENT]'
+                            });
+                        }
+                    }
+                    // Notify Sender (Echo)
+                    sendJson(ws, {
+                        type: 'message', // Echo as message to show in own chat? 
+                        // Actually App.jsx handles generic message send confirmation differently
+                        // But for image we need to show bubble too.
+                        // Let's send a custom ack or handle locally?
+                        // Handle locally in frontend (optimistic) or wait for confirmation.
+                        // Let's send 'image_sent'
+                        type: 'image_sent',
+                        mediaId
+                    });
+                } catch (e) { console.error(e); }
+                break;
+
+            case 'fetch_image':
+                if (!data.mediaId) return;
+                const clientDataFetch = activeClients.get(ws.clientId);
+                if (!clientDataFetch || !clientDataFetch.dbUserId) return;
+
+                try {
+                    const res = await pool.query(
+                        'SELECT * FROM ephemeral_media WHERE id = $1 AND receiver_id = $2',
+                        [data.mediaId, clientDataFetch.dbUserId]
+                    );
+
+                    if (res.rows.length === 0) {
+                        return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Bu fotoğraf silinmiş veya süresi dolmuş.' });
+                    }
+
+                    const item = res.rows[0];
+                    sendJson(ws, { type: 'image_data', mediaId: data.mediaId, imageData: item.media_data });
+
+                    // DELETE immediately
+                    await pool.query('DELETE FROM ephemeral_media WHERE id = $1', [data.mediaId]);
+                } catch (e) { console.error(e); }
                 break;
 
             case 'report':
@@ -567,14 +714,105 @@ const handleReport = async (reporterClientId, roomId, reason) => {
 
     if (!reporterObj || !reportedObj) return;
 
-    const result = await logReport(reporterObj.dbUserId, reportedObj.dbUserId, conversationId, reason);
+    const reporterId = reporterObj.dbUserId;
+    const reportedId = reportedObj.dbUserId;
 
-    if (result.banned) {
-        const clientData = activeClients.get(reportedObj.clientId);
-        if (clientData && clientData.ws && clientData.ws.readyState === WebSocket.OPEN) {
-            sendError(clientData.ws, 'BANNED', 'Yasaklandınız. (Auto-Ban)');
-            clientData.ws.close();
+    if (!reporterId || !reportedId) return;
+
+    // 1. Unique Reporter Check (24h)
+    try {
+        const existing = await pool.query(
+            "SELECT 1 FROM reports WHERE reporter_user_id=$1 AND reported_user_id=$2 AND created_at > NOW() - INTERVAL '24 hours'",
+            [reporterId, reportedId]
+        );
+        if (existing.rows.length > 0) return; // Already reported
+    } catch (e) {
+        console.error("Report check error", e);
+        return;
+    }
+
+    // 2. Calculate Weight
+    let weight = 1.0;
+    try {
+        const rUser = await pool.query('SELECT created_at FROM users WHERE id=$1', [reporterId]);
+        if (rUser.rows[0]) {
+            const ageHours = (Date.now() - new Date(rUser.rows[0].created_at).getTime()) / 3600000;
+            if (ageHours < 24) weight = 0.5;
         }
+    } catch (e) { }
+
+    const reasonLower = (reason || '').toLowerCase();
+    if (['threat', 'hate', 'sexual', 'harassment'].some(r => reasonLower.includes(r))) weight = 1.5;
+    else if (reasonLower.includes('spam') || reasonLower.includes('scam')) weight = 1.0;
+    else weight = 0.75;
+
+    // 3. Log Report
+    try {
+        await pool.query(
+            'INSERT INTO reports (reporter_user_id, reported_user_id, conversation_id, reason, meta) VALUES ($1, $2, $3, $4, $5)',
+            [reporterId, reportedId, conversationId, reason, JSON.stringify({ weight })]
+        );
+    } catch (e) { console.error(e); }
+
+    // 4. Threshold & Ban Logic
+    try {
+        // Check 24h Score
+        const res24h = await pool.query(`
+            SELECT SUM((meta->>'weight')::float) as score, COUNT(DISTINCT reporter_user_id) as reporters
+            FROM reports WHERE reported_user_id=$1 AND created_at > NOW() - INTERVAL '24 hours'
+        `, [reportedId]);
+
+        const score24h = parseFloat(res24h.rows[0].score || 0);
+        const reporters24h = parseInt(res24h.rows[0].reporters || 0);
+
+        if (reporters24h < 2) return; // Minimum 2 unique reporters
+
+        let banHours = 0;
+
+        // Base Scoring
+        if (score24h >= 3.0) banHours = 1;
+        else if (score24h >= 2.0) banHours = 0.5; // 30 mins
+
+        // Check 7d (Threshold 5)
+        if (banHours < 24) {
+            const res7d = await pool.query(`SELECT SUM((meta->>'weight')::float) as s FROM reports WHERE reported_user_id=$1 AND created_at > NOW() - INTERVAL '7 days'`, [reportedId]);
+            if ((res7d.rows[0].s || 0) >= 5.0) banHours = 24;
+        }
+
+        // Check 30d (Threshold 8)
+        if (banHours < 168) {
+            const res30d = await pool.query(`SELECT SUM((meta->>'weight')::float) as s FROM reports WHERE reported_user_id=$1 AND created_at > NOW() - INTERVAL '30 days'`, [reportedId]);
+            if ((res30d.rows[0].s || 0) >= 8.0) banHours = 168; // 7 days
+        }
+
+        if (banHours > 0) {
+            // 5. Repeat Offender Multiplier
+            const history = await pool.query("SELECT COUNT(*) as c FROM bans WHERE user_id=$1 AND created_at > NOW() - INTERVAL '30 days'", [reportedId]);
+            const pastBans = parseInt(history.rows[0].c || 0);
+
+            if (pastBans > 0) {
+                if (pastBans === 1) banHours = Math.max(banHours, 6);
+                else if (pastBans === 2) banHours = Math.max(banHours, 24);
+                else if (pastBans === 3) banHours = Math.max(banHours, 168);
+                else if (pastBans >= 4) banHours = 87600; // ~10 years (Perma)
+            }
+
+            // Apply Ban
+            const banUntil = new Date(Date.now() + banHours * 3600000);
+            await pool.query(
+                'INSERT INTO bans (user_id, ban_type, ban_until, reason, created_by) VALUES ($1, $2, $3, $4, $5)',
+                [reportedId, 'system', banUntil, `Auto-Ban: Score ${score24h.toFixed(1)}, History ${pastBans}`, 'auto']
+            );
+
+            // Kick User
+            const clientData = activeClients.get(reportedObj.clientId);
+            if (clientData && clientData.ws) {
+                sendJson(clientData.ws, { type: 'ended', reason: 'banned', message: `Hesabınız geçici olarak askıya alındı. Süre: ${banHours} saat.` });
+                clientData.ws.close();
+            }
+        }
+    } catch (e) {
+        console.error("Auto-ban error", e);
     }
 };
 

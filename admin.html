@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnonChat Admin V6</title>
+    <title>TalkX Admin</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -220,7 +220,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>AnonChat Admin Board V6</h1>
+            <h1>TalkX Admin Board</h1>
             <div>
                 <button onclick="loadStats(); loadContent();"
                     style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer;">Refresh</button>
@@ -248,8 +248,22 @@
                 <button class="tab-btn active" onclick="switchTab('reports')">Reports</button>
                 <button class="tab-btn" onclick="switchTab('bans')">Bans & Shadowbans</button>
                 <button class="tab-btn" onclick="switchTab('profiles')">Profiles</button>
+                <button class="tab-btn" onclick="switchTab('logs')">Live Logs 🔴</button>
             </div>
+
+            <div id="search-bar" style="display:none; margin-bottom:15px;">
+                <input type="text" id="search-input" placeholder="Search user..."
+                    style="padding:8px; width:300px; border:1px solid #ddd; border-radius:4px;"
+                    onkeyup="if(event.key === 'Enter') loadContent()">
+                <button onclick="loadContent()"
+                    style="padding:8px 15px; background:#3498db; color:white; border:none; border-radius:4px; cursor:pointer;">Search</button>
+            </div>
+
             <div id="content">Loading...</div>
+            <div id="log-container"
+                style="display:none; height:400px; overflow-y:auto; background:#1e1e1e; color:#00ff00; padding:15px; font-family:monospace; border-radius:6px; font-size: 0.9em;">
+                <div>Waiting for logs...</div>
+            </div>
         </div>
     </div>
 
@@ -258,58 +272,98 @@
         <div class="modal-content">
             <span class="close-btn" onclick="closeModal()">&times;</span>
             <h2 id="m_title">User Details</h2>
-            <h3>Blocked Users</h3>
-            <div id="m_blocks">Loading...</div>
-        </div>
-    </div>
+            <div id="m_details_content" style="max-height: 500px; overflow-y: auto;">
+                <h3>Friends</h3>
+                <div id="m_friends">Loading...</div>
+                <h3>Blocked Users</h3>
+                <div id="m_blocks">Loading...</div>
+            </div>
+            <script>
+                let currentTab = 'reports';
+                let logEventSource = null;
 
-    <script>
-        let currentTab = 'reports';
+                async function loadStats() {
+                    try {
+                        const res = await fetch('/admin/stats');
+                        const data = await res.json();
+                        document.getElementById('s_users').innerText = data.totalUsers;
+                        document.getElementById('s_active').innerText = data.activeConversations || 0;
+                        document.getElementById('s_reports').innerText = data.reports24h;
+                        document.getElementById('s_bans').innerText = data.totalBans + ' Active Bans';
+                    } catch (e) { console.error(e); }
+                }
 
-        async function loadStats() {
-            try {
-                const res = await fetch('/admin/stats');
-                const data = await res.json();
-                document.getElementById('s_users').innerText = data.totalUsers;
-                document.getElementById('s_active').innerText = data.activeConversations || 0;
-                document.getElementById('s_reports').innerText = data.reports24h;
-                document.getElementById('s_bans').innerText = data.totalBans + ' Active Bans';
-            } catch (e) { console.error(e); }
-        }
+                async function switchTab(tab) {
+                    currentTab = tab;
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    event.target.classList.add('active');
 
-        async function switchTab(tab) {
-            currentTab = tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            event.target.classList.add('active');
-            loadContent();
-        }
+                    // UI Toggles
+                    const isLogs = tab === 'logs';
+                    const isProfiles = tab === 'profiles';
 
-        async function loadContent() {
-            document.getElementById('content').innerHTML = '<p style="padding:20px; color:#7f8c8d;">Fetching data...</p>';
+                    document.getElementById('content').style.display = isLogs ? 'none' : 'block';
+                    document.getElementById('log-container').style.display = isLogs ? 'block' : 'none';
+                    document.getElementById('search-bar').style.display = isProfiles ? 'block' : 'none';
 
-            const res = await fetch(`/admin/data?type=${currentTab}`);
-            const data = await res.json();
-            const items = data.items;
+                    if (isLogs) {
+                        startLogs();
+                    } else {
+                        stopLogs();
+                        loadContent();
+                    }
+                }
 
-            let html = '<table><thead><tr>';
-            if (currentTab === 'reports') {
-                html += '<th>Time</th><th>Reporter</th><th>Reported</th><th>Reason</th><th>Actions</th>';
-            } else if (currentTab === 'bans') {
-                html += '<th>User</th><th>Type</th><th>Until</th><th>Reason</th><th>Actions</th>';
-            } else {
-                html += '<th>Username</th><th>Display Name</th><th>Last Seen</th><th>Actions</th>';
-            }
-            html += '</tr></thead><tbody>';
+                function startLogs() {
+                    if (logEventSource) return;
+                    const container = document.getElementById('log-container');
+                    container.innerHTML += '<div>Connecting stream...</div>';
 
-            if (items.length === 0) {
-                html = '<p style="padding:20px;">No records found.</p>';
-            } else {
-                items.forEach(item => {
-                    html += '<tr>';
+                    logEventSource = new EventSource('/admin/stream');
+                    logEventSource.onmessage = (e) => {
+                        const msg = JSON.parse(e.data);
+                        const line = document.createElement('div');
+                        line.style.marginBottom = '4px';
+                        line.innerHTML = `<span style="opacity:0.6">[${new Date().toLocaleTimeString()}]</span> <strong>${msg.from}</strong> -> <strong>${msg.to}</strong>: ${msg.content}`;
+                        container.appendChild(line);
+                        container.scrollTop = container.scrollHeight;
+                    };
+                }
+
+                function stopLogs() {
+                    if (logEventSource) {
+                        logEventSource.close();
+                        logEventSource = null;
+                    }
+                }
+
+                async function loadContent() {
+                    const container = document.getElementById('content');
+                    container.innerHTML = '<p style="padding:20px; color:#7f8c8d;">Fetching data...</p>';
+
+                    const query = document.getElementById('search-input').value;
+                    const res = await fetch(`/admin/data?type=${currentTab}&q=${encodeURIComponent(query)}`);
+                    const data = await res.json();
+                    const items = data.items;
+
+                    let html = '<table><thead><tr>';
                     if (currentTab === 'reports') {
-                        // ... code ...
-                        const reported = item.reported_user_id;
-                        html += `
+                        html += '<th>Time</th><th>Reporter</th><th>Reported</th><th>Reason</th><th>Actions</th>';
+                    } else if (currentTab === 'bans') {
+                        html += '<th>User</th><th>Type</th><th>Until</th><th>Reason</th><th>Actions</th>';
+                    } else {
+                        html += '<th>Username</th><th>Display Name</th><th>Registered</th><th>Actions</th>';
+                    }
+                    html += '</tr></thead><tbody>';
+
+                    if (items.length === 0) {
+                        html = '<p style="padding:20px;">No records found.</p>';
+                    } else {
+                        items.forEach(item => {
+                            html += '<tr>';
+                            if (currentTab === 'reports') {
+                                const reported = item.reported_user_id;
+                                html += `
                             <td>${new Date(item.created_at).toLocaleString()}</td>
                             <td>${item.reporter || 'Anon'}</td>
                             <td>${item.reported || 'Anon'}</td>
@@ -320,8 +374,8 @@
                                 <button class="btn-shadow" onclick="actionShadow('${reported}', 'Report: ${item.reason}')">Shadow</button>
                             </td>
                         `;
-                    } else if (currentTab === 'bans') {
-                        html += `
+                            } else if (currentTab === 'bans') {
+                                html += `
                             <td>${item.nickname || 'Unknown'}</td>
                             <td><span class="badge ${item.ban_type}">${item.ban_type.toUpperCase()}</span></td>
                             <td>${item.ban_until ? new Date(item.ban_until).toLocaleString() : 'PERMANENT'}</td>
@@ -330,90 +384,125 @@
                                 <button class="btn-unban" onclick="actionUnban('${item.user_id}')">Unban</button>
                             </td>
                         `;
-                    } else {
-                        // Profile
-                        html += `
+                            } else {
+                                // Profile
+                                html += `
                             <td><strong>${item.username}</strong></td>
                             <td>${item.display_name || '-'}</td>
-                            <td>${new Date(item.last_seen_at).toLocaleString()}</td>
+                            <td>${new Date(item.created_at).toLocaleString()}</td>
                             <td class="actions">
-                                <button class="btn-details" onclick="openDetails('${item.id}', '${item.username}')">Details</button>
+                                <button class="btn-details" onclick="openDetails('${item.id}', '${item.username}', '${item.created_at}')">Details</button>
                                 <button class="btn-ban" onclick="actionBan('${item.id}', 1, 'Admin Action')">Ban</button>
                             </td>
                         `;
+                            }
+                            html += '</tr>';
+                        });
+                        html += '</tbody></table>';
                     }
-                    html += '</tr>';
-                });
-                html += '</tbody></table>';
-            }
 
-            document.getElementById('content').innerHTML = html;
-        }
+                    container.innerHTML = html;
+                }
 
-        async function openDetails(userId, nickname) {
-            document.getElementById('modal').style.display = 'flex';
-            document.getElementById('m_title').innerText = `Details: ${nickname}`;
+                async function openDetails(userId, nickname, createdAt) {
+                    document.getElementById('modal').style.display = 'flex';
+                    document.getElementById('m_title').innerText = `Details: ${nickname}`;
 
-            const res = await fetch(`/admin/user-blocks/${userId}`);
-            const data = await res.json();
+                    // Reset contents
+                    document.getElementById('m_friends').innerHTML = 'Loading...';
+                    document.getElementById('m_blocks').innerHTML = 'Loading...';
 
-            let html = '<ul>';
-            if (data.items.length === 0) html += '<li>No blocked users.</li>';
-            else {
-                data.items.forEach(b => {
-                    html += `
+                    const blockRes = await fetch(`/admin/user-blocks/${userId}`);
+                    const blockData = await blockRes.json();
+
+                    const friendRes = await fetch(`/admin/user-friends/${userId}`);
+                    const friendData = await friendRes.json();
+
+                    // Render Friends
+                    let friendHtml = '<ul>';
+                    if (friendData.items.length === 0) friendHtml += '<li>No friends found.</li>';
+                    else {
+                        friendData.items.forEach(f => {
+                            friendHtml += `
+                        <li style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items:center;">
+                            <span>${f.username} <small>(${new Date(f.created_at).toLocaleDateString()})</small></span>
+                            <button class="btn-perm" onclick="actionRemoveFriend('${userId}', '${f.id}')" style="background:#e74c3c; padding:4px 8px;">Remove</button>
+                        </li>
+                    `;
+                        });
+                    }
+                    friendHtml += '</ul>';
+                    document.getElementById('m_friends').innerHTML = friendHtml;
+
+                    // Render Blocks
+                    let blockHtml = '<ul>';
+                    if (blockData.items.length === 0) blockHtml += '<li>No blocked users.</li>';
+                    else {
+                        blockData.items.forEach(b => {
+                            blockHtml += `
                         <li style="margin-bottom: 10px; display: flex; justify-content: space-between;">
                             <span>${b.nickname || 'Anonim User'}</span>
                             <button class="btn-unban" onclick="actionUnblock('${userId}', '${b.blocked_id}')">Unblock</button>
                         </li>
                     `;
-                });
-            }
-            html += '</ul>';
-            document.getElementById('m_blocks').innerHTML = html;
-        }
+                        });
+                    }
 
-        function closeModal() {
-            document.getElementById('modal').style.display = 'none';
-        }
+                    document.getElementById('m_blocks').previousElementSibling.style.display = 'none';
+                    document.getElementById('m_blocks').innerHTML = detailHtml;
+                }
 
-        async function actionBan(userId, days, reason) {
-            if (!confirm('Ban User?')) return;
-            await api('/admin/ban', { userId, days, reason });
-        }
+                function closeModal() {
+                    document.getElementById('modal').style.display = 'none';
+                }
 
-        async function actionShadow(userId, reason) {
-            if (!confirm('Shadowban User?')) return;
-            await api('/admin/ban', { userId, days: 0, type: 'shadow', reason });
-        }
+                async function actionBan(userId, days, reason) {
+                    if (!confirm('Ban User?')) return;
+                    await api('/admin/ban', { userId, days, reason });
+                }
 
-        async function actionUnban(userId) {
-            if (!confirm('Unban User?')) return;
-            await api('/admin/unban', { userId });
-        }
+                async function actionShadow(userId, reason) {
+                    if (!confirm('Shadowban User?')) return;
+                    await api('/admin/ban', { userId, days: 0, type: 'shadow', reason });
+                }
 
-        async function actionUnblock(blockerId, blockedId) {
-            if (!confirm('Unblock this pair?')) return;
-            await api('/admin/unblock', { blockerId, blockedId });
-            closeModal(); // Close to refresh
-        }
+                async function actionUnban(userId) {
+                    if (!confirm('Unban User?')) return;
+                    await api('/admin/unban', { userId });
+                }
 
-        async function api(url, body) {
-            try {
-                await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                loadContent();
+                async function actionUnblock(blockerId, blockedId) {
+                    if (!confirm('Unblock this pair?')) return;
+                    await api('/admin/unblock', { blockerId, blockedId });
+                    closeModal();
+                }
+
+                async function actionRemoveFriend(userId, friendId) {
+                    if (!confirm('Remove this friend?')) return;
+                    await api('/admin/remove-friend', { userId, friendId });
+                    // Refresh details logic? api() calls loadContent/Stats but doesn't reopen modal.
+                    // I should ideally refresh the modal.
+                    // Quick hack: close modal.
+                    closeModal();
+                    alert('Friend removed.');
+                }
+
+                async function api(url, body) {
+                    try {
+                        await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body)
+                        });
+                        loadContent();
+                        loadStats();
+                    } catch (e) { alert('Error: ' + e); }
+                }
+
+                // Init
                 loadStats();
-            } catch (e) { alert('Error: ' + e); }
-        }
-
-        // Init
-        loadStats();
-        loadContent();
-    </script>
+                loadContent();
+            </script>
 </body>
 
 </html>
