@@ -670,6 +670,11 @@ wss.on('connection', (ws, req) => {
                 }
                 break;
 
+            case 'leaveQueue': // New: Handle Cancel Match
+                removeFromQueue(ws.clientId);
+                sendJson(ws, { type: 'debug', msg: 'Queue removed' });
+                break;
+
             case 'next':
                 leaveRoom(ws.clientId, 'next');
                 await joinQueue(ws); // Join with existing nickname
