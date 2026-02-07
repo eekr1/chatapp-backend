@@ -139,6 +139,11 @@ router.post('/accept', async (req, res) => {
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'İstek bulunamadı.' });
 
+        if (req.notifyUser) {
+            req.notifyUser(request_user_id, { type: 'friend_refresh' });
+            req.notifyUser(myId, { type: 'friend_refresh' }); // Also notify self (other tabs)
+        }
+
         res.json({ success: true, message: 'Kabul edildi.' });
     } catch (e) {
         console.error(e);

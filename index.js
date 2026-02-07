@@ -31,6 +31,13 @@ app.use((req, res, next) => {
         }
         return false;
     };
+    req.notifyUser = (userId, data) => {
+        for (const [clientId, client] of activeClients) {
+            if (client.dbUserId === userId && client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify(data));
+            }
+        }
+    };
     next();
 });
 
