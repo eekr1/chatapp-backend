@@ -519,7 +519,7 @@ wss.on('connection', (ws, req) => {
                                     type: 'msg',
                                     from: clientData.nickname || 'User',
                                     to: peerObj.nickname || 'Peer',
-                                    content: data.content
+                                    content: data.text
                                 });
                             }
 
