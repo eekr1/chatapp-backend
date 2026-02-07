@@ -217,4 +217,34 @@ router.get('/history/:friendId', async (req, res) => {
     }
 });
 
+// Remove Friend (Delete)
+router.delete('/:friendId', async (req, res) => {
+    const friendId = req.params.friendId;
+    const myId = req.user.user_id;
+
+    try {
+        const result = await pool.query(`
+            DELETE FROM friendships 
+            WHERE ((user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1))
+            AND status = 'accepted'
+        `, [myId, friendId]);
+
+        if (result.rowCount === 0) {
+            // Maybe they were not friends or already deleted?
+            // Let's try to delete pending requests too just in case, or just return success.
+            // But strict requirement: "Arkadaş silme".
+            // Let's ensure we delete ANY relationship (pending or accepted) to be safe, like reject logic.
+            await pool.query(`
+                DELETE FROM friendships 
+                WHERE ((user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1))
+            `, [myId, friendId]);
+        }
+
+        res.json({ success: true, message: 'Arkadaş silindi.' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Hata.' });
+    }
+});
+
 module.exports = router;
