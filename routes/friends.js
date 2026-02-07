@@ -66,6 +66,10 @@ router.post('/request', async (req, res) => {
             [myId, target.id, 'pending']
         );
 
+        if (req.notifyUser) {
+            req.notifyUser(target.id, { type: 'friend_refresh' });
+        }
+
         res.json({ success: true, message: 'İstek gönderildi.' });
 
     } catch (e) {
