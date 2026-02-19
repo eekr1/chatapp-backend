@@ -1,6 +1,9 @@
 const { Pool } = require('pg');
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://chatapp_reports_user:praxPsnoB7jV3sqj1VjG4OUCyzIhcs3x@dpg-d5udd494tr6s73crvtng-a.frankfurt-postgres.render.com/chatapp_reports?ssl=true';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL is required (set it in your environment).');
+}
 
 const pool = new Pool({
   connectionString,

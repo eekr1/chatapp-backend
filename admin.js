@@ -3,6 +3,17 @@ const router = express.Router();
 const path = require('path');
 const { pool } = require('./db');
 
+// Disable admin panel in production unless ADMIN_PASSWORD is explicitly set and non-default.
+router.use((req, res, next) => {
+    if (process.env.NODE_ENV === 'production') {
+        const pass = process.env.ADMIN_PASSWORD;
+        if (!pass || pass === 'admin123') {
+            return res.status(503).send('Admin panel is disabled.');
+        }
+    }
+    next();
+});
+
 // Basic Auth Middleware
 const basicAuth = (req, res, next) => {
     const auth = { login: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123' };

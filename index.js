@@ -41,8 +41,30 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json()); // JSON body parser for admin API
-app.use(cors()); // Enable CORS for ALL origins (Production should be stricter, but this is for simplicity)
+const allowedOrigins = [
+    "https://talkx.chat",
+    "https://www.talkx.chat",
+    "http://localhost",
+    "https://localhost",
+    "capacitor://localhost",
+    "http://localhost:3000"
+];
+
+app.use(express.json());
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // origin yoksa (mobil / Postman / bazı durumlar) izin ver
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+
+        return callback(new Error("CORS blocked"), false);
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true,
+}));
+
 
 // Security: Rate Limiters
 const rateLimit = require('express-rate-limit');
@@ -90,6 +112,8 @@ const RATE_LIMIT_WINDOW = 1000;
 const RATE_LIMIT_MAX = 5;
 const REPORT_TTL = 5 * 60 * 1000;
 const HEARTBEAT_INTERVAL = 30000;
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB
+const EPHEMERAL_MEDIA_TTL_DAYS = 7;
 
 // Rate Limit Map (Memory is fine for rate limit)
 const rateLimitMap = new Map();
@@ -104,6 +128,33 @@ const sendJson = (ws, data) => {
 
 const sendError = (ws, code, message) => {
     sendJson(ws, { type: 'error', code, message });
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
+
+const estimateBase64Bytes = (b64) => {
+    if (typeof b64 !== 'string') return 0;
+    const len = b64.length;
+    const padding = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+    return Math.max(0, Math.floor((len * 3) / 4) - padding);
+};
+
+const validateImageDataUrl = (dataUrl) => {
+    if (typeof dataUrl !== 'string') return { ok: false, reason: 'Geçersiz fotoğraf verisi.' };
+    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
+        return { ok: false, reason: 'Geçersiz fotoğraf formatı.' };
+    }
+
+    const parts = dataUrl.split(',', 2);
+    if (parts.length !== 2) return { ok: false, reason: 'Geçersiz fotoğraf verisi.' };
+
+    const bytes = estimateBase64Bytes(parts[1]);
+    if (bytes > MAX_IMAGE_BYTES) {
+        return { ok: false, reason: 'Fotoğraf boyutu 2MB sınırını aşıyor.' };
+    }
+
+    return { ok: true };
 };
 
 const checkRateLimit = (clientId) => {
@@ -122,6 +173,20 @@ const broadcastOnlineCount = () => {
     const msg = JSON.stringify({ type: 'onlineCount', count });
     wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(msg); });
 };
+
+const cleanupEphemeralMedia = async () => {
+    try {
+        await pool.query(
+            `DELETE FROM ephemeral_media WHERE created_at < NOW() - INTERVAL '${EPHEMERAL_MEDIA_TTL_DAYS} days'`
+        );
+    } catch (e) {
+        // Non-fatal. Table may not be ready on cold start.
+        console.warn('ephemeral_media cleanup failed:', e.message);
+    }
+};
+
+cleanupEphemeralMedia();
+setInterval(cleanupEphemeralMedia, 6 * 60 * 60 * 1000); // every 6 hours
 
 // --- DB Logic Helpers ---
 
@@ -686,6 +751,10 @@ wss.on('connection', (ws, req) => {
 
             case 'image_send':
                 if (!data.roomId || !data.imageData) return;
+                {
+                    const v = validateImageDataUrl(data.imageData);
+                    if (!v.ok) return sendError(ws, 'INVALID_IMAGE', v.reason);
+                }
                 const iRoomId = userRoomMap.get(ws.clientId);
                 if (iRoomId !== data.roomId) return;
                 const iRoom = rooms.get(iRoomId);
@@ -706,7 +775,7 @@ wss.on('connection', (ws, req) => {
                     isFriend = fRes.rows.length > 0;
                 } catch (e) { }
 
-                if (!isFriend) return sendJson(ws, { type: 'error', message: 'Sadece arkadaşlarınıza fotoğraf gönderebilirsiniz.' });
+                if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Sadece arkadaşlarınıza fotoğraf gönderebilirsiniz.');
 
                 // Store
                 try {
@@ -753,6 +822,9 @@ wss.on('connection', (ws, req) => {
 
             case 'fetch_image':
                 if (!data.mediaId) return;
+                if (!isUuid(data.mediaId)) {
+                    return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Geçersiz medya kimliği.' });
+                }
                 const clientDataFetch = activeClients.get(ws.clientId);
                 if (!clientDataFetch || !clientDataFetch.dbUserId) return;
 
@@ -776,6 +848,10 @@ wss.on('connection', (ws, req) => {
 
             case 'direct_image_send':
                 if (!data.targetUserId || !data.imageData) return;
+                {
+                    const v = validateImageDataUrl(data.imageData);
+                    if (!v.ok) return sendError(ws, 'INVALID_IMAGE', v.reason);
+                }
                 const distSenderId = clientData.dbUserId;
                 const distTargetUserId = data.targetUserId;
 
