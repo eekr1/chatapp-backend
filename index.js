@@ -11,6 +11,8 @@ const adminRoutes = require('./admin');
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const friendsRoutes = require('./routes/friends');
+const pushRoutes = require('./routes/push');
+const { sendPushToTokens } = require('./utils/push');
 
 // Ensure DB Tables
 // Ensure DB Tables
@@ -87,6 +89,7 @@ app.use('/friends', apiLimiter);
 app.use('/admin', adminRoutes);
 app.use('/auth', authRoutes);
 app.use('/api', profileRoutes); // Mounting profile under /api since it's logical API (e.g. /api/me)
+app.use('/api/push', pushRoutes);
 app.use('/friends', friendsRoutes);
 
 app.get('/health', (req, res) => {
@@ -132,12 +135,101 @@ const sendError = (ws, code, message) => {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
+const toText = (value, fallback = '') => (typeof value === 'string' ? value : fallback);
+const clampDuration = (value, fallback = 10000) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(3000, Math.min(60000, Math.round(parsed)));
+};
 
 const estimateBase64Bytes = (b64) => {
     if (typeof b64 !== 'string') return 0;
     const len = b64.length;
     const padding = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
     return Math.max(0, Math.floor((len * 3) / 4) - padding);
+};
+
+const disableInvalidPushTokens = async (tokens) => {
+    if (!tokens || !tokens.length) return;
+    try {
+        await pool.query(
+            'UPDATE push_devices SET is_active = FALSE, updated_at = NOW() WHERE push_token = ANY($1::text[])',
+            [tokens]
+        );
+    } catch (e) {
+        console.error('Failed to disable invalid push tokens:', e.message);
+    }
+};
+
+const sendPushToUser = async (userId, payload) => {
+    if (!userId) return { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
+    try {
+        const tokenRes = await pool.query(
+            'SELECT push_token FROM push_devices WHERE user_id = $1 AND is_active = TRUE',
+            [userId]
+        );
+        const tokens = tokenRes.rows.map(r => r.push_token).filter(Boolean);
+        const result = await sendPushToTokens(tokens, payload);
+        if (result.invalidTokens && result.invalidTokens.length) {
+            disableInvalidPushTokens(result.invalidTokens);
+        }
+        return result;
+    } catch (e) {
+        console.error('sendPushToUser query error:', e.message);
+        return { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
+    }
+};
+
+adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' }) => {
+    const cleanTitle = toText(title, 'TalkX').trim().slice(0, 80) || 'TalkX';
+    const cleanBody = toText(body, '').trim().slice(0, 300);
+    const normalizedTarget = ['all', 'online', 'mobile'].includes(String(target)) ? String(target) : 'all';
+    const ttlMs = clampDuration(durationMs, 10000);
+
+    let wsDelivered = 0;
+    if (normalizedTarget === 'all' || normalizedTarget === 'online') {
+        for (const [, client] of activeClients) {
+            if (!client || client.ws.readyState !== WebSocket.OPEN) continue;
+            // Mobile clients get push; keep websocket notice for web/desktop.
+            if (client.platform === 'android') continue;
+            sendJson(client.ws, { type: 'admin_notice', title: cleanTitle, body: cleanBody, durationMs: ttlMs });
+            wsDelivered++;
+        }
+    }
+
+    let pushResult = { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
+    if (normalizedTarget === 'all' || normalizedTarget === 'mobile') {
+        try {
+            const tokenRes = await pool.query('SELECT push_token FROM push_devices WHERE is_active = TRUE');
+            const tokens = tokenRes.rows.map(r => r.push_token).filter(Boolean);
+            pushResult = await sendPushToTokens(tokens, {
+                title: cleanTitle,
+                body: cleanBody,
+                channelId: 'talkx_admin',
+                data: {
+                    type: 'admin_notice',
+                    title: cleanTitle,
+                    body: cleanBody,
+                    durationMs: String(ttlMs)
+                }
+            });
+            if (pushResult.invalidTokens && pushResult.invalidTokens.length) {
+                disableInvalidPushTokens(pushResult.invalidTokens);
+            }
+        } catch (e) {
+            console.error('admin notice push error:', e.message);
+        }
+    }
+
+    return {
+        wsDelivered,
+        push: {
+            enabled: !!pushResult.enabled,
+            tokenCount: pushResult.tokenCount || 0,
+            sentCount: pushResult.sentCount || 0,
+            failureCount: pushResult.failureCount || 0
+        }
+    };
 };
 
 const validateImageDataUrl = (dataUrl) => {
@@ -547,10 +639,11 @@ wss.on('connection', (ws, req) => {
             activeClients.set(ws.clientId, {
                 ws,
                 dbUserId: dbUser.id,
-                deviceId: isAnon ? deviceId : 'auth_user',
+                deviceId: deviceId || 'unknown',
                 isShadowBanned: isShadow,
                 nickname: dbUser.nickname, // Display Name
-                username: dbUser.username  // V13: Store unique username
+                username: dbUser.username,  // V13: Store unique username
+                platform: data.platform === 'android' ? 'android' : 'web'
             });
 
             sendJson(ws, { type: 'welcome', nickname: dbUser.nickname });
@@ -690,11 +783,26 @@ wss.on('connection', (ws, req) => {
                         fromUsername: clientData.username,
                         fromNickname: clientData.nickname,
                         fromUserId: dmSenderId,
+                        msgType: 'direct',
                         text: data.text,
                         conversationId: typeof convId !== 'undefined' ? convId : null
                     });
                 } else {
                     console.log(`[DEBUG] Target ${dmTargetUserId} is offline.`);
+                    sendPushToUser(dmTargetUserId, {
+                        title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                        body: String(data.text || '').slice(0, 140),
+                        channelId: 'talkx_messages',
+                        data: {
+                            type: 'direct_message',
+                            fromUserId: dmSenderId,
+                            fromUsername: clientData.username || '',
+                            fromNickname: clientData.nickname || '',
+                            msgType: 'direct',
+                            text: String(data.text || '').slice(0, 140),
+                            conversationId: convId || ''
+                        }
+                    });
                 }
                 break;
 
@@ -856,6 +964,14 @@ wss.on('connection', (ws, req) => {
                 const distTargetUserId = data.targetUserId;
 
                 try {
+                    const fRes = await pool.query(
+                        'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
+                        [distSenderId, distTargetUserId]
+                    );
+                    if (fRes.rows.length === 0) {
+                        return sendError(ws, 'NOT_FRIEND', 'Sadece arkadaslariniza fotograf gonderebilirsiniz.');
+                    }
+
                     // Store in ephemeral_media
                     const dInsertRes = await pool.query(
                         'INSERT INTO ephemeral_media (sender_id, receiver_id, media_data) VALUES ($1, $2, $3) RETURNING id',
@@ -889,6 +1005,22 @@ wss.on('connection', (ws, req) => {
                             mediaId: dMediaId,
                             text: '📸 Fotoğraf',
                             conversationId: dConvId
+                        });
+                    } else {
+                        sendPushToUser(distTargetUserId, {
+                            title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                            body: 'Fotograf gonderdi',
+                            channelId: 'talkx_messages',
+                            data: {
+                                type: 'direct_message',
+                                fromUserId: distSenderId,
+                                fromUsername: clientData.username || '',
+                                fromNickname: clientData.nickname || '',
+                                msgType: 'image',
+                                mediaId: dMediaId,
+                                text: 'Fotograf gonderdi',
+                                conversationId: dConvId || ''
+                            }
                         });
                     }
 

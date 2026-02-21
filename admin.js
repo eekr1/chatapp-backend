@@ -3,11 +3,16 @@ const router = express.Router();
 const path = require('path');
 const { pool } = require('./db');
 
-// Disable admin panel in production unless ADMIN_PASSWORD is explicitly set and non-default.
+const isEnvEnabled = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
+const hasSecureAdminPassword = () => {
+    const pass = process.env.ADMIN_PASSWORD;
+    return !!pass && pass !== 'admin123';
+};
+
+// Disable admin panel in production unless explicitly enabled and secure password is set.
 router.use((req, res, next) => {
     if (process.env.NODE_ENV === 'production') {
-        const pass = process.env.ADMIN_PASSWORD;
-        if (!pass || pass === 'admin123') {
+        if (!isEnvEnabled(process.env.ADMIN_PANEL_ENABLED) || !hasSecureAdminPassword()) {
             return res.status(503).send('Admin panel is disabled.');
         }
     }
@@ -241,6 +246,28 @@ router.post('/remove-friend', async (req, res) => {
         `, [userId, friendId]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/notify', async (req, res) => {
+    const title = (req.body.title || '').trim();
+    const body = (req.body.body || '').trim();
+    const durationMs = req.body.durationMs;
+    const target = req.body.target || 'all';
+
+    if (!title || !body) {
+        return res.status(400).json({ error: 'title ve body gerekli.' });
+    }
+    if (typeof router.sendSystemNotice !== 'function') {
+        return res.status(503).json({ error: 'Bildirim sistemi hazir degil.' });
+    }
+
+    try {
+        const result = await router.sendSystemNotice({ title, body, durationMs, target });
+        res.json({ success: true, ...result });
+    } catch (e) {
+        console.error('admin notify error:', e);
+        res.status(500).json({ error: 'Bildirim gonderilemedi.' });
+    }
 });
 
 module.exports = router;

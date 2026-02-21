@@ -113,6 +113,18 @@ const createTablesQuery = `
     created_at TIMESTAMPTZ DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS push_devices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    device_id TEXT,
+    platform TEXT NOT NULL DEFAULT 'android',
+    push_token TEXT UNIQUE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
   CREATE TABLE IF NOT EXISTS blocks (
     blocker_id UUID,
     blocked_id UUID,
@@ -138,6 +150,17 @@ const createTablesQuery = `
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='media_id') THEN
           ALTER TABLE messages ADD COLUMN media_id UUID;
       END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='push_devices' AND column_name='updated_at') THEN
+          ALTER TABLE push_devices ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='push_devices' AND column_name='last_seen_at') THEN
+          ALTER TABLE push_devices ADD COLUMN last_seen_at TIMESTAMPTZ DEFAULT NOW();
+      END IF;
+
+      CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices(user_id);
+      CREATE INDEX IF NOT EXISTS idx_push_devices_active ON push_devices(is_active);
 
       -- V13 Fix: Drop legacy FK constraints on conversations to allow Auth Users
       BEGIN
