@@ -12,7 +12,7 @@ const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const friendsRoutes = require('./routes/friends');
 const pushRoutes = require('./routes/push');
-const { sendPushToTokens } = require('./utils/push');
+const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 
 // Ensure DB Tables
 // Ensure DB Tables
@@ -206,6 +206,17 @@ const disableInvalidPushTokens = async (tokens) => {
     }
 };
 
+const buildPushLogMeta = (source, pushResult = {}, extra = {}) => ({
+    source,
+    firebaseEnabled: Boolean(
+        pushResult.firebaseEnabled !== undefined ? pushResult.firebaseEnabled : pushResult.enabled
+    ),
+    projectIdUsed: pushResult.projectIdUsed || null,
+    errorSummary: pushResult.errorSummary || {},
+    errorSamples: Array.isArray(pushResult.errorSamples) ? pushResult.errorSamples.slice(0, 5) : [],
+    ...extra
+});
+
 const logPushDelivery = async ({
     deliveryId = null,
     eventType = 'unknown',
@@ -240,7 +251,17 @@ const logPushDelivery = async ({
 };
 
 const sendPushToUser = async (userId, payload = {}, options = {}) => {
-    if (!userId) return { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
+    if (!userId) {
+        return {
+            enabled: false,
+            tokenCount: 0,
+            sentCount: 0,
+            failureCount: 0,
+            invalidTokens: [],
+            errorSummary: {},
+            errorSamples: []
+        };
+    }
     const deliveryId = (payload.data && payload.data.deliveryId) || options.deliveryId || uuidv4();
     const eventType = options.eventType || (payload.data && payload.data.type) || 'unknown';
     const channelId = payload.channelId || null;
@@ -274,11 +295,19 @@ const sendPushToUser = async (userId, payload = {}, options = {}) => {
             failureCount: result.failureCount || 0,
             invalidTokenCount: (result.invalidTokens || []).length,
             channelId,
-            meta: { source: 'sendPushToUser' }
+            meta: buildPushLogMeta('sendPushToUser', result)
         });
         return { ...result, deliveryId };
     } catch (e) {
         console.error('sendPushToUser query error:', e.message);
+        const diagnostics = getPushDiagnostics();
+        const fallbackResult = {
+            enabled: false,
+            firebaseEnabled: diagnostics.enabled,
+            projectIdUsed: diagnostics.projectId || null,
+            errorSummary: { db_query_error: 1 },
+            errorSamples: [{ code: 'db_query_error', message: e.message }]
+        };
         await logPushDelivery({
             deliveryId,
             eventType,
@@ -288,9 +317,20 @@ const sendPushToUser = async (userId, payload = {}, options = {}) => {
             failureCount: 1,
             invalidTokenCount: 0,
             channelId,
-            meta: { source: 'sendPushToUser', error: e.message }
+            meta: buildPushLogMeta('sendPushToUser', fallbackResult, { error: e.message })
         });
-        return { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
+        return {
+            enabled: false,
+            tokenCount: 0,
+            sentCount: 0,
+            failureCount: 0,
+            invalidTokens: [],
+            errorSummary: fallbackResult.errorSummary,
+            errorSamples: fallbackResult.errorSamples,
+            firebaseEnabled: fallbackResult.firebaseEnabled,
+            projectIdUsed: fallbackResult.projectIdUsed,
+            initError: diagnostics.initError || null
+        };
     }
 };
 
@@ -318,7 +358,15 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
         }
     }
 
-    let pushResult = { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
+    let pushResult = {
+        enabled: false,
+        tokenCount: 0,
+        sentCount: 0,
+        failureCount: 0,
+        invalidTokens: [],
+        errorSummary: {},
+        errorSamples: []
+    };
     if (normalizedTarget === 'all' || normalizedTarget === 'mobile') {
         try {
             const tokenRes = await pool.query(
@@ -331,6 +379,8 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
             pushResult = await sendPushToTokens(tokens, {
                 title: senderTitle,
                 body: composeAdminPushBody(noticeTitle, cleanBody),
+                ttlSeconds: 86400,
+                collapseKey: 'talkx_admin_notice',
                 channelId: PUSH_CHANNEL_IDS.admin,
                 data: {
                     type: 'admin_notice',
@@ -347,6 +397,14 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
             }
         } catch (e) {
             console.error('admin notice push error:', e.message);
+            const diagnostics = getPushDiagnostics();
+            pushResult = {
+                ...pushResult,
+                firebaseEnabled: diagnostics.enabled,
+                projectIdUsed: diagnostics.projectId || null,
+                errorSummary: { admin_notice_push_error: 1 },
+                errorSamples: [{ code: 'admin_notice_push_error', message: e.message }]
+            };
         }
     }
 
@@ -359,7 +417,7 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
         failureCount: pushResult.failureCount || 0,
         invalidTokenCount: (pushResult.invalidTokens || []).length,
         channelId: PUSH_CHANNEL_IDS.admin,
-        meta: { target: normalizedTarget, wsDelivered }
+        meta: buildPushLogMeta('admin_notice', pushResult, { target: normalizedTarget, wsDelivered })
     });
 
     return {
@@ -370,7 +428,8 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
             tokenCount: pushResult.tokenCount || 0,
             sentCount: pushResult.sentCount || 0,
             failureCount: pushResult.failureCount || 0,
-            invalidTokenCount: (pushResult.invalidTokens || []).length
+            invalidTokenCount: (pushResult.invalidTokens || []).length,
+            errorSummary: pushResult.errorSummary || {}
         }
     };
 };
@@ -965,6 +1024,8 @@ wss.on('connection', (ws, req) => {
                     sendPushToUser(dmTargetUserId, {
                         title: clientData.nickname || clientData.username || 'Yeni mesaj',
                         body: dmText.slice(0, 140),
+                        ttlSeconds: 3600,
+                        collapseKey: `direct_${String(convId || dmTargetUserId).slice(0, 64)}`,
                         channelId: PUSH_CHANNEL_IDS.messages,
                         data: {
                             type: 'direct_message',
@@ -1240,6 +1301,8 @@ wss.on('connection', (ws, req) => {
                         sendPushToUser(distTargetUserId, {
                             title: clientData.nickname || clientData.username || 'Yeni mesaj',
                             body: 'Fotograf gonderdi',
+                            ttlSeconds: 3600,
+                            collapseKey: `direct_${String(dConvId || distTargetUserId).slice(0, 64)}`,
                             channelId: PUSH_CHANNEL_IDS.messages,
                             data: {
                                 type: 'direct_message',

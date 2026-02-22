@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const { pool } = require('./db');
+const { getPushDiagnostics } = require('./utils/push');
 
 const isEnvEnabled = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
 const hasSecureAdminPassword = () => {
@@ -315,12 +316,123 @@ router.get('/push/health', async (req, res) => {
     }
 });
 
+router.get('/push/diagnostics', async (req, res) => {
+    const hours = Math.max(1, Math.min(24 * 14, Number(req.query.hours) || 24));
+    try {
+        const firebase = getPushDiagnostics();
+
+        const totalsRes = await pool.query(
+            `SELECT
+                COALESCE(SUM(sent_count), 0)::int AS sent_count,
+                COALESCE(SUM(failure_count), 0)::int AS failure_count,
+                COALESCE(SUM(invalid_token_count), 0)::int AS invalid_token_count
+             FROM push_delivery_logs
+             WHERE created_at > NOW() - ($1::text || ' hours')::interval`,
+            [hours]
+        );
+
+        const byTypeRes = await pool.query(
+            `SELECT event_type,
+                    COUNT(*)::int AS events,
+                    COALESCE(SUM(sent_count), 0)::int AS sent_count,
+                    COALESCE(SUM(failure_count), 0)::int AS failure_count,
+                    COALESCE(SUM(invalid_token_count), 0)::int AS invalid_token_count
+             FROM push_delivery_logs
+             WHERE created_at > NOW() - ($1::text || ' hours')::interval
+             GROUP BY event_type
+             ORDER BY events DESC`,
+            [hours]
+        );
+
+        const errorSummaryRes = await pool.query(
+            `SELECT err.key AS code,
+                    SUM(
+                        COALESCE(
+                            NULLIF(regexp_replace(err.value, '[^0-9-]', '', 'g'), '')::int,
+                            0
+                        )
+                    )::int AS count
+             FROM push_delivery_logs l
+             CROSS JOIN LATERAL jsonb_each_text(COALESCE(l.meta->'errorSummary', '{}'::jsonb)) AS err(key, value)
+             WHERE l.created_at > NOW() - ($1::text || ' hours')::interval
+             GROUP BY err.key
+             ORDER BY count DESC
+             LIMIT 12`,
+            [hours]
+        );
+
+        const devicesRes = await pool.query(
+            `SELECT
+                COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active_count,
+                COUNT(*)::int AS total_count,
+                MAX(updated_at) FILTER (WHERE is_active = TRUE) AS last_active_updated_at
+             FROM push_devices`
+        );
+
+        const platformRes = await pool.query(
+            `SELECT platform, COUNT(*)::int AS count
+             FROM push_devices
+             WHERE is_active = TRUE
+             GROUP BY platform
+             ORDER BY count DESC`
+        );
+
+        const freshnessRes = await pool.query(
+            `SELECT
+                COUNT(*) FILTER (WHERE is_active = TRUE AND updated_at > NOW() - INTERVAL '5 minutes')::int AS lt_5m,
+                COUNT(*) FILTER (WHERE is_active = TRUE AND updated_at > NOW() - INTERVAL '1 hour' AND updated_at <= NOW() - INTERVAL '5 minutes')::int AS lt_1h,
+                COUNT(*) FILTER (WHERE is_active = TRUE AND updated_at > NOW() - INTERVAL '24 hours' AND updated_at <= NOW() - INTERVAL '1 hour')::int AS lt_24h,
+                COUNT(*) FILTER (WHERE is_active = TRUE AND updated_at > NOW() - INTERVAL '7 days' AND updated_at <= NOW() - INTERVAL '24 hours')::int AS lt_7d,
+                COUNT(*) FILTER (WHERE is_active = TRUE AND updated_at <= NOW() - INTERVAL '7 days')::int AS gte_7d
+             FROM push_devices`
+        );
+
+        const totals = totalsRes.rows[0] || {};
+        const devices = devicesRes.rows[0] || {};
+        const freshness = freshnessRes.rows[0] || {};
+
+        res.json({
+            hours,
+            firebase: {
+                enabled: !!firebase.enabled,
+                initError: firebase.initError || null,
+                projectId: firebase.projectId || null,
+                expectedProjectId: firebase.expectedProjectId || null,
+                credentialSource: firebase.credentialSource || null,
+                initializedAt: firebase.initializedAt || null
+            },
+            logs: {
+                sentCount: Number(totals.sent_count) || 0,
+                failureCount: Number(totals.failure_count) || 0,
+                invalidTokenCount: Number(totals.invalid_token_count) || 0,
+                byType: byTypeRes.rows || [],
+                errorSummary: errorSummaryRes.rows || []
+            },
+            devices: {
+                activeCount: Number(devices.active_count) || 0,
+                totalCount: Number(devices.total_count) || 0,
+                lastActiveUpdatedAt: devices.last_active_updated_at || null,
+                byPlatform: platformRes.rows || [],
+                freshness: {
+                    lt5m: Number(freshness.lt_5m) || 0,
+                    lt1h: Number(freshness.lt_1h) || 0,
+                    lt24h: Number(freshness.lt_24h) || 0,
+                    lt7d: Number(freshness.lt_7d) || 0,
+                    gte7d: Number(freshness.gte_7d) || 0
+                }
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.get('/push/logs', async (req, res) => {
     const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
     try {
         const result = await pool.query(
             `SELECT id, delivery_id, event_type, target_user_id, token_count, sent_count, failure_count,
-                    invalid_token_count, channel_id, created_at
+                    invalid_token_count, channel_id, meta, created_at
              FROM push_delivery_logs
              ORDER BY created_at DESC
              LIMIT $1`,

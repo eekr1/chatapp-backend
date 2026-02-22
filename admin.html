@@ -133,6 +133,37 @@
             color: #7f8c8d;
         }
 
+        .diagnostics-panel {
+            margin: 6px 0 16px;
+            border: 1px solid #e4e8f0;
+            border-radius: 10px;
+            padding: 12px;
+            background: #f8fbff;
+            font-size: 0.85em;
+            color: #2f4158;
+        }
+
+        .diagnostics-title {
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+
+        .diagnostics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 8px 14px;
+        }
+
+        .diag-item strong {
+            color: #243447;
+        }
+
+        .diag-muted {
+            color: #6b7b8f;
+            font-size: 0.82em;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -272,7 +303,7 @@
                 <h1>TalkX Admin Board</h1>
             </div>
             <div>
-                <button class="btn btn-refresh" onclick="loadStats(); loadPushHealth(); loadContent();">Refresh</button>
+                <button class="btn btn-refresh" onclick="loadStats(); loadPushHealth(); loadPushDiagnostics(); loadContent();">Refresh</button>
             </div>
         </div>
 
@@ -295,6 +326,12 @@
                 <div class="stat-value" id="s_push_rate">-%</div>
                 <div class="stat-sub" id="s_push_total">0 sent / 0 fail</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-title">Push Firebase</div>
+                <div class="stat-value" id="s_push_enabled">-</div>
+                <div class="stat-sub" id="s_push_project">project: -</div>
+                <div class="stat-sub" id="s_push_devices">active devices: -</div>
+            </div>
         </div>
 
         <div class="main-card">
@@ -311,6 +348,13 @@
                 <input id="notify-duration" type="number" min="3" max="60" step="1" value="10" style="width:120px;" title="Web toast suresi (saniye)" />
                 <button class="btn btn-notify" onclick="sendNotice()">Bildirim Gonder</button>
                 <span class="notify-result" id="notify-result"></span>
+            </div>
+
+            <div class="diagnostics-panel">
+                <div class="diagnostics-title">Push Diagnostics (24h)</div>
+                <div id="push-diagnostics" class="diagnostics-grid">
+                    <div class="diag-item">Yukleniyor...</div>
+                </div>
             </div>
 
             <div id="search-bar" style="display:none; margin-bottom:15px;">
@@ -343,6 +387,13 @@
         let currentTab = 'reports';
         let logEventSource = null;
 
+        const escapeHtml = (value) => String(value || '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+
         async function loadStats() {
             try {
                 const res = await fetch('/admin/stats');
@@ -369,6 +420,50 @@
                 console.error('push health error', e);
                 document.getElementById('s_push_rate').innerText = '-%';
                 document.getElementById('s_push_total').innerText = 'Push health unavailable';
+            }
+        }
+
+        async function loadPushDiagnostics() {
+            const host = document.getElementById('push-diagnostics');
+            const enabledEl = document.getElementById('s_push_enabled');
+            const projectEl = document.getElementById('s_push_project');
+            const devicesEl = document.getElementById('s_push_devices');
+            try {
+                const res = await fetch('/admin/push/diagnostics?hours=24');
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'push diagnostics failed');
+
+                const firebase = data.firebase || {};
+                const devices = data.devices || {};
+                const logs = data.logs || {};
+                const errors = Array.isArray(logs.errorSummary) ? logs.errorSummary : [];
+                const topErrorText = errors.length
+                    ? errors.slice(0, 3).map((e) => `${e.code}: ${e.count}`).join(', ')
+                    : 'yok';
+
+                enabledEl.innerText = firebase.enabled ? 'ON' : 'OFF';
+                enabledEl.style.color = firebase.enabled ? '#27ae60' : '#c0392b';
+                projectEl.innerText = `project: ${firebase.projectId || '-'}`;
+                devicesEl.innerText = `active devices: ${devices.activeCount || 0}`;
+
+                host.innerHTML = `
+                    <div class="diag-item"><strong>Init:</strong> ${firebase.enabled ? 'enabled' : 'disabled'}</div>
+                    <div class="diag-item"><strong>Credential:</strong> ${escapeHtml(firebase.credentialSource || '-')}</div>
+                    <div class="diag-item"><strong>Expected Project:</strong> ${escapeHtml(firebase.expectedProjectId || '-')}</div>
+                    <div class="diag-item"><strong>Last Init:</strong> ${firebase.initializedAt ? new Date(firebase.initializedAt).toLocaleString() : '-'}</div>
+                    <div class="diag-item"><strong>24h Sent/Fail:</strong> ${logs.sentCount || 0} / ${logs.failureCount || 0}</div>
+                    <div class="diag-item"><strong>24h Invalid:</strong> ${logs.invalidTokenCount || 0}</div>
+                    <div class="diag-item"><strong>Freshness:</strong> 5m ${devices.freshness?.lt5m || 0}, 1h ${devices.freshness?.lt1h || 0}, 24h ${devices.freshness?.lt24h || 0}</div>
+                    <div class="diag-item"><strong>Top Errors:</strong> ${escapeHtml(topErrorText)}</div>
+                    <div class="diag-item diag-muted"><strong>Init Error:</strong> ${escapeHtml(firebase.initError || 'none')}</div>
+                `;
+            } catch (e) {
+                console.error('push diagnostics error', e);
+                enabledEl.innerText = '-';
+                enabledEl.style.color = '#2c3e50';
+                projectEl.innerText = 'project: -';
+                devicesEl.innerText = 'active devices: -';
+                host.innerHTML = `<div class="diag-item">Diagnostics alinamadi: ${escapeHtml(e.message || e)}</div>`;
             }
         }
 
@@ -564,8 +659,14 @@
                 if (!res.ok || !data.success) {
                     throw new Error(data.error || 'Notify failed');
                 }
-                resultEl.innerText = `WS: ${data.wsDelivered || 0} | Push: ${data.push?.sentCount || 0}/${data.push?.tokenCount || 0} (fail ${data.push?.failureCount || 0})`;
+                const errSummary = data.push?.errorSummary || {};
+                const hasErr = Object.keys(errSummary).length > 0;
+                const errText = hasErr
+                    ? ` | err: ${Object.entries(errSummary).map(([k, v]) => `${k}=${v}`).join(', ')}`
+                    : '';
+                resultEl.innerText = `WS: ${data.wsDelivered || 0} | Push: ${data.push?.sentCount || 0}/${data.push?.tokenCount || 0} (fail ${data.push?.failureCount || 0})${errText}`;
                 loadPushHealth();
+                loadPushDiagnostics();
             } catch (e) {
                 resultEl.innerText = 'Hata';
                 alert('Error: ' + e.message);
@@ -622,6 +723,7 @@
 
         loadStats();
         loadPushHealth();
+        loadPushDiagnostics();
         loadContent();
     </script>
 </body>
