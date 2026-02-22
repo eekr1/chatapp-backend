@@ -106,6 +106,7 @@ const createTablesQuery = `
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     sender_id UUID REFERENCES users(id),
+    client_msg_id TEXT,
     text TEXT NOT NULL,
     msg_type TEXT DEFAULT 'text',
     is_read BOOLEAN DEFAULT FALSE,
@@ -165,6 +166,10 @@ const createTablesQuery = `
           ALTER TABLE messages ADD COLUMN media_id UUID;
       END IF;
 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='client_msg_id') THEN
+          ALTER TABLE messages ADD COLUMN client_msg_id TEXT;
+      END IF;
+
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='push_devices' AND column_name='updated_at') THEN
           ALTER TABLE push_devices ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
       END IF;
@@ -186,6 +191,9 @@ const createTablesQuery = `
       CREATE INDEX IF NOT EXISTS idx_push_logs_created_at ON push_delivery_logs(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_push_logs_delivery_id ON push_delivery_logs(delivery_id);
       CREATE INDEX IF NOT EXISTS idx_push_logs_event_type ON push_delivery_logs(event_type);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
+        ON messages(sender_id, client_msg_id)
+        WHERE client_msg_id IS NOT NULL;
 
       -- V13 Fix: Drop legacy FK constraints on conversations to allow Auth Users
       BEGIN

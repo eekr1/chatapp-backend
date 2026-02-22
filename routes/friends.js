@@ -180,7 +180,7 @@ router.get('/history/:friendId', async (req, res) => {
 
     try {
         const msgRes = await pool.query(`
-            SELECT m.id, m.sender_id, m.text, m.msg_type, m.created_at, m.is_read, m.media_id
+            SELECT m.id, m.sender_id, m.client_msg_id, m.text, m.msg_type, m.created_at, m.is_read, m.media_id
             FROM messages m
             JOIN conversations c ON m.conversation_id = c.id
             WHERE ((c.user_a_id = $1 AND c.user_b_id = $2) OR (c.user_a_id = $2 AND c.user_b_id = $1))
@@ -202,6 +202,7 @@ router.get('/history/:friendId', async (req, res) => {
                 from: m.sender_id === myId ? 'me' : 'peer',
                 text: m.text,
                 msgType: m.msg_type,
+                clientMsgId: m.client_msg_id,
                 mediaId: m.media_id,
                 mediaExpired,
                 createdAt: m.created_at,

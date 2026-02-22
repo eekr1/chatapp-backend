@@ -162,13 +162,19 @@ const sendJson = (ws, data) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
 };
 
-const sendError = (ws, code, message) => {
-    sendJson(ws, { type: 'error', code, message });
+const sendError = (ws, code, message, extra = {}) => {
+    sendJson(ws, { type: 'error', code, message, ...extra });
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
 const toText = (value, fallback = '') => (typeof value === 'string' ? value : fallback);
+const toClientMsgId = (value) => {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 120) return null;
+    return trimmed;
+};
 const clampDuration = (value, fallback = 10000) => {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return fallback;
@@ -710,7 +716,7 @@ wss.on('connection', (ws, req) => {
 
         if (ws.limiter.count > 5) {
             if (ws.limiter.count > 10) return ws.close(); // Hard Limit
-            sendJson(ws, { type: 'error', message: 'Ã‡ok hÄ±zlÄ± mesaj atÄ±yorsunuz! ğŸ¢' });
+            sendError(ws, 'RATE_LIMIT', 'Cok hizli mesaj atiyorsunuz.');
             return;
         }
 
@@ -845,111 +851,146 @@ wss.on('connection', (ws, req) => {
                 break;
 
             case 'direct_message':
-                // New logic for Friend Messaging (Non-blocking)
-                sendJson(ws, { type: 'debug', msg: '1. Received DM Request', data });
+                {
+                    const dmTargetUserId = data.targetUserId;
+                    const dmText = toText(data.text, '').trim();
+                    const clientMsgId = toClientMsgId(data.clientMsgId);
+                    const dmSenderId = clientData.dbUserId;
 
-                if (!data.targetUserId || !data.text) {
-                    sendJson(ws, { type: 'debug', msg: '2. Validation Failed', data });
-                    return;
-                }
-
-                const dmTargetUserId = data.targetUserId;
-                const dmSenderId = clientData.dbUserId;
-
-                console.log(`[DEBUG] direct_message from ${clientData.nickname} (${dmSenderId}) to ${dmTargetUserId}`);
-
-                // 1. Verify Friendship (Strict Security)
-                try {
-                    const fCheck = await pool.query(
-                        'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
-                        [dmSenderId, dmTargetUserId]
-                    );
-                    sendJson(ws, { type: 'debug', msg: '3. Friendship Check Result', rows: fCheck.rows.length });
-
-                    if (fCheck.rows.length === 0) {
-                        return sendJson(ws, { type: 'error', message: 'Sadece arkadaÅŸlarÄ±nÄ±za mesaj atabilirsiniz.' });
-                    }
-                } catch (e) {
-                    sendJson(ws, { type: 'debug', msg: '3. Friendship Check ERROR', error: e.message });
-                    return;
-                }
-
-                // 2. Find Target Client
-                let dmTargetClient = null;
-                for (const [cid, cData] of activeClients) {
-                    if (cData.dbUserId === dmTargetUserId) {
-                        dmTargetClient = cData;
+                    if (!dmTargetUserId || !dmText) {
+                        sendError(ws, 'SERVER_ERROR', 'Gecersiz mesaj istegi.', { clientMsgId: clientMsgId || undefined });
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId: clientMsgId || null, status: 'failed' });
                         break;
                     }
-                }
-                sendJson(ws, { type: 'debug', msg: '4. Target Client Found?', found: !!dmTargetClient });
 
-                // 3. Persist
-                // Use persistent conversation for direct messages
-                let convId = null;
-                try {
-                    convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
-                    sendJson(ws, { type: 'debug', msg: '5. Conversation ID Used', convId });
-                } catch (e) {
-                    sendJson(ws, { type: 'debug', msg: '5. Conversation Creation FAILED', error: e.message, code: e.code, detail: e.detail });
-                    console.error('[CRITICAL] Conv Create Error:', e);
-                    return sendJson(ws, { type: 'error', message: 'Sohbet oluÅŸturulamadÄ±: ' + e.message });
-                }
-
-                if (!convId) {
-                    console.error('[CRITICAL] Failed to get conversation ID for DM persistence.');
-                    return sendJson(ws, { type: 'error', message: 'Mesaj kaydedilemedi (ID AlÄ±namadÄ±).' });
-                }
-
-                try {
-                    await pool.query(
-                        'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
-                        [convId, dmSenderId, data.text, 'direct']
-                    );
-                    sendJson(ws, { type: 'debug', msg: '6. DB Insert Success' });
-                } catch (e) {
-                    sendJson(ws, { type: 'debug', msg: '6. DB Insert ERROR', error: e.message });
-                    console.error('DM Persist error', e);
-                }
-
-                const dmDeliveryId = uuidv4();
-
-                // 4. Send to target if online
-                if (dmTargetClient) {
-                    console.log(`[DEBUG] Target is online. Sending DM to ${dmTargetClient.nickname}`);
-                    sendJson(dmTargetClient.ws, {
-                        type: 'direct_message',
-                        fromUsername: clientData.username,
-                        fromNickname: clientData.nickname,
-                        fromUserId: dmSenderId,
-                        msgType: 'direct',
-                        text: data.text,
-                        conversationId: typeof convId !== 'undefined' ? convId : null,
-                        deliveryId: dmDeliveryId
-                    });
-                } else {
-                    console.log(`[DEBUG] Target ${dmTargetUserId} appears offline (push still sent).`);
-                }
-
-                sendPushToUser(dmTargetUserId, {
-                    title: clientData.nickname || clientData.username || 'Yeni mesaj',
-                    body: String(data.text || '').slice(0, 140),
-                    channelId: PUSH_CHANNEL_IDS.messages,
-                    data: {
-                        type: 'direct_message',
-                        fromUserId: dmSenderId,
-                        fromUsername: clientData.username || '',
-                        fromNickname: clientData.nickname || '',
-                        msgType: 'direct',
-                        text: String(data.text || '').slice(0, 140),
-                        conversationId: convId || '',
-                        deliveryId: dmDeliveryId,
-                        channelId: PUSH_CHANNEL_IDS.messages
+                    if (!clientMsgId) {
+                        sendError(ws, 'SERVER_ERROR', 'Mesaj kimligi gecersiz.');
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId: null, status: 'failed' });
+                        break;
                     }
-                }, {
-                    eventType: 'direct_message',
-                    deliveryId: dmDeliveryId
-                }).catch((e) => console.error('direct_message push error:', e.message));
+
+                    try {
+                        const fCheck = await pool.query(
+                            'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
+                            [dmSenderId, dmTargetUserId]
+                        );
+                        if (fCheck.rows.length === 0) {
+                            sendError(ws, 'NOT_FRIEND', 'Sadece arkadaslariniza mesaj atabilirsiniz.', { clientMsgId });
+                            sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                            break;
+                        }
+                    } catch (e) {
+                        console.error('direct_message friendship check error:', e.message);
+                        sendError(ws, 'SERVER_ERROR', 'Arkadaslik kontrolu basarisiz.', { clientMsgId });
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        break;
+                    }
+
+                    let convId = null;
+                    try {
+                        convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
+                    } catch (e) {
+                        console.error('direct_message conversation error:', e.message);
+                        sendError(ws, 'SERVER_ERROR', 'Sohbet olusturulamadi.', { clientMsgId });
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        break;
+                    }
+
+                    if (!convId) {
+                        sendError(ws, 'SERVER_ERROR', 'Sohbet olusturulamadi.', { clientMsgId });
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        break;
+                    }
+
+                    let persistedMessageId = null;
+                    let isDuplicate = false;
+                    try {
+                        const existing = await pool.query(
+                            'SELECT id, conversation_id FROM messages WHERE sender_id = $1 AND client_msg_id = $2 LIMIT 1',
+                            [dmSenderId, clientMsgId]
+                        );
+                        if (existing.rows.length > 0) {
+                            isDuplicate = true;
+                            persistedMessageId = existing.rows[0].id;
+                            convId = existing.rows[0].conversation_id || convId;
+                        } else {
+                            const ins = await pool.query(
+                                'INSERT INTO messages (conversation_id, sender_id, client_msg_id, text, msg_type) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+                                [convId, dmSenderId, clientMsgId, dmText, 'direct']
+                            );
+                            persistedMessageId = ins.rows[0].id;
+                        }
+                    } catch (e) {
+                        console.error('direct_message persist error:', e.message);
+                        sendError(ws, 'SERVER_ERROR', 'Mesaj kaydedilemedi.', { clientMsgId });
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        break;
+                    }
+
+                    if (isDuplicate) {
+                        sendJson(ws, {
+                            type: 'direct_message_ack',
+                            clientMsgId,
+                            status: 'duplicate',
+                            serverMessageId: persistedMessageId,
+                            conversationId: convId
+                        });
+                        break;
+                    }
+
+                    const dmDeliveryId = uuidv4();
+
+                    let dmTargetClient = null;
+                    for (const [, cData] of activeClients) {
+                        if (cData.dbUserId === dmTargetUserId) {
+                            dmTargetClient = cData;
+                            break;
+                        }
+                    }
+
+                    if (dmTargetClient) {
+                        sendJson(dmTargetClient.ws, {
+                            type: 'direct_message',
+                            fromUsername: clientData.username,
+                            fromNickname: clientData.nickname,
+                            fromUserId: dmSenderId,
+                            msgType: 'direct',
+                            text: dmText,
+                            conversationId: convId || null,
+                            deliveryId: dmDeliveryId,
+                            clientMsgId
+                        });
+                    }
+
+                    sendPushToUser(dmTargetUserId, {
+                        title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                        body: dmText.slice(0, 140),
+                        channelId: PUSH_CHANNEL_IDS.messages,
+                        data: {
+                            type: 'direct_message',
+                            fromUserId: dmSenderId,
+                            fromUsername: clientData.username || '',
+                            fromNickname: clientData.nickname || '',
+                            msgType: 'direct',
+                            text: dmText.slice(0, 140),
+                            conversationId: convId || '',
+                            deliveryId: dmDeliveryId,
+                            clientMsgId,
+                            channelId: PUSH_CHANNEL_IDS.messages
+                        }
+                    }, {
+                        eventType: 'direct_message',
+                        deliveryId: dmDeliveryId
+                    }).catch((e) => console.error('direct_message push error:', e.message));
+
+                    sendJson(ws, {
+                        type: 'direct_message_ack',
+                        clientMsgId,
+                        status: 'sent',
+                        serverMessageId: persistedMessageId,
+                        conversationId: convId
+                    });
+                }
                 break;
 
             case 'typing':
@@ -1101,91 +1142,144 @@ wss.on('connection', (ws, req) => {
                 break;
 
             case 'direct_image_send':
-                if (!data.targetUserId || !data.imageData) return;
                 {
-                    const v = validateImageDataUrl(data.imageData);
-                    if (!v.ok) return sendError(ws, 'INVALID_IMAGE', v.reason);
-                }
-                const distSenderId = clientData.dbUserId;
-                const distTargetUserId = data.targetUserId;
+                    const distTargetUserId = data.targetUserId;
+                    const distSenderId = clientData.dbUserId;
+                    const clientMsgId = toClientMsgId(data.clientMsgId);
 
-                try {
-                    const fRes = await pool.query(
-                        'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
-                        [distSenderId, distTargetUserId]
-                    );
-                    if (fRes.rows.length === 0) {
-                        return sendError(ws, 'NOT_FRIEND', 'Sadece arkadaslariniza fotograf gonderebilirsiniz.');
+                    if (!distTargetUserId || !data.imageData) {
+                        sendError(ws, 'SERVER_ERROR', 'Gecersiz fotograf istegi.', { clientMsgId: clientMsgId || undefined });
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId: clientMsgId || null, status: 'failed' });
+                        break;
                     }
 
-                    // Store in ephemeral_media
-                    const dInsertRes = await pool.query(
-                        'INSERT INTO ephemeral_media (sender_id, receiver_id, media_data) VALUES ($1, $2, $3) RETURNING id',
-                        [distSenderId, distTargetUserId, data.imageData]
-                    );
-                    const dMediaId = dInsertRes.rows[0].id;
+                    if (!clientMsgId) {
+                        sendError(ws, 'SERVER_ERROR', 'Mesaj kimligi gecersiz.');
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId: null, status: 'failed' });
+                        break;
+                    }
 
-                    // Persist as message in conversation
-                    const dConvId = await findOrCreatePersistentConversation(distSenderId, distTargetUserId);
-                    await pool.query(
-                        'INSERT INTO messages (conversation_id, sender_id, text, msg_type, media_id) VALUES ($1, $2, $3, $4, $5)',
-                        [dConvId, distSenderId, 'ğŸ“¸ FotoÄŸraf', 'image', dMediaId]
-                    );
+                    const v = validateImageDataUrl(data.imageData);
+                    if (!v.ok) {
+                        sendError(ws, 'SERVER_ERROR', v.reason, { clientMsgId });
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        break;
+                    }
 
-                    // Find Target Client
-                    let dTargetClient = null;
-                    for (const [cid, cData] of activeClients) {
-                        if (cData.dbUserId === distTargetUserId) {
-                            dTargetClient = cData;
+                    try {
+                        const fRes = await pool.query(
+                            'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
+                            [distSenderId, distTargetUserId]
+                        );
+                        if (fRes.rows.length === 0) {
+                            sendError(ws, 'NOT_FRIEND', 'Sadece arkadaslariniza fotograf gonderebilirsiniz.', { clientMsgId });
+                            sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                             break;
                         }
-                    }
 
-                    const imageDeliveryId = uuidv4();
-
-                    if (dTargetClient) {
-                        sendJson(dTargetClient.ws, {
-                            type: 'direct_message',
-                            fromUserId: distSenderId,
-                            fromUsername: clientData.username,
-                            fromNickname: clientData.nickname,
-                            msgType: 'image',
-                            mediaId: dMediaId,
-                            text: 'ğŸ“¸ FotoÄŸraf',
-                            conversationId: dConvId,
-                            deliveryId: imageDeliveryId
-                        });
-                    }
-
-                    sendPushToUser(distTargetUserId, {
-                        title: clientData.nickname || clientData.username || 'Yeni mesaj',
-                        body: 'Fotograf gonderdi',
-                        channelId: PUSH_CHANNEL_IDS.messages,
-                        data: {
-                            type: 'direct_message',
-                            fromUserId: distSenderId,
-                            fromUsername: clientData.username || '',
-                            fromNickname: clientData.nickname || '',
-                            msgType: 'image',
-                            mediaId: dMediaId,
-                            text: 'Fotograf gonderdi',
-                            conversationId: dConvId || '',
-                            deliveryId: imageDeliveryId,
-                            channelId: PUSH_CHANNEL_IDS.messages
+                        const existing = await pool.query(
+                            'SELECT id, conversation_id, media_id FROM messages WHERE sender_id = $1 AND client_msg_id = $2 LIMIT 1',
+                            [distSenderId, clientMsgId]
+                        );
+                        if (existing.rows.length > 0) {
+                            const row = existing.rows[0];
+                            sendJson(ws, {
+                                type: 'direct_message_ack',
+                                clientMsgId,
+                                status: 'duplicate',
+                                serverMessageId: row.id,
+                                conversationId: row.conversation_id,
+                                mediaId: row.media_id
+                            });
+                            break;
                         }
-                    }, {
-                        eventType: 'direct_image_send',
-                        deliveryId: imageDeliveryId
-                    }).catch((e) => console.error('direct_image_send push error:', e.message));
 
-                    // Echo back to sender
-                    sendJson(ws, {
-                        type: 'image_sent',
-                        mediaId: dMediaId,
-                        targetUserId: distTargetUserId
-                    });
+                        const dConvId = await findOrCreatePersistentConversation(distSenderId, distTargetUserId);
+                        if (!dConvId) {
+                            sendError(ws, 'SERVER_ERROR', 'Sohbet olusturulamadi.', { clientMsgId });
+                            sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                            break;
+                        }
 
-                } catch (e) { console.error('direct_image_send error', e); }
+                        const dInsertRes = await pool.query(
+                            'INSERT INTO ephemeral_media (sender_id, receiver_id, media_data) VALUES ($1, $2, $3) RETURNING id',
+                            [distSenderId, distTargetUserId, data.imageData]
+                        );
+                        const dMediaId = dInsertRes.rows[0].id;
+
+                        const messageInsert = await pool.query(
+                            'INSERT INTO messages (conversation_id, sender_id, client_msg_id, text, msg_type, media_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+                            [dConvId, distSenderId, clientMsgId, 'Fotograf gonderildi', 'image', dMediaId]
+                        );
+                        const serverMessageId = messageInsert.rows[0].id;
+
+                        let dTargetClient = null;
+                        for (const [, cData] of activeClients) {
+                            if (cData.dbUserId === distTargetUserId) {
+                                dTargetClient = cData;
+                                break;
+                            }
+                        }
+
+                        const imageDeliveryId = uuidv4();
+                        if (dTargetClient) {
+                            sendJson(dTargetClient.ws, {
+                                type: 'direct_message',
+                                fromUserId: distSenderId,
+                                fromUsername: clientData.username,
+                                fromNickname: clientData.nickname,
+                                msgType: 'image',
+                                mediaId: dMediaId,
+                                text: 'Fotograf gonderdi',
+                                conversationId: dConvId,
+                                deliveryId: imageDeliveryId,
+                                clientMsgId
+                            });
+                        }
+
+                        sendPushToUser(distTargetUserId, {
+                            title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                            body: 'Fotograf gonderdi',
+                            channelId: PUSH_CHANNEL_IDS.messages,
+                            data: {
+                                type: 'direct_message',
+                                fromUserId: distSenderId,
+                                fromUsername: clientData.username || '',
+                                fromNickname: clientData.nickname || '',
+                                msgType: 'image',
+                                mediaId: dMediaId,
+                                text: 'Fotograf gonderdi',
+                                conversationId: dConvId || '',
+                                deliveryId: imageDeliveryId,
+                                clientMsgId,
+                                channelId: PUSH_CHANNEL_IDS.messages
+                            }
+                        }, {
+                            eventType: 'direct_image_send',
+                            deliveryId: imageDeliveryId
+                        }).catch((e) => console.error('direct_image_send push error:', e.message));
+
+                        sendJson(ws, {
+                            type: 'image_sent',
+                            mediaId: dMediaId,
+                            targetUserId: distTargetUserId,
+                            clientMsgId
+                        });
+
+                        sendJson(ws, {
+                            type: 'direct_message_ack',
+                            clientMsgId,
+                            status: 'sent',
+                            serverMessageId,
+                            conversationId: dConvId,
+                            mediaId: dMediaId
+                        });
+                    } catch (e) {
+                        console.error('direct_image_send error', e);
+                        sendError(ws, 'SERVER_ERROR', 'Fotograf gonderilemedi.', { clientMsgId });
+                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                    }
+                }
                 break;
 
 
