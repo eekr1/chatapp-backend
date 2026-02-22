@@ -145,6 +145,11 @@ const REPORT_TTL = 5 * 60 * 1000;
 const HEARTBEAT_INTERVAL = 30000;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB
 const EPHEMERAL_MEDIA_TTL_DAYS = 7;
+const PUSH_CHANNEL_IDS = {
+    messages: 'talkx_messages_v2',
+    admin: 'talkx_admin_v2',
+    default: 'talkx_default_v2'
+};
 
 // Rate Limit Map (Memory is fine for rate limit)
 const rateLimitMap = new Map();
@@ -320,7 +325,7 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
             pushResult = await sendPushToTokens(tokens, {
                 title: senderTitle,
                 body: composeAdminPushBody(noticeTitle, cleanBody),
-                channelId: 'talkx_admin',
+                channelId: PUSH_CHANNEL_IDS.admin,
                 data: {
                     type: 'admin_notice',
                     title: senderTitle,
@@ -328,7 +333,7 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
                     body: cleanBody,
                     durationMs: String(ttlMs),
                     deliveryId,
-                    channelId: 'talkx_admin'
+                    channelId: PUSH_CHANNEL_IDS.admin
                 }
             });
             if (pushResult.invalidTokens && pushResult.invalidTokens.length) {
@@ -347,7 +352,7 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
         sentCount: pushResult.sentCount || 0,
         failureCount: pushResult.failureCount || 0,
         invalidTokenCount: (pushResult.invalidTokens || []).length,
-        channelId: 'talkx_admin',
+        channelId: PUSH_CHANNEL_IDS.admin,
         meta: { target: normalizedTarget, wsDelivered }
     });
 
@@ -929,7 +934,7 @@ wss.on('connection', (ws, req) => {
                 sendPushToUser(dmTargetUserId, {
                     title: clientData.nickname || clientData.username || 'Yeni mesaj',
                     body: String(data.text || '').slice(0, 140),
-                    channelId: 'talkx_messages',
+                    channelId: PUSH_CHANNEL_IDS.messages,
                     data: {
                         type: 'direct_message',
                         fromUserId: dmSenderId,
@@ -939,7 +944,7 @@ wss.on('connection', (ws, req) => {
                         text: String(data.text || '').slice(0, 140),
                         conversationId: convId || '',
                         deliveryId: dmDeliveryId,
-                        channelId: 'talkx_messages'
+                        channelId: PUSH_CHANNEL_IDS.messages
                     }
                 }, {
                     eventType: 'direct_message',
@@ -1155,7 +1160,7 @@ wss.on('connection', (ws, req) => {
                     sendPushToUser(distTargetUserId, {
                         title: clientData.nickname || clientData.username || 'Yeni mesaj',
                         body: 'Fotograf gonderdi',
-                        channelId: 'talkx_messages',
+                        channelId: PUSH_CHANNEL_IDS.messages,
                         data: {
                             type: 'direct_message',
                             fromUserId: distSenderId,
@@ -1166,7 +1171,7 @@ wss.on('connection', (ws, req) => {
                             text: 'Fotograf gonderdi',
                             conversationId: dConvId || '',
                             deliveryId: imageDeliveryId,
-                            channelId: 'talkx_messages'
+                            channelId: PUSH_CHANNEL_IDS.messages
                         }
                     }, {
                         eventType: 'direct_image_send',

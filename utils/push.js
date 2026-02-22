@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const DEFAULT_PUSH_CHANNEL_ID = 'talkx_default_v2';
 
 let admin = null;
 let initAttempted = false;
@@ -117,7 +118,9 @@ const sendPushToTokens = async (tokens, payload = {}) => {
             priority: 'high',
             notification: {
                 sound: 'default',
-                channelId: payload.channelId || 'talkx_default'
+                defaultSound: true,
+                priority: 'PRIORITY_HIGH',
+                channelId: payload.channelId || DEFAULT_PUSH_CHANNEL_ID
             }
         }
     };
