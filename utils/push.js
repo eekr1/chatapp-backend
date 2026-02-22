@@ -252,7 +252,8 @@ const sendPushToTokens = async (tokens, payload = {}) => {
             notification: {
                 sound: 'default',
                 defaultSound: true,
-                priority: 'PRIORITY_HIGH',
+                // Firebase Admin AndroidNotification priority expects 'high', not 'PRIORITY_HIGH'.
+                priority: 'high',
                 channelId: pushOptions.channelId
             }
         }
