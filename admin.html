@@ -284,7 +284,7 @@
             <div class="notify-box">
                 <input id="notify-title" type="text" placeholder="Bildirim baslik" style="min-width:200px;" />
                 <input id="notify-body" type="text" placeholder="Bildirim metni" style="min-width:300px;" />
-                <input id="notify-duration" type="number" min="3000" max="60000" step="1000" value="10000" style="width:120px;" />
+                <input id="notify-duration" type="number" min="3" max="60" step="1" value="10" style="width:120px;" title="Web toast suresi (saniye)" />
                 <button class="btn btn-notify" onclick="sendNotice()">Bildirim Gonder</button>
                 <span class="notify-result" id="notify-result"></span>
             </div>
@@ -498,7 +498,8 @@
         async function sendNotice() {
             const title = (document.getElementById('notify-title').value || '').trim();
             const body = (document.getElementById('notify-body').value || '').trim();
-            const durationMs = Number(document.getElementById('notify-duration').value || 10000);
+            const durationSeconds = Number(document.getElementById('notify-duration').value || 10);
+            const durationMs = Math.max(3000, Math.min(60000, Math.round(durationSeconds * 1000)));
             if (!title || !body) {
                 alert('Baslik ve metin gerekli.');
                 return;
@@ -513,7 +514,13 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title, body, durationMs, target: 'all' })
                 });
-                const data = await res.json();
+                const raw = await res.text();
+                let data = {};
+                try {
+                    data = raw ? JSON.parse(raw) : {};
+                } catch {
+                    throw new Error(`Sunucu JSON donmedi (HTTP ${res.status}). CORS/domain ayarini kontrol et.`);
+                }
                 if (!res.ok || !data.success) {
                     throw new Error(data.error || 'Notify failed');
                 }
@@ -557,7 +564,14 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
-            const data = await res.json().catch(() => ({}));
+            const raw = await res.text();
+            const data = (() => {
+                try {
+                    return raw ? JSON.parse(raw) : {};
+                } catch {
+                    return {};
+                }
+            })();
             if (!res.ok) {
                 throw new Error(data.error || 'Request failed');
             }

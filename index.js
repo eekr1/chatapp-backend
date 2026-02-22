@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -43,28 +43,56 @@ app.use((req, res, next) => {
     next();
 });
 
-const allowedOrigins = [
+const defaultAllowedOrigins = [
     "https://talkx.chat",
     "https://www.talkx.chat",
     "http://localhost",
     "https://localhost",
-    "capacitor://localhost",
-    "http://localhost:3000"
+    "http://localhost:3000",
+    "capacitor://localhost"
 ];
+const envAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+const allowedOrigins = new Set([...defaultAllowedOrigins, ...envAllowedOrigins]);
+
+const baseCorsOptions = {
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true
+};
+
+const isSameHostOrigin = (origin, req) => {
+    try {
+        const originUrl = new URL(origin);
+        return originUrl.host === req.get('host');
+    } catch {
+        return false;
+    }
+};
 
 app.use(express.json());
 
-app.use(cors({
-    origin: function (origin, callback) {
-        // origin yoksa (mobil / Postman / bazı durumlar) izin ver
-        if (!origin) return callback(null, true);
+app.use(cors((req, callback) => {
+    const origin = req.get('Origin');
 
-        if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Origin yoksa (native app, server-to-server) izin ver.
+    if (!origin) {
+        return callback(null, { ...baseCorsOptions, origin: true });
+    }
 
-        return callback(new Error("CORS blocked"), false);
-    },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    credentials: true,
+    // Explicit allow-list (sabit + env)
+    if (allowedOrigins.has(origin)) {
+        return callback(null, { ...baseCorsOptions, origin: true });
+    }
+
+    // Admin panelindeki istekleri ayni hosttan geldigi surece bloklama.
+    if (req.path.startsWith('/admin') && isSameHostOrigin(origin, req)) {
+        return callback(null, { ...baseCorsOptions, origin: true });
+    }
+
+    console.warn('CORS blocked for origin:', origin, 'path:', req.path);
+    return callback(null, { ...baseCorsOptions, origin: false });
 }));
 
 
@@ -74,7 +102,7 @@ const rateLimit = require('express-rate-limit');
 const authLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
     max: 50, // 50 requests per IP
-    message: { error: 'Çok fazla deneme. Lütfen bekleyin.' }
+    message: { error: 'Ã‡ok fazla deneme. LÃ¼tfen bekleyin.' }
 });
 
 const apiLimiter = rateLimit({
@@ -233,17 +261,17 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
 };
 
 const validateImageDataUrl = (dataUrl) => {
-    if (typeof dataUrl !== 'string') return { ok: false, reason: 'Geçersiz fotoğraf verisi.' };
+    if (typeof dataUrl !== 'string') return { ok: false, reason: 'GeÃ§ersiz fotoÄŸraf verisi.' };
     if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
-        return { ok: false, reason: 'Geçersiz fotoğraf formatı.' };
+        return { ok: false, reason: 'GeÃ§ersiz fotoÄŸraf formatÄ±.' };
     }
 
     const parts = dataUrl.split(',', 2);
-    if (parts.length !== 2) return { ok: false, reason: 'Geçersiz fotoğraf verisi.' };
+    if (parts.length !== 2) return { ok: false, reason: 'GeÃ§ersiz fotoÄŸraf verisi.' };
 
     const bytes = estimateBase64Bytes(parts[1]);
     if (bytes > MAX_IMAGE_BYTES) {
-        return { ok: false, reason: 'Fotoğraf boyutu 2MB sınırını aşıyor.' };
+        return { ok: false, reason: 'FotoÄŸraf boyutu 2MB sÄ±nÄ±rÄ±nÄ± aÅŸÄ±yor.' };
     }
 
     return { ok: true };
@@ -438,11 +466,11 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
 
 const joinQueue = async (ws) => {
     const clientData = activeClients.get(ws.clientId);
-    if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR', 'Kimlik doğrulanamadı.');
+    if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR', 'Kimlik doÄŸrulanamadÄ±.');
 
     // Require nickname (V6)
     if (!clientData.nickname) {
-        return sendError(ws, 'NO_NICKNAME', 'Lütfen önce kullanıcı adı belirleyin.');
+        return sendError(ws, 'NO_NICKNAME', 'LÃ¼tfen Ã¶nce kullanÄ±cÄ± adÄ± belirleyin.');
     }
 
     // Ban Check
@@ -452,7 +480,7 @@ const joinQueue = async (ws) => {
             sendJson(ws, { type: 'queued' });
             return;
         }
-        return sendError(ws, 'BANNED', `Yasaklandınız. Sebep: ${ban.reason}`);
+        return sendError(ws, 'BANNED', `YasaklandÄ±nÄ±z. Sebep: ${ban.reason}`);
     }
 
     leaveRoom(ws.clientId);
@@ -573,7 +601,7 @@ wss.on('connection', (ws, req) => {
 
         if (ws.limiter.count > 5) {
             if (ws.limiter.count > 10) return ws.close(); // Hard Limit
-            sendJson(ws, { type: 'error', message: 'Çok hızlı mesaj atıyorsunuz! 🐢' });
+            sendJson(ws, { type: 'error', message: 'Ã‡ok hÄ±zlÄ± mesaj atÄ±yorsunuz! ğŸ¢' });
             return;
         }
 
@@ -613,24 +641,24 @@ wss.on('connection', (ws, req) => {
                 // But since UI enforces login, this might mean "Session Expired"
                 // Let's send AUTH_ERROR if token was provided but failed.
                 if (data.token) {
-                    return sendError(ws, 'AUTH_ERROR', 'Oturum süresi doldu.');
+                    return sendError(ws, 'AUTH_ERROR', 'Oturum sÃ¼resi doldu.');
                 }
                 // If no token was provided at all (legacy client?), use getOrCreateUser
                 dbUser = await getOrCreateUser(deviceId, req.socket.remoteAddress);
                 isAnon = true;
             }
 
-            if (!dbUser) return sendError(ws, 'DB_ERROR', 'Sunucu hatası.');
+            if (!dbUser) return sendError(ws, 'DB_ERROR', 'Sunucu hatasÄ±.');
 
             // Check Status
             if (dbUser.status && dbUser.status !== 'active') {
-                return sendError(ws, 'BANNED', 'Hesabınız askıya alınmış.');
+                return sendError(ws, 'BANNED', 'HesabÄ±nÄ±z askÄ±ya alÄ±nmÄ±ÅŸ.');
             }
 
             // Check Bans
             const ban = await checkBan(dbUser.id);
             if (ban && ban.ban_type !== 'shadow') {
-                sendError(ws, 'BANNED', `Yasaklandınız. Bitiş: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'Süresiz'}. Sebep: ${ban.reason}`);
+                sendError(ws, 'BANNED', `YasaklandÄ±nÄ±z. BitiÅŸ: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'SÃ¼resiz'}. Sebep: ${ban.reason}`);
                 ws.close();
                 return;
             }
@@ -730,7 +758,7 @@ wss.on('connection', (ws, req) => {
                     sendJson(ws, { type: 'debug', msg: '3. Friendship Check Result', rows: fCheck.rows.length });
 
                     if (fCheck.rows.length === 0) {
-                        return sendJson(ws, { type: 'error', message: 'Sadece arkadaşlarınıza mesaj atabilirsiniz.' });
+                        return sendJson(ws, { type: 'error', message: 'Sadece arkadaÅŸlarÄ±nÄ±za mesaj atabilirsiniz.' });
                     }
                 } catch (e) {
                     sendJson(ws, { type: 'debug', msg: '3. Friendship Check ERROR', error: e.message });
@@ -756,12 +784,12 @@ wss.on('connection', (ws, req) => {
                 } catch (e) {
                     sendJson(ws, { type: 'debug', msg: '5. Conversation Creation FAILED', error: e.message, code: e.code, detail: e.detail });
                     console.error('[CRITICAL] Conv Create Error:', e);
-                    return sendJson(ws, { type: 'error', message: 'Sohbet oluşturulamadı: ' + e.message });
+                    return sendJson(ws, { type: 'error', message: 'Sohbet oluÅŸturulamadÄ±: ' + e.message });
                 }
 
                 if (!convId) {
                     console.error('[CRITICAL] Failed to get conversation ID for DM persistence.');
-                    return sendJson(ws, { type: 'error', message: 'Mesaj kaydedilemedi (ID Alınamadı).' });
+                    return sendJson(ws, { type: 'error', message: 'Mesaj kaydedilemedi (ID AlÄ±namadÄ±).' });
                 }
 
                 try {
@@ -883,7 +911,7 @@ wss.on('connection', (ws, req) => {
                     isFriend = fRes.rows.length > 0;
                 } catch (e) { }
 
-                if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Sadece arkadaşlarınıza fotoğraf gönderebilirsiniz.');
+                if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Sadece arkadaÅŸlarÄ±nÄ±za fotoÄŸraf gÃ¶nderebilirsiniz.');
 
                 // Store
                 try {
@@ -902,7 +930,7 @@ wss.on('connection', (ws, req) => {
                             from: 'peer',
                             msgType: 'image',
                             mediaId: mediaId,
-                            text: '📸 Fotoğraf' // Placeholder text
+                            text: 'ğŸ“¸ FotoÄŸraf' // Placeholder text
                         });
                         // Admin Log
                         if (adminRoutes.logToAdmin) {
@@ -931,7 +959,7 @@ wss.on('connection', (ws, req) => {
             case 'fetch_image':
                 if (!data.mediaId) return;
                 if (!isUuid(data.mediaId)) {
-                    return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Geçersiz medya kimliği.' });
+                    return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'GeÃ§ersiz medya kimliÄŸi.' });
                 }
                 const clientDataFetch = activeClients.get(ws.clientId);
                 if (!clientDataFetch || !clientDataFetch.dbUserId) return;
@@ -943,7 +971,7 @@ wss.on('connection', (ws, req) => {
                     );
 
                     if (res.rows.length === 0) {
-                        return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Bu fotoğraf silinmiş veya süresi dolmuş.' });
+                        return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Bu fotoÄŸraf silinmiÅŸ veya sÃ¼resi dolmuÅŸ.' });
                     }
 
                     const item = res.rows[0];
@@ -983,7 +1011,7 @@ wss.on('connection', (ws, req) => {
                     const dConvId = await findOrCreatePersistentConversation(distSenderId, distTargetUserId);
                     await pool.query(
                         'INSERT INTO messages (conversation_id, sender_id, text, msg_type, media_id) VALUES ($1, $2, $3, $4, $5)',
-                        [dConvId, distSenderId, '📸 Fotoğraf', 'image', dMediaId]
+                        [dConvId, distSenderId, 'ğŸ“¸ FotoÄŸraf', 'image', dMediaId]
                     );
 
                     // Find Target Client
@@ -1003,7 +1031,7 @@ wss.on('connection', (ws, req) => {
                             fromNickname: clientData.nickname,
                             msgType: 'image',
                             mediaId: dMediaId,
-                            text: '📸 Fotoğraf',
+                            text: 'ğŸ“¸ FotoÄŸraf',
                             conversationId: dConvId
                         });
                     } else {
@@ -1059,7 +1087,7 @@ wss.on('connection', (ws, req) => {
                         targetUser = tRes.rows[0];
                     } catch (e) { console.error(e); }
 
-                    if (!targetUser) return sendError(ws, 'NOT_FOUND', 'Kullanıcı bulunamadı.');
+                    if (!targetUser) return sendError(ws, 'NOT_FOUND', 'KullanÄ±cÄ± bulunamadÄ±.');
 
                     // 2. Check Friendship
                     let isFriend = false;
@@ -1071,7 +1099,7 @@ wss.on('connection', (ws, req) => {
                         isFriend = fRes.rows.length > 0;
                     } catch (e) { console.error(e); }
 
-                    if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Bu kullanıcı arkadaşınız değil.');
+                    if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Bu kullanÄ±cÄ± arkadaÅŸÄ±nÄ±z deÄŸil.');
 
                     // 3. Check if Target is Online
                     let targetClient = null;
@@ -1084,7 +1112,7 @@ wss.on('connection', (ws, req) => {
 
                     if (targetClient) {
                         // V13: Do NOT force leaveRoom anymore.
-                        // Establece que una sesión directa PUEDE existir.
+                        // Establece que una sesiÃ³n directa PUEDE existir.
                         const conversationId = await findOrCreatePersistentConversation(meId, targetUser.id);
 
                         sendJson(ws, {
@@ -1095,7 +1123,7 @@ wss.on('connection', (ws, req) => {
                         });
                         return;
                     } else {
-                        return sendError(ws, 'OFFLINE', 'Kullanıcı şu an çevrimdışı.');
+                        return sendError(ws, 'OFFLINE', 'KullanÄ±cÄ± ÅŸu an Ã§evrimdÄ±ÅŸÄ±.');
                     }
                 }
                 break;
@@ -1225,7 +1253,7 @@ const handleReport = async (reporterClientId, roomId, reason) => {
             // Kick User
             const clientData = activeClients.get(reportedObj.clientId);
             if (clientData && clientData.ws) {
-                sendJson(clientData.ws, { type: 'ended', reason: 'banned', message: `Hesabınız geçici olarak askıya alındı. Süre: ${banHours} saat.` });
+                sendJson(clientData.ws, { type: 'ended', reason: 'banned', message: `HesabÄ±nÄ±z geÃ§ici olarak askÄ±ya alÄ±ndÄ±. SÃ¼re: ${banHours} saat.` });
                 clientData.ws.close();
             }
         }
@@ -1289,3 +1317,4 @@ app.get('*', (req, res) => {
 server.listen(port, () => {
     console.log(`Backend running on ${port}`);
 });
+
