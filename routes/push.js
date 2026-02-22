@@ -50,6 +50,20 @@ router.post('/register', async (req, res) => {
                last_seen_at = NOW()`,
             [req.userId, deviceId, platform, token]
         );
+
+        // Keep only the latest active token per user+device to prevent duplicate push notifications.
+        if (deviceId) {
+            await pool.query(
+                `UPDATE push_devices
+                 SET is_active = FALSE, updated_at = NOW()
+                 WHERE user_id = $1
+                   AND device_id = $2
+                   AND push_token <> $3
+                   AND is_active = TRUE`,
+                [req.userId, deviceId, token]
+            );
+        }
+
         res.json({ success: true });
     } catch (e) {
         console.error('Push register error:', e);

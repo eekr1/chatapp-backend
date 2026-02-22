@@ -169,6 +169,12 @@ const clampDuration = (value, fallback = 10000) => {
     if (!Number.isFinite(parsed)) return fallback;
     return Math.max(3000, Math.min(60000, Math.round(parsed)));
 };
+const composeAdminPushBody = (noticeTitle, body) => {
+    const cleanNoticeTitle = toText(noticeTitle, '').trim();
+    const cleanBody = toText(body, '').trim();
+    if (cleanNoticeTitle && cleanBody) return `${cleanNoticeTitle}: ${cleanBody}`;
+    return cleanBody || cleanNoticeTitle || '';
+};
 
 const estimateBase64Bytes = (b64) => {
     if (typeof b64 !== 'string') return 0;
@@ -237,7 +243,10 @@ const sendPushToUser = async (userId, payload = {}, options = {}) => {
 
     try {
         const tokenRes = await pool.query(
-            'SELECT push_token FROM push_devices WHERE user_id = $1 AND is_active = TRUE',
+            `SELECT DISTINCT ON (COALESCE(NULLIF(device_id, ''), ('user:' || user_id::text))) push_token
+             FROM push_devices
+             WHERE user_id = $1 AND is_active = TRUE
+             ORDER BY COALESCE(NULLIF(device_id, ''), ('user:' || user_id::text)), updated_at DESC`,
             [userId]
         );
         const tokens = tokenRes.rows.map(r => r.push_token).filter(Boolean);
@@ -275,8 +284,9 @@ const sendPushToUser = async (userId, payload = {}, options = {}) => {
 };
 
 adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' }) => {
-    const cleanTitle = toText(title, 'TalkX').trim().slice(0, 80) || 'TalkX';
+    const noticeTitle = toText(title, 'Duyuru').trim().slice(0, 80) || 'Duyuru';
     const cleanBody = toText(body, '').trim().slice(0, 300);
+    const senderTitle = 'TalkX';
     const normalizedTarget = ['all', 'online', 'mobile'].includes(String(target)) ? String(target) : 'all';
     const ttlMs = clampDuration(durationMs, 10000);
     const deliveryId = uuidv4();
@@ -287,7 +297,8 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
             if (!client || client.ws.readyState !== WebSocket.OPEN) continue;
             sendJson(client.ws, {
                 type: 'admin_notice',
-                title: cleanTitle,
+                title: senderTitle,
+                noticeTitle,
                 body: cleanBody,
                 durationMs: ttlMs,
                 deliveryId
@@ -299,15 +310,21 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
     let pushResult = { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
     if (normalizedTarget === 'all' || normalizedTarget === 'mobile') {
         try {
-            const tokenRes = await pool.query('SELECT push_token FROM push_devices WHERE is_active = TRUE');
+            const tokenRes = await pool.query(
+                `SELECT DISTINCT ON ((COALESCE(user_id::text, '') || ':' || COALESCE(NULLIF(device_id, ''), 'no-device'))) push_token
+                 FROM push_devices
+                 WHERE is_active = TRUE
+                 ORDER BY (COALESCE(user_id::text, '') || ':' || COALESCE(NULLIF(device_id, ''), 'no-device')), updated_at DESC`
+            );
             const tokens = tokenRes.rows.map(r => r.push_token).filter(Boolean);
             pushResult = await sendPushToTokens(tokens, {
-                title: cleanTitle,
-                body: cleanBody,
+                title: senderTitle,
+                body: composeAdminPushBody(noticeTitle, cleanBody),
                 channelId: 'talkx_admin',
                 data: {
                     type: 'admin_notice',
-                    title: cleanTitle,
+                    title: senderTitle,
+                    noticeTitle,
                     body: cleanBody,
                     durationMs: String(ttlMs),
                     deliveryId,
