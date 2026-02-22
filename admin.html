@@ -272,7 +272,7 @@
                 <h1>TalkX Admin Board</h1>
             </div>
             <div>
-                <button class="btn btn-refresh" onclick="loadStats(); loadContent();">Refresh</button>
+                <button class="btn btn-refresh" onclick="loadStats(); loadPushHealth(); loadContent();">Refresh</button>
             </div>
         </div>
 
@@ -289,6 +289,11 @@
                 <div class="stat-title">Reports (24h)</div>
                 <div class="stat-value" id="s_reports">-</div>
                 <div class="stat-sub" id="s_bans">- Active Bans</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Push (60m)</div>
+                <div class="stat-value" id="s_push_rate">-%</div>
+                <div class="stat-sub" id="s_push_total">0 sent / 0 fail</div>
             </div>
         </div>
 
@@ -348,6 +353,22 @@
                 document.getElementById('s_bans').innerText = `${data.totalBans} Active Bans`;
             } catch (e) {
                 console.error(e);
+            }
+        }
+
+        async function loadPushHealth() {
+            try {
+                const res = await fetch('/admin/push/health?minutes=60');
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'push health failed');
+
+                document.getElementById('s_push_rate').innerText = `${Number(data.successRate || 0).toFixed(1)}%`;
+                document.getElementById('s_push_total').innerText =
+                    `${data.sentCount || 0} sent / ${data.failureCount || 0} fail (invalid: ${data.invalidTokenCount || 0})`;
+            } catch (e) {
+                console.error('push health error', e);
+                document.getElementById('s_push_rate').innerText = '-%';
+                document.getElementById('s_push_total').innerText = 'Push health unavailable';
             }
         }
 
@@ -543,7 +564,8 @@
                 if (!res.ok || !data.success) {
                     throw new Error(data.error || 'Notify failed');
                 }
-                resultEl.innerText = `WS: ${data.wsDelivered || 0} | Push Sent: ${data.push?.sentCount || 0}/${data.push?.tokenCount || 0}`;
+                resultEl.innerText = `WS: ${data.wsDelivered || 0} | Push: ${data.push?.sentCount || 0}/${data.push?.tokenCount || 0} (fail ${data.push?.failureCount || 0})`;
+                loadPushHealth();
             } catch (e) {
                 resultEl.innerText = 'Hata';
                 alert('Error: ' + e.message);
@@ -599,6 +621,7 @@
         }
 
         loadStats();
+        loadPushHealth();
         loadContent();
     </script>
 </body>

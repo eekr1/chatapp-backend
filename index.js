@@ -189,21 +189,87 @@ const disableInvalidPushTokens = async (tokens) => {
     }
 };
 
-const sendPushToUser = async (userId, payload) => {
+const logPushDelivery = async ({
+    deliveryId = null,
+    eventType = 'unknown',
+    targetUserId = null,
+    tokenCount = 0,
+    sentCount = 0,
+    failureCount = 0,
+    invalidTokenCount = 0,
+    channelId = null,
+    meta = {}
+}) => {
+    try {
+        await pool.query(
+            `INSERT INTO push_delivery_logs
+              (delivery_id, event_type, target_user_id, token_count, sent_count, failure_count, invalid_token_count, channel_id, meta)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+            [
+                deliveryId && isUuid(deliveryId) ? deliveryId : null,
+                eventType,
+                targetUserId && isUuid(targetUserId) ? targetUserId : null,
+                Number(tokenCount) || 0,
+                Number(sentCount) || 0,
+                Number(failureCount) || 0,
+                Number(invalidTokenCount) || 0,
+                channelId || null,
+                JSON.stringify(meta || {})
+            ]
+        );
+    } catch (e) {
+        console.error('push delivery log insert failed:', e.message);
+    }
+};
+
+const sendPushToUser = async (userId, payload = {}, options = {}) => {
     if (!userId) return { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
+    const deliveryId = (payload.data && payload.data.deliveryId) || options.deliveryId || uuidv4();
+    const eventType = options.eventType || (payload.data && payload.data.type) || 'unknown';
+    const channelId = payload.channelId || null;
+    const pushPayload = {
+        ...payload,
+        data: {
+            ...(payload.data || {}),
+            deliveryId: String(deliveryId)
+        }
+    };
+
     try {
         const tokenRes = await pool.query(
             'SELECT push_token FROM push_devices WHERE user_id = $1 AND is_active = TRUE',
             [userId]
         );
         const tokens = tokenRes.rows.map(r => r.push_token).filter(Boolean);
-        const result = await sendPushToTokens(tokens, payload);
+        const result = await sendPushToTokens(tokens, pushPayload);
         if (result.invalidTokens && result.invalidTokens.length) {
             disableInvalidPushTokens(result.invalidTokens);
         }
-        return result;
+        await logPushDelivery({
+            deliveryId,
+            eventType,
+            targetUserId: userId,
+            tokenCount: result.tokenCount || 0,
+            sentCount: result.sentCount || 0,
+            failureCount: result.failureCount || 0,
+            invalidTokenCount: (result.invalidTokens || []).length,
+            channelId,
+            meta: { source: 'sendPushToUser' }
+        });
+        return { ...result, deliveryId };
     } catch (e) {
         console.error('sendPushToUser query error:', e.message);
+        await logPushDelivery({
+            deliveryId,
+            eventType,
+            targetUserId: userId,
+            tokenCount: 0,
+            sentCount: 0,
+            failureCount: 1,
+            invalidTokenCount: 0,
+            channelId,
+            meta: { source: 'sendPushToUser', error: e.message }
+        });
         return { enabled: false, tokenCount: 0, sentCount: 0, failureCount: 0 };
     }
 };
@@ -213,14 +279,19 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
     const cleanBody = toText(body, '').trim().slice(0, 300);
     const normalizedTarget = ['all', 'online', 'mobile'].includes(String(target)) ? String(target) : 'all';
     const ttlMs = clampDuration(durationMs, 10000);
+    const deliveryId = uuidv4();
 
     let wsDelivered = 0;
     if (normalizedTarget === 'all' || normalizedTarget === 'online') {
         for (const [, client] of activeClients) {
             if (!client || client.ws.readyState !== WebSocket.OPEN) continue;
-            // Mobile clients get push; keep websocket notice for web/desktop.
-            if (client.platform === 'android') continue;
-            sendJson(client.ws, { type: 'admin_notice', title: cleanTitle, body: cleanBody, durationMs: ttlMs });
+            sendJson(client.ws, {
+                type: 'admin_notice',
+                title: cleanTitle,
+                body: cleanBody,
+                durationMs: ttlMs,
+                deliveryId
+            });
             wsDelivered++;
         }
     }
@@ -238,7 +309,9 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
                     type: 'admin_notice',
                     title: cleanTitle,
                     body: cleanBody,
-                    durationMs: String(ttlMs)
+                    durationMs: String(ttlMs),
+                    deliveryId,
+                    channelId: 'talkx_admin'
                 }
             });
             if (pushResult.invalidTokens && pushResult.invalidTokens.length) {
@@ -249,13 +322,27 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
         }
     }
 
+    await logPushDelivery({
+        deliveryId,
+        eventType: 'admin_notice',
+        targetUserId: null,
+        tokenCount: pushResult.tokenCount || 0,
+        sentCount: pushResult.sentCount || 0,
+        failureCount: pushResult.failureCount || 0,
+        invalidTokenCount: (pushResult.invalidTokens || []).length,
+        channelId: 'talkx_admin',
+        meta: { target: normalizedTarget, wsDelivered }
+    });
+
     return {
+        deliveryId,
         wsDelivered,
         push: {
             enabled: !!pushResult.enabled,
             tokenCount: pushResult.tokenCount || 0,
             sentCount: pushResult.sentCount || 0,
-            failureCount: pushResult.failureCount || 0
+            failureCount: pushResult.failureCount || 0,
+            invalidTokenCount: (pushResult.invalidTokens || []).length
         }
     };
 };
@@ -803,6 +890,8 @@ wss.on('connection', (ws, req) => {
                     console.error('DM Persist error', e);
                 }
 
+                const dmDeliveryId = uuidv4();
+
                 // 4. Send to target if online
                 if (dmTargetClient) {
                     console.log(`[DEBUG] Target is online. Sending DM to ${dmTargetClient.nickname}`);
@@ -813,25 +902,32 @@ wss.on('connection', (ws, req) => {
                         fromUserId: dmSenderId,
                         msgType: 'direct',
                         text: data.text,
-                        conversationId: typeof convId !== 'undefined' ? convId : null
+                        conversationId: typeof convId !== 'undefined' ? convId : null,
+                        deliveryId: dmDeliveryId
                     });
                 } else {
-                    console.log(`[DEBUG] Target ${dmTargetUserId} is offline.`);
-                    sendPushToUser(dmTargetUserId, {
-                        title: clientData.nickname || clientData.username || 'Yeni mesaj',
-                        body: String(data.text || '').slice(0, 140),
-                        channelId: 'talkx_messages',
-                        data: {
-                            type: 'direct_message',
-                            fromUserId: dmSenderId,
-                            fromUsername: clientData.username || '',
-                            fromNickname: clientData.nickname || '',
-                            msgType: 'direct',
-                            text: String(data.text || '').slice(0, 140),
-                            conversationId: convId || ''
-                        }
-                    });
+                    console.log(`[DEBUG] Target ${dmTargetUserId} appears offline (push still sent).`);
                 }
+
+                sendPushToUser(dmTargetUserId, {
+                    title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                    body: String(data.text || '').slice(0, 140),
+                    channelId: 'talkx_messages',
+                    data: {
+                        type: 'direct_message',
+                        fromUserId: dmSenderId,
+                        fromUsername: clientData.username || '',
+                        fromNickname: clientData.nickname || '',
+                        msgType: 'direct',
+                        text: String(data.text || '').slice(0, 140),
+                        conversationId: convId || '',
+                        deliveryId: dmDeliveryId,
+                        channelId: 'talkx_messages'
+                    }
+                }, {
+                    eventType: 'direct_message',
+                    deliveryId: dmDeliveryId
+                }).catch((e) => console.error('direct_message push error:', e.message));
                 break;
 
             case 'typing':
@@ -1023,6 +1119,8 @@ wss.on('connection', (ws, req) => {
                         }
                     }
 
+                    const imageDeliveryId = uuidv4();
+
                     if (dTargetClient) {
                         sendJson(dTargetClient.ws, {
                             type: 'direct_message',
@@ -1032,25 +1130,31 @@ wss.on('connection', (ws, req) => {
                             msgType: 'image',
                             mediaId: dMediaId,
                             text: 'ğŸ“¸ FotoÄŸraf',
-                            conversationId: dConvId
-                        });
-                    } else {
-                        sendPushToUser(distTargetUserId, {
-                            title: clientData.nickname || clientData.username || 'Yeni mesaj',
-                            body: 'Fotograf gonderdi',
-                            channelId: 'talkx_messages',
-                            data: {
-                                type: 'direct_message',
-                                fromUserId: distSenderId,
-                                fromUsername: clientData.username || '',
-                                fromNickname: clientData.nickname || '',
-                                msgType: 'image',
-                                mediaId: dMediaId,
-                                text: 'Fotograf gonderdi',
-                                conversationId: dConvId || ''
-                            }
+                            conversationId: dConvId,
+                            deliveryId: imageDeliveryId
                         });
                     }
+
+                    sendPushToUser(distTargetUserId, {
+                        title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                        body: 'Fotograf gonderdi',
+                        channelId: 'talkx_messages',
+                        data: {
+                            type: 'direct_message',
+                            fromUserId: distSenderId,
+                            fromUsername: clientData.username || '',
+                            fromNickname: clientData.nickname || '',
+                            msgType: 'image',
+                            mediaId: dMediaId,
+                            text: 'Fotograf gonderdi',
+                            conversationId: dConvId || '',
+                            deliveryId: imageDeliveryId,
+                            channelId: 'talkx_messages'
+                        }
+                    }, {
+                        eventType: 'direct_image_send',
+                        deliveryId: imageDeliveryId
+                    }).catch((e) => console.error('direct_image_send push error:', e.message));
 
                     // Echo back to sender
                     sendJson(ws, {

@@ -270,4 +270,66 @@ router.post('/notify', async (req, res) => {
     }
 });
 
+router.get('/push/health', async (req, res) => {
+    const minutes = Math.max(1, Math.min(24 * 60, Number(req.query.minutes) || 60));
+    try {
+        const agg = await pool.query(
+            `SELECT
+                COUNT(*)::int AS total_events,
+                COALESCE(SUM(token_count), 0)::int AS token_count,
+                COALESCE(SUM(sent_count), 0)::int AS sent_count,
+                COALESCE(SUM(failure_count), 0)::int AS failure_count,
+                COALESCE(SUM(invalid_token_count), 0)::int AS invalid_token_count
+             FROM push_delivery_logs
+             WHERE created_at > NOW() - ($1::text || ' minutes')::interval`,
+            [minutes]
+        );
+
+        const byType = await pool.query(
+            `SELECT event_type,
+                    COUNT(*)::int AS events,
+                    COALESCE(SUM(sent_count), 0)::int AS sent_count,
+                    COALESCE(SUM(failure_count), 0)::int AS failure_count
+             FROM push_delivery_logs
+             WHERE created_at > NOW() - ($1::text || ' minutes')::interval
+             GROUP BY event_type
+             ORDER BY events DESC`,
+            [minutes]
+        );
+
+        const row = agg.rows[0] || {};
+        const totalOut = (Number(row.sent_count) || 0) + (Number(row.failure_count) || 0);
+        const successRate = totalOut > 0 ? Math.round(((Number(row.sent_count) || 0) / totalOut) * 1000) / 10 : 0;
+        res.json({
+            minutes,
+            totalEvents: Number(row.total_events) || 0,
+            tokenCount: Number(row.token_count) || 0,
+            sentCount: Number(row.sent_count) || 0,
+            failureCount: Number(row.failure_count) || 0,
+            invalidTokenCount: Number(row.invalid_token_count) || 0,
+            successRate,
+            byType: byType.rows || []
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/push/logs', async (req, res) => {
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+    try {
+        const result = await pool.query(
+            `SELECT id, delivery_id, event_type, target_user_id, token_count, sent_count, failure_count,
+                    invalid_token_count, channel_id, created_at
+             FROM push_delivery_logs
+             ORDER BY created_at DESC
+             LIMIT $1`,
+            [limit]
+        );
+        res.json({ items: result.rows });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 module.exports = router;

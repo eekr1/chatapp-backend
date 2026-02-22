@@ -125,6 +125,20 @@ const createTablesQuery = `
     last_seen_at TIMESTAMPTZ DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS push_delivery_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    delivery_id UUID,
+    event_type TEXT NOT NULL,
+    target_user_id UUID,
+    token_count INTEGER NOT NULL DEFAULT 0,
+    sent_count INTEGER NOT NULL DEFAULT 0,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    invalid_token_count INTEGER NOT NULL DEFAULT 0,
+    channel_id TEXT,
+    meta JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
   CREATE TABLE IF NOT EXISTS blocks (
     blocker_id UUID,
     blocked_id UUID,
@@ -159,8 +173,19 @@ const createTablesQuery = `
           ALTER TABLE push_devices ADD COLUMN last_seen_at TIMESTAMPTZ DEFAULT NOW();
       END IF;
 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='push_delivery_logs' AND column_name='invalid_token_count') THEN
+          ALTER TABLE push_delivery_logs ADD COLUMN invalid_token_count INTEGER NOT NULL DEFAULT 0;
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='push_delivery_logs' AND column_name='meta') THEN
+          ALTER TABLE push_delivery_logs ADD COLUMN meta JSONB DEFAULT '{}'::jsonb;
+      END IF;
+
       CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices(user_id);
       CREATE INDEX IF NOT EXISTS idx_push_devices_active ON push_devices(is_active);
+      CREATE INDEX IF NOT EXISTS idx_push_logs_created_at ON push_delivery_logs(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_push_logs_delivery_id ON push_delivery_logs(delivery_id);
+      CREATE INDEX IF NOT EXISTS idx_push_logs_event_type ON push_delivery_logs(event_type);
 
       -- V13 Fix: Drop legacy FK constraints on conversations to allow Auth Users
       BEGIN
