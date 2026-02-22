@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <title>TalkX Admin</title>
     <style>
         body {
@@ -23,6 +25,20 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+        }
+
+        .header-brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .admin-logo {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            object-fit: contain;
+            box-shadow: 0 0 0 1px rgba(52, 152, 219, 0.15), 0 8px 18px rgba(26, 81, 133, 0.15);
         }
 
         h1 {
@@ -251,7 +267,10 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>TalkX Admin Board</h1>
+            <div class="header-brand">
+                <img src="/brand/talkx-icon-256.png" alt="TalkX" class="admin-logo">
+                <h1>TalkX Admin Board</h1>
+            </div>
             <div>
                 <button class="btn btn-refresh" onclick="loadStats(); loadContent();">Refresh</button>
             </div>
