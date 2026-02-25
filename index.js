@@ -12,6 +12,7 @@ const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const friendsRoutes = require('./routes/friends');
 const pushRoutes = require('./routes/push');
+const supportRoutes = require('./routes/support');
 const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 
 // Ensure DB Tables
@@ -119,6 +120,7 @@ app.use('/auth', authRoutes);
 app.use('/api', profileRoutes); // Mounting profile under /api since it's logical API (e.g. /api/me)
 app.use('/api/push', pushRoutes);
 app.use('/friends', friendsRoutes);
+app.use('/support', supportRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ ok: true });

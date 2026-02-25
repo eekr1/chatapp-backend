@@ -140,6 +140,28 @@ const createTablesQuery = `
     created_at TIMESTAMPTZ DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS support_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    subject TEXT NOT NULL,
+    description TEXT NOT NULL,
+    contact_email TEXT,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    username_snapshot TEXT,
+    app_version TEXT,
+    platform TEXT,
+    device_model TEXT,
+    client_timestamp TIMESTAMPTZ,
+    network_type TEXT,
+    last_error_code TEXT,
+    ip TEXT,
+    user_agent TEXT,
+    brevo_status TEXT NOT NULL DEFAULT 'pending',
+    brevo_message_id TEXT,
+    brevo_error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
   CREATE TABLE IF NOT EXISTS blocks (
     blocker_id UUID,
     blocked_id UUID,
@@ -186,11 +208,30 @@ const createTablesQuery = `
           ALTER TABLE push_delivery_logs ADD COLUMN meta JSONB DEFAULT '{}'::jsonb;
       END IF;
 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='support_reports' AND column_name='updated_at') THEN
+          ALTER TABLE support_reports ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='support_reports' AND column_name='brevo_status') THEN
+          ALTER TABLE support_reports ADD COLUMN brevo_status TEXT NOT NULL DEFAULT 'pending';
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='support_reports' AND column_name='brevo_message_id') THEN
+          ALTER TABLE support_reports ADD COLUMN brevo_message_id TEXT;
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='support_reports' AND column_name='brevo_error') THEN
+          ALTER TABLE support_reports ADD COLUMN brevo_error TEXT;
+      END IF;
+
       CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices(user_id);
       CREATE INDEX IF NOT EXISTS idx_push_devices_active ON push_devices(is_active);
       CREATE INDEX IF NOT EXISTS idx_push_logs_created_at ON push_delivery_logs(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_push_logs_delivery_id ON push_delivery_logs(delivery_id);
       CREATE INDEX IF NOT EXISTS idx_push_logs_event_type ON push_delivery_logs(event_type);
+      CREATE INDEX IF NOT EXISTS idx_support_reports_created_at ON support_reports(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_support_reports_subject ON support_reports(subject);
+      CREATE INDEX IF NOT EXISTS idx_support_reports_brevo_status ON support_reports(brevo_status);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
         ON messages(sender_id, client_msg_id)
         WHERE client_msg_id IS NOT NULL;
