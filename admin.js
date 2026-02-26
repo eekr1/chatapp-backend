@@ -35,6 +35,7 @@ const basicAuth = (req, res, next) => {
 };
 
 router.use(basicAuth);
+router.use('/assets', express.static(path.join(__dirname, 'public', 'admin')));
 
 // Admin Dashboard HTML (Serve Static File)
 router.get('/', (req, res) => {
@@ -68,12 +69,14 @@ router.get('/stats', async (req, res) => {
         const users = await pool.query('SELECT COUNT(*) FROM users');
         const bans = await pool.query('SELECT COUNT(*) FROM bans');
         const reports = await pool.query('SELECT COUNT(*) FROM reports WHERE created_at > NOW() - INTERVAL \'24 hours\'');
+        const supportReports = await pool.query('SELECT COUNT(*) FROM support_reports WHERE created_at > NOW() - INTERVAL \'24 hours\'');
         const active = await pool.query('SELECT COUNT(*) FROM conversations WHERE ended_at IS NULL');
 
         res.json({
             totalUsers: users.rows[0].count,
             totalBans: bans.rows[0].count,
             reports24h: reports.rows[0].count,
+            supportReports24h: supportReports.rows[0].count,
             activeConversations: active.rows[0].count
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -123,8 +126,114 @@ router.get('/data', async (req, res) => {
 
             const result = await pool.query(query, params);
             res.json({ items: result.rows });
+        } else if (type === 'app_reports') {
+            const params = [];
+            let whereSql = '';
+            if (search) {
+                params.push(`%${search}%`);
+                whereSql = `
+                    WHERE sr.subject ILIKE $1
+                       OR sr.description ILIKE $1
+                       OR COALESCE(sr.contact_email, '') ILIKE $1
+                       OR COALESCE(sr.username_snapshot, '') ILIKE $1
+                       OR COALESCE(sr.brevo_status, '') ILIKE $1
+                `;
+            }
+            const limitParam = params.length + 1;
+            params.push(100);
+
+            const result = await pool.query(
+                `
+                SELECT
+                    sr.id,
+                    sr.subject,
+                    sr.description,
+                    sr.contact_email,
+                    sr.user_id,
+                    sr.username_snapshot,
+                    sr.app_version,
+                    sr.platform,
+                    sr.device_model,
+                    sr.client_timestamp,
+                    sr.network_type,
+                    sr.last_error_code,
+                    sr.brevo_status,
+                    sr.created_at,
+                    COUNT(srm.id)::int AS media_count
+                FROM support_reports sr
+                LEFT JOIN support_report_media srm ON srm.report_id = sr.id
+                ${whereSql}
+                GROUP BY sr.id
+                ORDER BY sr.created_at DESC
+                LIMIT $${limitParam}
+                `,
+                params
+            );
+            res.json({ items: result.rows });
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/support-report/:id', async (req, res) => {
+    const reportId = req.params.id;
+    try {
+        const reportRes = await pool.query(
+            `SELECT *
+             FROM support_reports
+             WHERE id = $1
+             LIMIT 1`,
+            [reportId]
+        );
+        if (!reportRes.rows.length) return res.status(404).json({ error: 'Rapor bulunamadi.' });
+
+        const mediaRes = await pool.query(
+            `SELECT id, report_id, mime_type, file_name, size_bytes, media_kind, created_at
+             FROM support_report_media
+             WHERE report_id = $1
+             ORDER BY created_at ASC`,
+            [reportId]
+        );
+
+        res.json({
+            item: reportRes.rows[0],
+            media: mediaRes.rows
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/support-report-media/:mediaId/content', async (req, res) => {
+    try {
+        const mediaRes = await pool.query(
+            `SELECT id, mime_type, file_name, data
+             FROM support_report_media
+             WHERE id = $1
+             LIMIT 1`,
+            [req.params.mediaId]
+        );
+        if (!mediaRes.rows.length) return res.status(404).send('Medya bulunamadi.');
+
+        const media = mediaRes.rows[0];
+        res.setHeader('Content-Type', media.mime_type || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `inline; filename="${(media.file_name || 'media.bin').replace(/"/g, '')}"`);
+        res.send(media.data);
+    } catch (e) {
+        res.status(500).send('Medya okunamadi.');
+    }
+});
+
+router.delete('/support-report/:id', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'DELETE FROM support_reports WHERE id = $1 RETURNING id',
+            [req.params.id]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Rapor bulunamadi.' });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // Get user specific blocks

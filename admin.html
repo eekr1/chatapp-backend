@@ -1,731 +1,328 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-    <title>TalkX Admin</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding: 20px;
-            background: #eef2f6;
-            color: #333;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .header-brand {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .admin-logo {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            object-fit: contain;
-            box-shadow: 0 0 0 1px rgba(52, 152, 219, 0.15), 0 8px 18px rgba(26, 81, 133, 0.15);
-        }
-
-        h1 {
-            margin: 0;
-            color: #2c3e50;
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .stat-card {
-            background: #fff;
-            padding: 16px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        .stat-title {
-            font-size: 0.85em;
-            color: #7f8c8d;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .stat-value {
-            font-size: 1.8em;
-            font-weight: 700;
-            color: #2c3e50;
-        }
-
-        .stat-sub {
-            font-size: 0.8em;
-            color: #27ae60;
-            margin-top: 4px;
-        }
-
-        .main-card {
-            background: #fff;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        .tabs {
-            margin-bottom: 14px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-
-        .tab-btn {
-            background: none;
-            border: none;
-            padding: 10px 16px;
-            font-size: 0.95em;
-            font-weight: 600;
-            color: #7f8c8d;
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-            transition: all 0.2s;
-        }
-
-        .tab-btn:hover {
-            color: #3498db;
-        }
-
-        .tab-btn.active {
-            color: #3498db;
-            border-bottom-color: #3498db;
-        }
-
-        .notify-box {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-items: center;
-            margin: 6px 0 12px;
-        }
-
-        .notify-box input {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-
-        .notify-result {
-            font-size: 0.85em;
-            color: #7f8c8d;
-        }
-
-        .diagnostics-panel {
-            margin: 6px 0 16px;
-            border: 1px solid #e4e8f0;
-            border-radius: 10px;
-            padding: 12px;
-            background: #f8fbff;
-            font-size: 0.85em;
-            color: #2f4158;
-        }
-
-        .diagnostics-title {
-            font-weight: 700;
-            color: #2c3e50;
-            margin-bottom: 8px;
-        }
-
-        .diagnostics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 8px 14px;
-        }
-
-        .diag-item strong {
-            color: #243447;
-        }
-
-        .diag-muted {
-            color: #6b7b8f;
-            font-size: 0.82em;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            text-align: left;
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-            vertical-align: middle;
-        }
-
-        th {
-            background: #f8f9fa;
-            color: #7f8c8d;
-            font-weight: 600;
-        }
-
-        tr:hover {
-            background: #f8f9fa;
-        }
-
-        .badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            font-weight: 700;
-            color: #fff;
-        }
-
-        .badge.shadow {
-            background: #34495e;
-        }
-
-        .badge.perm {
-            background: #c0392b;
-        }
-
-        .badge.temp,
-        .badge.system {
-            background: #f39c12;
-        }
-
-        .actions button,
-        .btn {
-            padding: 6px 10px;
-            border: none;
-            border-radius: 6px;
-            color: #fff;
-            font-size: 0.82em;
-            cursor: pointer;
-            margin-right: 5px;
-            transition: opacity 0.2s;
-        }
-
-        .actions button:hover,
-        .btn:hover {
-            opacity: 0.9;
-        }
-
-        .btn-ban {
-            background: #e74c3c;
-        }
-
-        .btn-perm {
-            background: #c0392b;
-        }
-
-        .btn-shadow {
-            background: #34495e;
-        }
-
-        .btn-unban {
-            background: #2ecc71;
-        }
-
-        .btn-details {
-            background: #3498db;
-        }
-
-        .btn-refresh {
-            background: #3498db;
-        }
-
-        .btn-notify {
-            background: #8e44ad;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-content {
-            background: #fff;
-            padding: 24px;
-            border-radius: 12px;
-            width: 640px;
-            max-width: 95%;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        }
-
-        .close-btn {
-            float: right;
-            cursor: pointer;
-            font-size: 1.5em;
-        }
-
-        #log-container {
-            display: none;
-            height: 400px;
-            overflow-y: auto;
-            background: #1e1e1e;
-            color: #00ff00;
-            padding: 15px;
-            font-family: monospace;
-            border-radius: 6px;
-            font-size: 0.9em;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TalkX Yonetim Paneli</title>
+  <style>
+    body { font-family: Segoe UI, Tahoma, sans-serif; margin: 0; padding: 20px; background:#eef2f6; color:#2c3e50; }
+    .container { max-width: 1500px; margin: 0 auto; }
+    .header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; }
+    .brand { display:flex; align-items:center; gap:10px; }
+    .logo { width:34px; height:34px; border-radius:10px; object-fit:contain; background:#fff; box-shadow:0 4px 10px rgba(0,0,0,0.12); }
+    .cards { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); margin-bottom:16px; }
+    .card { background:#fff; border-radius:12px; padding:14px; box-shadow:0 3px 8px rgba(0,0,0,0.06); }
+    .card .t { font-size:12px; color:#7f8c8d; text-transform:uppercase; margin-bottom:8px; }
+    .card .v { font-size:28px; font-weight:700; }
+    .card .s { font-size:12px; color:#2d9c5a; margin-top:4px; }
+    .panel { background:#fff; border-radius:12px; padding:16px; box-shadow:0 3px 8px rgba(0,0,0,0.06); }
+    .tabs { border-bottom:2px solid #f1f1f1; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:2px; }
+    .tab { border:none; background:none; padding:10px 14px; color:#7f8c8d; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; }
+    .tab.active { color:#3498db; border-bottom-color:#3498db; }
+    .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+    input, select { border:1px solid #d8dbe2; border-radius:6px; padding:8px; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    th, td { padding:10px; border-bottom:1px solid #eee; text-align:left; vertical-align:middle; word-break:break-word; }
+    th { background:#f8f9fa; color:#7f8c8d; }
+    .btn { border:none; border-radius:6px; padding:6px 10px; color:#fff; cursor:pointer; font-size:12px; margin-right:5px; }
+    .btn-refresh, .btn-details { background:#3498db; }
+    .btn-notify { background:#8e44ad; }
+    .btn-ban { background:#e74c3c; }
+    .btn-perm { background:#c0392b; }
+    .btn-shadow { background:#34495e; }
+    .btn-unban { background:#2ecc71; }
+    .btn-delete { background:#d63031; }
+    .badge { display:inline-block; color:#fff; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:700; }
+    .badge.sent { background:#27ae60; } .badge.failed { background:#e74c3c; } .badge.pending { background:#f39c12; }
+    .badge.temp, .badge.system { background:#f39c12; } .badge.perm { background:#c0392b; } .badge.shadow { background:#34495e; }
+    #logs { display:none; height:380px; overflow-y:auto; background:#111; color:#a8ff9a; border-radius:8px; padding:10px; font-family:monospace; }
+    .diag { border:1px solid #e4e8f0; border-radius:10px; background:#f8fbff; padding:10px; margin-bottom:12px; font-size:13px; color:#2f4158; }
+    .diag-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px 12px; }
+    .modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; padding:12px; z-index:9999; }
+    .modal-box { width:min(900px,100%); max-height:90vh; overflow-y:auto; background:#fff; border-radius:12px; padding:16px; }
+    .modal-close { float:right; cursor:pointer; font-size:24px; line-height:1; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; margin-bottom:10px; }
+    .item { border:1px solid #ecf0f3; border-radius:8px; background:#fafcff; padding:8px; font-size:13px; }
+    .desc { border:1px solid #ecf0f3; border-radius:8px; background:#fafcff; padding:10px; white-space:pre-wrap; }
+    .media { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:10px; }
+    .media .m { border:1px solid #ecf0f3; border-radius:8px; padding:8px; }
+    .media img, .media video { width:100%; max-height:220px; object-fit:contain; background:#111; border-radius:8px; }
+  </style>
 </head>
-
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="header-brand">
-                <img src="/brand/talkx-icon-256.png" alt="TalkX" class="admin-logo">
-                <h1>TalkX Admin Board</h1>
-            </div>
-            <div>
-                <button class="btn btn-refresh" onclick="loadStats(); loadPushHealth(); loadPushDiagnostics(); loadContent();">Refresh</button>
-            </div>
-        </div>
-
-        <div class="dashboard-grid">
-            <div class="stat-card">
-                <div class="stat-title">Total Users</div>
-                <div class="stat-value" id="s_users">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-title">Active Chats</div>
-                <div class="stat-value" id="s_active">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-title">Reports (24h)</div>
-                <div class="stat-value" id="s_reports">-</div>
-                <div class="stat-sub" id="s_bans">- Active Bans</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-title">Push (60m)</div>
-                <div class="stat-value" id="s_push_rate">-%</div>
-                <div class="stat-sub" id="s_push_total">0 sent / 0 fail</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-title">Push Firebase</div>
-                <div class="stat-value" id="s_push_enabled">-</div>
-                <div class="stat-sub" id="s_push_project">project: -</div>
-                <div class="stat-sub" id="s_push_devices">active devices: -</div>
-            </div>
-        </div>
-
-        <div class="main-card">
-            <div class="tabs">
-                <button class="tab-btn active" onclick="switchTab('reports', event)">Reports</button>
-                <button class="tab-btn" onclick="switchTab('bans', event)">Bans & Shadowbans</button>
-                <button class="tab-btn" onclick="switchTab('profiles', event)">Profiles</button>
-                <button class="tab-btn" onclick="switchTab('logs', event)">Live Logs</button>
-            </div>
-
-            <div class="notify-box">
-                <input id="notify-title" type="text" placeholder="Bildirim baslik" style="min-width:200px;" />
-                <input id="notify-body" type="text" placeholder="Bildirim metni" style="min-width:300px;" />
-                <input id="notify-duration" type="number" min="3" max="60" step="1" value="10" style="width:120px;" title="Web toast suresi (saniye)" />
-                <button class="btn btn-notify" onclick="sendNotice()">Bildirim Gonder</button>
-                <span class="notify-result" id="notify-result"></span>
-            </div>
-
-            <div class="diagnostics-panel">
-                <div class="diagnostics-title">Push Diagnostics (24h)</div>
-                <div id="push-diagnostics" class="diagnostics-grid">
-                    <div class="diag-item">Yukleniyor...</div>
-                </div>
-            </div>
-
-            <div id="search-bar" style="display:none; margin-bottom:15px;">
-                <input type="text" id="search-input" placeholder="Search user..." style="padding:8px; width:300px; border:1px solid #ddd; border-radius:4px;"
-                    onkeyup="if(event.key === 'Enter') loadContent()" />
-                <button class="btn btn-refresh" onclick="loadContent()">Search</button>
-            </div>
-
-            <div id="content">Loading...</div>
-            <div id="log-container">
-                <div>Waiting for logs...</div>
-            </div>
-        </div>
+  <div class="container">
+    <div class="header">
+      <div class="brand">
+        <img src="/admin/assets/talkx-icon-256.png" class="logo" alt="TalkX" />
+        <h1>TalkX Yonetim Paneli</h1>
+      </div>
+      <button class="btn btn-refresh" onclick="refreshAll()">Yenile</button>
     </div>
 
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" onclick="closeModal()">&times;</span>
-            <h2 id="m_title">User Details</h2>
-            <div id="m_details_content" style="max-height:500px; overflow-y:auto;">
-                <h3>Friends</h3>
-                <div id="m_friends">Loading...</div>
-                <h3>Blocked Users</h3>
-                <div id="m_blocks">Loading...</div>
-            </div>
-        </div>
+    <div class="cards">
+      <div class="card"><div class="t">Toplam Kullanici</div><div class="v" id="s_users">-</div></div>
+      <div class="card"><div class="t">Aktif Sohbet</div><div class="v" id="s_active">-</div></div>
+      <div class="card"><div class="t">Kullanici Raporlari (24s)</div><div class="v" id="s_reports">-</div><div class="s" id="s_bans">- aktif yasak</div></div>
+      <div class="card"><div class="t">Uygulama Raporlari (24s)</div><div class="v" id="s_support_reports">-</div><div class="s">support bildirimi</div></div>
+      <div class="card"><div class="t">Push (60 dk)</div><div class="v" id="s_push_rate">-%</div><div class="s" id="s_push_total">0 gonderim / 0 hata</div></div>
+      <div class="card"><div class="t">Push Firebase</div><div class="v" id="s_push_enabled">-</div><div class="s" id="s_push_project">proje: -</div><div class="s" id="s_push_devices">aktif cihaz: -</div></div>
     </div>
 
-    <script>
-        let currentTab = 'reports';
-        let logEventSource = null;
+    <div class="panel">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('reports',event)">Kullanici Raporlari</button>
+        <button class="tab" onclick="switchTab('bans',event)">Yasaklar & Golge</button>
+        <button class="tab" onclick="switchTab('profiles',event)">Profiller</button>
+        <button class="tab" onclick="switchTab('app_reports',event)">Uygulama Raporlari</button>
+        <button class="tab" onclick="switchTab('logs',event)">Canli Loglar</button>
+      </div>
 
-        const escapeHtml = (value) => String(value || '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
+      <div class="row">
+        <input id="notify-title" type="text" placeholder="Bildirim basligi" style="min-width:190px">
+        <input id="notify-body" type="text" placeholder="Bildirim metni" style="min-width:280px">
+        <input id="notify-duration" type="number" min="3" max="60" step="1" value="10" style="width:120px">
+        <button class="btn btn-notify" onclick="sendNotice()">Bildirim Gonder</button>
+        <span id="notify-result" style="font-size:12px;color:#7f8c8d"></span>
+      </div>
 
-        async function loadStats() {
-            try {
-                const res = await fetch('/admin/stats');
-                const data = await res.json();
-                document.getElementById('s_users').innerText = data.totalUsers;
-                document.getElementById('s_active').innerText = data.activeConversations || 0;
-                document.getElementById('s_reports').innerText = data.reports24h;
-                document.getElementById('s_bans').innerText = `${data.totalBans} Active Bans`;
-            } catch (e) {
-                console.error(e);
-            }
+      <div class="diag">
+        <strong>Push Teshis (24 saat)</strong>
+        <div id="push-diagnostics" class="diag-grid" style="margin-top:8px"><div>Yukleniyor...</div></div>
+      </div>
+
+      <div class="row" id="search-wrap" style="display:none">
+        <input id="search-input" type="text" style="min-width:320px" onkeyup="if(event.key==='Enter') loadContent()">
+        <button class="btn btn-refresh" onclick="loadContent()">Ara</button>
+      </div>
+
+      <div id="content">Yukleniyor...</div>
+      <div id="logs"><div>Log akisi bekleniyor...</div></div>
+    </div>
+  </div>
+
+  <div id="modal" class="modal">
+    <div class="modal-box">
+      <span class="modal-close" onclick="closeModal()">&times;</span>
+      <h2 id="m_title">Detay</h2>
+      <div id="m_body"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentTab='reports';
+    let logEventSource=null;
+    const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
+    const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
+    const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
+    const d=v=>v?new Date(v).toLocaleString():'-';
+    const subject=v=>SUBJECT_LABELS[v]||v||'-';
+    const brevo=v=>BREVO_LABELS[v]||v||'-';
+
+    function refreshAll(){loadStats();loadPushHealth();loadPushDiagnostics();loadContent();}
+
+    async function loadStats(){
+      try{
+        const r=await fetch('/admin/stats');const x=await r.json();
+        document.getElementById('s_users').innerText=x.totalUsers||0;
+        document.getElementById('s_active').innerText=x.activeConversations||0;
+        document.getElementById('s_reports').innerText=x.reports24h||0;
+        document.getElementById('s_support_reports').innerText=x.supportReports24h||0;
+        document.getElementById('s_bans').innerText=`${x.totalBans||0} aktif yasak`;
+      }catch(e){console.error(e);}
+    }
+
+    async function loadPushHealth(){
+      try{
+        const r=await fetch('/admin/push/health?minutes=60');const x=await r.json();if(!r.ok) throw new Error(x.error||'hata');
+        document.getElementById('s_push_rate').innerText=`${Number(x.successRate||0).toFixed(1)}%`;
+        document.getElementById('s_push_total').innerText=`${x.sentCount||0} gonderim / ${x.failureCount||0} hata (gecersiz: ${x.invalidTokenCount||0})`;
+      }catch(e){document.getElementById('s_push_rate').innerText='-%';document.getElementById('s_push_total').innerText='Push sagligi okunamadi';}
+    }
+
+    async function loadPushDiagnostics(){
+      const host=document.getElementById('push-diagnostics');
+      const enabled=document.getElementById('s_push_enabled');
+      const project=document.getElementById('s_push_project');
+      const devices=document.getElementById('s_push_devices');
+      try{
+        const r=await fetch('/admin/push/diagnostics?hours=24');const x=await r.json();if(!r.ok) throw new Error(x.error||'hata');
+        const f=x.firebase||{};const dv=x.devices||{};const lg=x.logs||{};const errs=Array.isArray(lg.errorSummary)?lg.errorSummary:[];
+        const top=errs.length?errs.slice(0,3).map(i=>`${i.code}: ${i.count}`).join(', '):'yok';
+        enabled.innerText=f.enabled?'ACIK':'KAPALI'; enabled.style.color=f.enabled?'#27ae60':'#c0392b';
+        project.innerText=`proje: ${f.projectId||'-'}`; devices.innerText=`aktif cihaz: ${dv.activeCount||0}`;
+        host.innerHTML=`
+          <div><strong>Durum:</strong> ${f.enabled?'aktif':'pasif'}</div>
+          <div><strong>Kimlik Kaynagi:</strong> ${esc(f.credentialSource||'-')}</div>
+          <div><strong>Beklenen Proje:</strong> ${esc(f.expectedProjectId||'-')}</div>
+          <div><strong>24s Gonderim/Hata:</strong> ${lg.sentCount||0} / ${lg.failureCount||0}</div>
+          <div><strong>24s Gecersiz:</strong> ${lg.invalidTokenCount||0}</div>
+          <div><strong>Tazelik:</strong> 5dk ${dv.freshness?.lt5m||0}, 1s ${dv.freshness?.lt1h||0}, 24s ${dv.freshness?.lt24h||0}</div>
+          <div><strong>Ust Hatalar:</strong> ${esc(top)}</div>
+          <div><strong>Baslatma Hatasi:</strong> ${esc(f.initError||'yok')}</div>`;
+      }catch(e){
+        enabled.innerText='-'; enabled.style.color='#2c3e50'; project.innerText='proje: -'; devices.innerText='aktif cihaz: -';
+        host.innerHTML=`<div>Teshis verisi alinamadi: ${esc(e.message||e)}</div>`;
+      }
+    }
+
+    function applySearchUI(){
+      const show=currentTab==='profiles'||currentTab==='app_reports';
+      const w=document.getElementById('search-wrap');const i=document.getElementById('search-input');
+      w.style.display=show?'flex':'none';
+      if(!show) return;
+      i.placeholder=currentTab==='profiles'?'Kullanici adi veya gorunen isim ara...':'Konu, aciklama, e-posta veya durum ara...';
+    }
+
+    async function switchTab(tab,ev){
+      currentTab=tab;
+      document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+      if(ev&&ev.target) ev.target.classList.add('active');
+      const logs=tab==='logs';
+      document.getElementById('content').style.display=logs?'none':'block';
+      document.getElementById('logs').style.display=logs?'block':'none';
+      applySearchUI();
+      if(logs) startLogs(); else { stopLogs(); loadContent(); }
+    }
+
+    function startLogs(){
+      if(logEventSource) return;
+      const box=document.getElementById('logs');
+      logEventSource=new EventSource('/admin/stream');
+      logEventSource.onmessage=(e)=>{const m=JSON.parse(e.data);const line=document.createElement('div');line.innerHTML=`[${new Date().toLocaleTimeString()}] <strong>${esc(m.from||'-')}</strong> -> <strong>${esc(m.to||'-')}</strong>: ${esc(m.content||'')}`;box.appendChild(line);box.scrollTop=box.scrollHeight;};
+    }
+    function stopLogs(){ if(!logEventSource) return; logEventSource.close(); logEventSource=null; }
+
+    async function loadContent(){
+      const c=document.getElementById('content'); c.innerHTML='<p style="padding:16px;color:#7f8c8d">Veri getiriliyor...</p>';
+      try{
+        const q=document.getElementById('search-input')?.value||'';
+        const r=await fetch(`/admin/data?type=${currentTab}&q=${encodeURIComponent(q)}`); const x=await r.json(); const items=x.items||[];
+        if(!items.length){ c.innerHTML='<p style="padding:16px">Kayit bulunamadi.</p>'; return; }
+        let h='<table><thead><tr>';
+        if(currentTab==='reports') h+='<th>Tarih</th><th>Raporlayan</th><th>Raporlanan</th><th>Sebep</th><th>Islem</th>';
+        else if(currentTab==='bans') h+='<th>Kullanici</th><th>Tur</th><th>Bitis</th><th>Sebep</th><th>Islem</th>';
+        else if(currentTab==='profiles') h+='<th>Kullanici</th><th>Gorunen Isim</th><th>Kayit</th><th>Islem</th>';
+        else h+='<th>Tarih</th><th>Konu</th><th>Kullanici</th><th>E-posta</th><th>Durum</th><th>Medya</th><th>Islem</th>';
+        h+='</tr></thead><tbody>';
+        items.forEach(it=>{
+          h+='<tr>';
+          if(currentTab==='reports'){
+            const rid=it.reported_user_id||'';
+            h+=`<td>${d(it.created_at)}</td><td>${esc(it.reporter||'Anon')}</td><td>${esc(it.reported||'Anon')}</td><td>${esc(it.reason||'')}</td><td>
+              <button class="btn btn-ban" onclick="actionBan('${rid}',1,'Rapor: ${esc(it.reason||'')}')">24s</button>
+              <button class="btn btn-perm" onclick="actionBan('${rid}',0,'Rapor: ${esc(it.reason||'')}')">Kalici</button>
+              <button class="btn btn-shadow" onclick="actionShadow('${rid}','Rapor: ${esc(it.reason||'')}')">Golge</button></td>`;
+          }else if(currentTab==='bans'){
+            h+=`<td>${esc(it.nickname||'Bilinmiyor')}</td><td><span class="badge ${esc(it.ban_type)}">${esc((it.ban_type||'').toUpperCase())}</span></td><td>${it.ban_until?new Date(it.ban_until).toLocaleString():'SURESIZ'}</td><td>${esc(it.reason||'')}</td><td><button class="btn btn-unban" onclick="actionUnban('${it.user_id}')">Yasagi Kaldir</button></td>`;
+          }else if(currentTab==='profiles'){
+            h+=`<td><strong>${esc(it.username||'-')}</strong></td><td>${esc(it.display_name||'-')}</td><td>${d(it.created_at)}</td><td><button class="btn btn-details" onclick="openProfileDetails('${it.id}','${esc(it.username||'-')}')">Detay</button><button class="btn btn-ban" onclick="actionBan('${it.id}',1,'Panel islemi')">Yasakla</button></td>`;
+          }else{
+            h+=`<td>${d(it.created_at)}</td><td>${esc(subject(it.subject))}</td><td>${esc(it.username_snapshot||'-')}</td><td>${esc(it.contact_email||'-')}</td><td><span class="badge ${esc(it.brevo_status||'pending')}">${esc(brevo(it.brevo_status))}</span></td><td>${Number(it.media_count||0)}</td><td><button class="btn btn-details" onclick="openSupportDetails('${it.id}')">Detay</button><button class="btn btn-delete" onclick="deleteSupportReport('${it.id}')">Sil</button></td>`;
+          }
+          h+='</tr>';
+        });
+        h+='</tbody></table>'; c.innerHTML=h;
+      }catch(e){ c.innerHTML='<p style="padding:16px;color:#c0392b">Veri yuklenemedi.</p>'; }
+    }
+
+    function openModal(title,body){document.getElementById('m_title').innerText=title;document.getElementById('m_body').innerHTML=body;document.getElementById('modal').style.display='flex';}
+    function closeModal(){document.getElementById('modal').style.display='none';document.getElementById('m_body').innerHTML='';}
+
+    async function openProfileDetails(userId,username){
+      openModal(`Profil Detayi: ${username}`,'<p>Yukleniyor...</p>');
+      try{
+        const [rb,rf]=await Promise.all([fetch(`/admin/user-blocks/${userId}`),fetch(`/admin/user-friends/${userId}`)]);
+        const b=await rb.json(); const f=await rf.json();
+        let fh='<h3>Arkadaslar</h3><ul>';
+        if(!f.items?.length) fh+='<li>Arkadas kaydi yok.</li>';
+        else f.items.forEach(i=>{fh+=`<li style="margin-bottom:8px;display:flex;justify-content:space-between;gap:8px"><span>${esc(i.username)} <small>(${new Date(i.created_at).toLocaleDateString()})</small></span><button class="btn btn-perm" onclick="actionRemoveFriend('${userId}','${i.id}')">Sil</button></li>`;});
+        fh+='</ul>';
+        let bh='<h3>Engellenen Kullanici</h3><ul>';
+        if(!b.items?.length) bh+='<li>Engel kaydi yok.</li>';
+        else b.items.forEach(i=>{bh+=`<li style="margin-bottom:8px;display:flex;justify-content:space-between;gap:8px"><span>${esc(i.nickname||'Anonim')}</span><button class="btn btn-unban" onclick="actionUnblock('${userId}','${i.blocked_id}')">Engeli Kaldir</button></li>`;});
+        bh+='</ul>';
+        document.getElementById('m_body').innerHTML=`${fh}<hr/>${bh}`;
+      }catch(e){document.getElementById('m_body').innerHTML='<p>Detay yuklenemedi.</p>';}
+    }
+
+    async function openSupportDetails(id){
+      openModal('Uygulama Raporu Detayi','<p>Yukleniyor...</p>');
+      try{
+        const r=await fetch(`/admin/support-report/${id}`); const x=await r.json(); if(!r.ok) throw new Error(x.error||'hata');
+        const it=x.item||{}; const media=Array.isArray(x.media)?x.media:[];
+        let body=`<div class="grid">
+          <div class="item"><strong>Rapor ID</strong>${esc(it.id||'-')}</div>
+          <div class="item"><strong>Konu</strong>${esc(subject(it.subject))}</div>
+          <div class="item"><strong>Tarih</strong>${d(it.created_at)}</div>
+          <div class="item"><strong>Kullanici</strong>${esc(it.username_snapshot||'-')}</div>
+          <div class="item"><strong>Iletisim E-posta</strong>${esc(it.contact_email||'-')}</div>
+          <div class="item"><strong>Brevo Durumu</strong>${esc(brevo(it.brevo_status))}</div>
+          <div class="item"><strong>App Versiyon</strong>${esc(it.app_version||'-')}</div>
+          <div class="item"><strong>Platform</strong>${esc(it.platform||'-')}</div>
+          <div class="item"><strong>Cihaz Modeli</strong>${esc(it.device_model||'-')}</div>
+          <div class="item"><strong>Istemci Saat</strong>${d(it.client_timestamp)}</div>
+          <div class="item"><strong>Ag Tipi</strong>${esc(it.network_type||'-')}</div>
+          <div class="item"><strong>Son Hata Kodu</strong>${esc(it.last_error_code||'-')}</div>
+          <div class="item"><strong>IP</strong>${esc(it.ip||'-')}</div>
+          <div class="item"><strong>User-Agent</strong>${esc(it.user_agent||'-')}</div>
+          <div class="item"><strong>Brevo Mesaj ID</strong>${esc(it.brevo_message_id||'-')}</div>
+          <div class="item"><strong>Brevo Hata</strong>${esc(it.brevo_error||'-')}</div>
+        </div>
+        <h3>Aciklama</h3><div class="desc">${esc(it.description||'-')}</div>
+        <h3>Medya</h3>`;
+        if(!media.length) body+='<p>Medya yok.</p>';
+        else{
+          body+='<div class="media">';
+          media.forEach(m=>{
+            const src=`/admin/support-report-media/${m.id}/content`;
+            const prev=m.media_kind==='video'?`<video controls src="${src}"></video>`:`<img src="${src}" alt="${esc(m.file_name||'medya')}" />`;
+            body+=`<div class="m">${prev}<div style="font-size:12px;color:#5f6d7a;margin-top:6px"><strong>${esc(m.file_name||'-')}</strong><br/>${esc(m.mime_type||'-')} | ${(Number(m.size_bytes||0)/1024).toFixed(1)} KB</div></div>`;
+          });
+          body+='</div>';
         }
+        document.getElementById('m_body').innerHTML=body;
+      }catch(e){document.getElementById('m_body').innerHTML=`<p>Detay yuklenemedi: ${esc(e.message||e)}</p>`;}
+    }
 
-        async function loadPushHealth() {
-            try {
-                const res = await fetch('/admin/push/health?minutes=60');
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'push health failed');
+    async function deleteSupportReport(id){
+      if(!confirm('Bu uygulama raporunu kalici olarak silmek istiyor musunuz?')) return;
+      try{
+        const r=await fetch(`/admin/support-report/${id}`,{method:'DELETE'}); const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Silinemedi');
+        loadContent(); loadStats();
+      }catch(e){alert(`Silme hatasi: ${e.message}`);}
+    }
 
-                document.getElementById('s_push_rate').innerText = `${Number(data.successRate || 0).toFixed(1)}%`;
-                document.getElementById('s_push_total').innerText =
-                    `${data.sentCount || 0} sent / ${data.failureCount || 0} fail (invalid: ${data.invalidTokenCount || 0})`;
-            } catch (e) {
-                console.error('push health error', e);
-                document.getElementById('s_push_rate').innerText = '-%';
-                document.getElementById('s_push_total').innerText = 'Push health unavailable';
-            }
-        }
+    async function sendNotice(){
+      const title=(document.getElementById('notify-title').value||'').trim();
+      const body=(document.getElementById('notify-body').value||'').trim();
+      const sec=Number(document.getElementById('notify-duration').value||10);
+      const durationMs=Math.max(3000,Math.min(60000,Math.round(sec*1000)));
+      if(!title||!body){alert('Baslik ve metin gerekli.');return;}
+      const out=document.getElementById('notify-result'); out.innerText='Gonderiliyor...';
+      try{
+        const r=await fetch('/admin/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,body,durationMs,target:'all'})});
+        const raw=await r.text(); let x={}; try{x=raw?JSON.parse(raw):{};}catch{throw new Error(`Sunucu JSON donmedi (HTTP ${r.status}).`);}
+        if(!r.ok||!x.success) throw new Error(x.error||'Bildirim gonderimi basarisiz');
+        const err=x.push?.errorSummary||{}; const errTxt=Object.keys(err).length?` | hata: ${Object.entries(err).map(([k,v])=>`${k}=${v}`).join(', ')}`:'';
+        out.innerText=`WS: ${x.wsDelivered||0} | Push: ${x.push?.sentCount||0}/${x.push?.tokenCount||0} (hata ${x.push?.failureCount||0})${errTxt}`;
+        loadPushHealth(); loadPushDiagnostics();
+      }catch(e){out.innerText='Hata'; alert('Hata: '+e.message);}
+    }
 
-        async function loadPushDiagnostics() {
-            const host = document.getElementById('push-diagnostics');
-            const enabledEl = document.getElementById('s_push_enabled');
-            const projectEl = document.getElementById('s_push_project');
-            const devicesEl = document.getElementById('s_push_devices');
-            try {
-                const res = await fetch('/admin/push/diagnostics?hours=24');
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'push diagnostics failed');
+    async function apiPost(url,body){
+      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const raw=await r.text(); const x=(()=>{try{return raw?JSON.parse(raw):{};}catch{return{};}})();
+      if(!r.ok) throw new Error(x.error||'Istek basarisiz');
+      loadContent(); loadStats();
+    }
+    async function actionBan(userId,days,reason){ if(!confirm('Kullaniciyi yasaklamak istiyor musunuz?')) return; await apiPost('/admin/ban',{userId,days,reason}); }
+    async function actionShadow(userId,reason){ if(!confirm('Kullaniciyi golge yasaga almak istiyor musunuz?')) return; await apiPost('/admin/ban',{userId,days:0,type:'shadow',reason}); }
+    async function actionUnban(userId){ if(!confirm('Yasagi kaldirmak istiyor musunuz?')) return; await apiPost('/admin/unban',{userId}); }
+    async function actionUnblock(blockerId,blockedId){ if(!confirm('Bu engeli kaldirmak istiyor musunuz?')) return; await apiPost('/admin/unblock',{blockerId,blockedId}); closeModal(); }
+    async function actionRemoveFriend(userId,friendId){ if(!confirm('Arkadasligi silmek istiyor musunuz?')) return; await apiPost('/admin/remove-friend',{userId,friendId}); closeModal(); }
 
-                const firebase = data.firebase || {};
-                const devices = data.devices || {};
-                const logs = data.logs || {};
-                const errors = Array.isArray(logs.errorSummary) ? logs.errorSummary : [];
-                const topErrorText = errors.length
-                    ? errors.slice(0, 3).map((e) => `${e.code}: ${e.count}`).join(', ')
-                    : 'yok';
-
-                enabledEl.innerText = firebase.enabled ? 'ON' : 'OFF';
-                enabledEl.style.color = firebase.enabled ? '#27ae60' : '#c0392b';
-                projectEl.innerText = `project: ${firebase.projectId || '-'}`;
-                devicesEl.innerText = `active devices: ${devices.activeCount || 0}`;
-
-                host.innerHTML = `
-                    <div class="diag-item"><strong>Init:</strong> ${firebase.enabled ? 'enabled' : 'disabled'}</div>
-                    <div class="diag-item"><strong>Credential:</strong> ${escapeHtml(firebase.credentialSource || '-')}</div>
-                    <div class="diag-item"><strong>Expected Project:</strong> ${escapeHtml(firebase.expectedProjectId || '-')}</div>
-                    <div class="diag-item"><strong>Last Init:</strong> ${firebase.initializedAt ? new Date(firebase.initializedAt).toLocaleString() : '-'}</div>
-                    <div class="diag-item"><strong>24h Sent/Fail:</strong> ${logs.sentCount || 0} / ${logs.failureCount || 0}</div>
-                    <div class="diag-item"><strong>24h Invalid:</strong> ${logs.invalidTokenCount || 0}</div>
-                    <div class="diag-item"><strong>Freshness:</strong> 5m ${devices.freshness?.lt5m || 0}, 1h ${devices.freshness?.lt1h || 0}, 24h ${devices.freshness?.lt24h || 0}</div>
-                    <div class="diag-item"><strong>Top Errors:</strong> ${escapeHtml(topErrorText)}</div>
-                    <div class="diag-item diag-muted"><strong>Init Error:</strong> ${escapeHtml(firebase.initError || 'none')}</div>
-                `;
-            } catch (e) {
-                console.error('push diagnostics error', e);
-                enabledEl.innerText = '-';
-                enabledEl.style.color = '#2c3e50';
-                projectEl.innerText = 'project: -';
-                devicesEl.innerText = 'active devices: -';
-                host.innerHTML = `<div class="diag-item">Diagnostics alinamadi: ${escapeHtml(e.message || e)}</div>`;
-            }
-        }
-
-        async function switchTab(tab, ev) {
-            currentTab = tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            if (ev && ev.target) ev.target.classList.add('active');
-
-            const isLogs = tab === 'logs';
-            const isProfiles = tab === 'profiles';
-
-            document.getElementById('content').style.display = isLogs ? 'none' : 'block';
-            document.getElementById('log-container').style.display = isLogs ? 'block' : 'none';
-            document.getElementById('search-bar').style.display = isProfiles ? 'block' : 'none';
-
-            if (isLogs) {
-                startLogs();
-            } else {
-                stopLogs();
-                loadContent();
-            }
-        }
-
-        function startLogs() {
-            if (logEventSource) return;
-            const container = document.getElementById('log-container');
-            container.innerHTML += '<div>Connecting stream...</div>';
-
-            logEventSource = new EventSource('/admin/stream');
-            logEventSource.onmessage = (e) => {
-                const msg = JSON.parse(e.data);
-                const line = document.createElement('div');
-                line.style.marginBottom = '4px';
-                line.innerHTML = `<span style="opacity:0.6">[${new Date().toLocaleTimeString()}]</span> <strong>${msg.from || '-'}</strong> -> <strong>${msg.to || '-'}</strong>: ${msg.content || ''}`;
-                container.appendChild(line);
-                container.scrollTop = container.scrollHeight;
-            };
-        }
-
-        function stopLogs() {
-            if (!logEventSource) return;
-            logEventSource.close();
-            logEventSource = null;
-        }
-
-        async function loadContent() {
-            const container = document.getElementById('content');
-            container.innerHTML = '<p style="padding:20px; color:#7f8c8d;">Fetching data...</p>';
-
-            try {
-                const query = document.getElementById('search-input') ? document.getElementById('search-input').value : '';
-                const res = await fetch(`/admin/data?type=${currentTab}&q=${encodeURIComponent(query || '')}`);
-                const data = await res.json();
-                const items = data.items || [];
-
-                if (items.length === 0) {
-                    container.innerHTML = '<p style="padding:20px;">No records found.</p>';
-                    return;
-                }
-
-                let html = '<table><thead><tr>';
-                if (currentTab === 'reports') {
-                    html += '<th>Time</th><th>Reporter</th><th>Reported</th><th>Reason</th><th>Actions</th>';
-                } else if (currentTab === 'bans') {
-                    html += '<th>User</th><th>Type</th><th>Until</th><th>Reason</th><th>Actions</th>';
-                } else {
-                    html += '<th>Username</th><th>Display Name</th><th>Registered</th><th>Actions</th>';
-                }
-                html += '</tr></thead><tbody>';
-
-                items.forEach(item => {
-                    html += '<tr>';
-                    if (currentTab === 'reports') {
-                        const reported = item.reported_user_id;
-                        html += `
-                            <td>${new Date(item.created_at).toLocaleString()}</td>
-                            <td>${item.reporter || 'Anon'}</td>
-                            <td>${item.reported || 'Anon'}</td>
-                            <td>${item.reason || ''}</td>
-                            <td class="actions">
-                                <button class="btn-ban" onclick="actionBan('${reported}', 1, 'Report: ${item.reason || ''}')">24h</button>
-                                <button class="btn-perm" onclick="actionBan('${reported}', 0, 'Report: ${item.reason || ''}')">Perm</button>
-                                <button class="btn-shadow" onclick="actionShadow('${reported}', 'Report: ${item.reason || ''}')">Shadow</button>
-                            </td>`;
-                    } else if (currentTab === 'bans') {
-                        html += `
-                            <td>${item.nickname || 'Unknown'}</td>
-                            <td><span class="badge ${item.ban_type}">${(item.ban_type || '').toUpperCase()}</span></td>
-                            <td>${item.ban_until ? new Date(item.ban_until).toLocaleString() : 'PERMANENT'}</td>
-                            <td>${item.reason || ''}</td>
-                            <td class="actions">
-                                <button class="btn-unban" onclick="actionUnban('${item.user_id}')">Unban</button>
-                            </td>`;
-                    } else {
-                        html += `
-                            <td><strong>${item.username}</strong></td>
-                            <td>${item.display_name || '-'}</td>
-                            <td>${new Date(item.created_at).toLocaleString()}</td>
-                            <td class="actions">
-                                <button class="btn-details" onclick="openDetails('${item.id}', '${item.username}')">Details</button>
-                                <button class="btn-ban" onclick="actionBan('${item.id}', 1, 'Admin Action')">Ban</button>
-                            </td>`;
-                    }
-                    html += '</tr>';
-                });
-
-                html += '</tbody></table>';
-                container.innerHTML = html;
-            } catch (e) {
-                console.error(e);
-                container.innerHTML = '<p style="padding:20px; color:#c0392b;">Load failed.</p>';
-            }
-        }
-
-        async function openDetails(userId, nickname) {
-            document.getElementById('modal').style.display = 'flex';
-            document.getElementById('m_title').innerText = `Details: ${nickname}`;
-
-            document.getElementById('m_friends').innerHTML = 'Loading...';
-            document.getElementById('m_blocks').innerHTML = 'Loading...';
-
-            try {
-                const blockRes = await fetch(`/admin/user-blocks/${userId}`);
-                const blockData = await blockRes.json();
-
-                const friendRes = await fetch(`/admin/user-friends/${userId}`);
-                const friendData = await friendRes.json();
-
-                let friendHtml = '<ul>';
-                if (!friendData.items || friendData.items.length === 0) {
-                    friendHtml += '<li>No friends found.</li>';
-                } else {
-                    friendData.items.forEach(f => {
-                        friendHtml += `<li style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-                            <span>${f.username} <small>(${new Date(f.created_at).toLocaleDateString()})</small></span>
-                            <button class="btn-perm" style="background:#e74c3c;" onclick="actionRemoveFriend('${userId}', '${f.id}')">Remove</button>
-                        </li>`;
-                    });
-                }
-                friendHtml += '</ul>';
-                document.getElementById('m_friends').innerHTML = friendHtml;
-
-                let blockHtml = '<ul>';
-                if (!blockData.items || blockData.items.length === 0) {
-                    blockHtml += '<li>No blocked users.</li>';
-                } else {
-                    blockData.items.forEach(b => {
-                        blockHtml += `<li style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-                            <span>${b.nickname || 'Anonim User'}</span>
-                            <button class="btn-unban" onclick="actionUnblock('${userId}', '${b.blocked_id}')">Unblock</button>
-                        </li>`;
-                    });
-                }
-                blockHtml += '</ul>';
-                document.getElementById('m_blocks').innerHTML = blockHtml;
-            } catch (e) {
-                console.error(e);
-                document.getElementById('m_friends').innerHTML = 'Load error';
-                document.getElementById('m_blocks').innerHTML = 'Load error';
-            }
-        }
-
-        function closeModal() {
-            document.getElementById('modal').style.display = 'none';
-        }
-
-        async function sendNotice() {
-            const title = (document.getElementById('notify-title').value || '').trim();
-            const body = (document.getElementById('notify-body').value || '').trim();
-            const durationSeconds = Number(document.getElementById('notify-duration').value || 10);
-            const durationMs = Math.max(3000, Math.min(60000, Math.round(durationSeconds * 1000)));
-            if (!title || !body) {
-                alert('Baslik ve metin gerekli.');
-                return;
-            }
-
-            const resultEl = document.getElementById('notify-result');
-            resultEl.innerText = 'Gonderiliyor...';
-
-            try {
-                const res = await fetch('/admin/notify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title, body, durationMs, target: 'all' })
-                });
-                const raw = await res.text();
-                let data = {};
-                try {
-                    data = raw ? JSON.parse(raw) : {};
-                } catch {
-                    throw new Error(`Sunucu JSON donmedi (HTTP ${res.status}). CORS/domain ayarini kontrol et.`);
-                }
-                if (!res.ok || !data.success) {
-                    throw new Error(data.error || 'Notify failed');
-                }
-                const errSummary = data.push?.errorSummary || {};
-                const hasErr = Object.keys(errSummary).length > 0;
-                const errText = hasErr
-                    ? ` | err: ${Object.entries(errSummary).map(([k, v]) => `${k}=${v}`).join(', ')}`
-                    : '';
-                resultEl.innerText = `WS: ${data.wsDelivered || 0} | Push: ${data.push?.sentCount || 0}/${data.push?.tokenCount || 0} (fail ${data.push?.failureCount || 0})${errText}`;
-                loadPushHealth();
-                loadPushDiagnostics();
-            } catch (e) {
-                resultEl.innerText = 'Hata';
-                alert('Error: ' + e.message);
-            }
-        }
-
-        async function actionBan(userId, days, reason) {
-            if (!confirm('Ban User?')) return;
-            await api('/admin/ban', { userId, days, reason });
-        }
-
-        async function actionShadow(userId, reason) {
-            if (!confirm('Shadowban User?')) return;
-            await api('/admin/ban', { userId, days: 0, type: 'shadow', reason });
-        }
-
-        async function actionUnban(userId) {
-            if (!confirm('Unban User?')) return;
-            await api('/admin/unban', { userId });
-        }
-
-        async function actionUnblock(blockerId, blockedId) {
-            if (!confirm('Unblock this pair?')) return;
-            await api('/admin/unblock', { blockerId, blockedId });
-            closeModal();
-        }
-
-        async function actionRemoveFriend(userId, friendId) {
-            if (!confirm('Remove this friend?')) return;
-            await api('/admin/remove-friend', { userId, friendId });
-            closeModal();
-        }
-
-        async function api(url, body) {
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            const raw = await res.text();
-            const data = (() => {
-                try {
-                    return raw ? JSON.parse(raw) : {};
-                } catch {
-                    return {};
-                }
-            })();
-            if (!res.ok) {
-                throw new Error(data.error || 'Request failed');
-            }
-            loadContent();
-            loadStats();
-        }
-
-        loadStats();
-        loadPushHealth();
-        loadPushDiagnostics();
-        loadContent();
-    </script>
+    loadStats(); loadPushHealth(); loadPushDiagnostics(); applySearchUI(); loadContent();
+  </script>
 </body>
-
 </html>

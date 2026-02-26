@@ -22,6 +22,15 @@ const parseEmails = (value) => String(value || '')
 
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 
+const normalizeFileName = (value, fallback = 'attachment.bin') => {
+    const cleaned = String(value || '')
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '_')
+        .replace(/\s+/g, '_')
+        .slice(0, 120);
+    return cleaned || fallback;
+};
+
 const buildTextBody = (report = {}) => {
     const subjectLabel = SUBJECT_LABELS[report.subject] || report.subject || 'Diger';
     const lines = [
@@ -129,6 +138,16 @@ const sendSupportReportEmail = async (report = {}) => {
 
     if (report.contactEmail && isValidEmail(report.contactEmail)) {
         payload.replyTo = { email: report.contactEmail };
+    }
+
+    if (Array.isArray(report.attachments) && report.attachments.length > 0) {
+        payload.attachment = report.attachments
+            .filter((item) => item?.buffer && Buffer.isBuffer(item.buffer))
+            .map((item, index) => ({
+                name: normalizeFileName(item.fileName, `report-${report.reportId || 'unknown'}-${index + 1}.bin`),
+                content: item.buffer.toString('base64'),
+                type: cleanText(item.mimeType, 120) || undefined
+            }));
     }
 
     const result = await postBrevoMail(payload, config.apiKey);

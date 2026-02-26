@@ -162,6 +162,17 @@ const createTablesQuery = `
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS support_report_media (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id UUID NOT NULL REFERENCES support_reports(id) ON DELETE CASCADE,
+    mime_type TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    media_kind TEXT NOT NULL,
+    data BYTEA NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
   CREATE TABLE IF NOT EXISTS blocks (
     blocker_id UUID,
     blocked_id UUID,
@@ -224,6 +235,10 @@ const createTablesQuery = `
           ALTER TABLE support_reports ADD COLUMN brevo_error TEXT;
       END IF;
 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='support_report_media' AND column_name='created_at') THEN
+          ALTER TABLE support_report_media ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();
+      END IF;
+
       CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices(user_id);
       CREATE INDEX IF NOT EXISTS idx_push_devices_active ON push_devices(is_active);
       CREATE INDEX IF NOT EXISTS idx_push_logs_created_at ON push_delivery_logs(created_at DESC);
@@ -232,6 +247,8 @@ const createTablesQuery = `
       CREATE INDEX IF NOT EXISTS idx_support_reports_created_at ON support_reports(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_support_reports_subject ON support_reports(subject);
       CREATE INDEX IF NOT EXISTS idx_support_reports_brevo_status ON support_reports(brevo_status);
+      CREATE INDEX IF NOT EXISTS idx_support_report_media_report_id ON support_report_media(report_id);
+      CREATE INDEX IF NOT EXISTS idx_support_report_media_created_at ON support_report_media(created_at DESC);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
         ON messages(sender_id, client_msg_id)
         WHERE client_msg_id IS NOT NULL;
