@@ -14,6 +14,7 @@ const friendsRoutes = require('./routes/friends');
 const pushRoutes = require('./routes/push');
 const supportRoutes = require('./routes/support');
 const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
+const { shouldDebouncePush } = require('./utils/pushDebounce');
 
 // Ensure DB Tables
 // Ensure DB Tables
@@ -148,9 +149,9 @@ const HEARTBEAT_INTERVAL = 30000;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB
 const EPHEMERAL_MEDIA_TTL_DAYS = 7;
 const PUSH_CHANNEL_IDS = {
-    messages: 'talkx_messages_v2',
-    admin: 'talkx_admin_v2',
-    default: 'talkx_default_v2'
+    messages: 'talkx_messages_v3',
+    admin: 'talkx_admin_v3',
+    default: 'talkx_default_v3'
 };
 
 // Rate Limit Map (Memory is fine for rate limit)
@@ -250,6 +251,35 @@ const logPushDelivery = async ({
     } catch (e) {
         console.error('push delivery log insert failed:', e.message);
     }
+};
+
+const logDebouncedPush = ({
+    deliveryId,
+    eventType,
+    targetUserId,
+    conversationId,
+    channelId,
+    debounce
+}) => {
+    const meta = {
+        source: 'push_debounce',
+        reason: 'conversation_throttle',
+        conversationId: conversationId || null,
+        debounceKey: debounce?.key || null,
+        debounceWindowMs: debounce?.windowMs || null,
+        retryAfterMs: debounce?.waitMs || null
+    };
+    logPushDelivery({
+        deliveryId,
+        eventType,
+        targetUserId,
+        tokenCount: 0,
+        sentCount: 0,
+        failureCount: 0,
+        invalidTokenCount: 0,
+        channelId: channelId || PUSH_CHANNEL_IDS.messages,
+        meta
+    }).catch((e) => console.error('debounced push log insert failed:', e.message));
 };
 
 const sendPushToUser = async (userId, payload = {}, options = {}) => {
@@ -1023,28 +1053,45 @@ wss.on('connection', (ws, req) => {
                         });
                     }
 
-                    sendPushToUser(dmTargetUserId, {
-                        title: clientData.nickname || clientData.username || 'Yeni mesaj',
-                        body: dmText.slice(0, 140),
-                        ttlSeconds: 3600,
-                        collapseKey: `direct_${String(convId || dmTargetUserId).slice(0, 64)}`,
-                        channelId: PUSH_CHANNEL_IDS.messages,
-                        data: {
-                            type: 'direct_message',
-                            fromUserId: dmSenderId,
-                            fromUsername: clientData.username || '',
-                            fromNickname: clientData.nickname || '',
-                            msgType: 'direct',
-                            text: dmText.slice(0, 140),
-                            conversationId: convId || '',
+                    const dmPushDebounce = shouldDebouncePush({
+                        targetUserId: dmTargetUserId,
+                        conversationId: convId || 'no-conversation',
+                        eventType: 'direct_message'
+                    });
+
+                    if (dmPushDebounce.debounced) {
+                        logDebouncedPush({
                             deliveryId: dmDeliveryId,
-                            clientMsgId,
-                            channelId: PUSH_CHANNEL_IDS.messages
-                        }
-                    }, {
-                        eventType: 'direct_message',
-                        deliveryId: dmDeliveryId
-                    }).catch((e) => console.error('direct_message push error:', e.message));
+                            eventType: 'direct_message_debounced',
+                            targetUserId: dmTargetUserId,
+                            conversationId: convId || null,
+                            channelId: PUSH_CHANNEL_IDS.messages,
+                            debounce: dmPushDebounce
+                        });
+                    } else {
+                        sendPushToUser(dmTargetUserId, {
+                            title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                            body: dmText.slice(0, 140),
+                            ttlSeconds: 3600,
+                            collapseKey: `direct_${String(convId || dmTargetUserId).slice(0, 64)}`,
+                            channelId: PUSH_CHANNEL_IDS.messages,
+                            data: {
+                                type: 'direct_message',
+                                fromUserId: dmSenderId,
+                                fromUsername: clientData.username || '',
+                                fromNickname: clientData.nickname || '',
+                                msgType: 'direct',
+                                text: dmText.slice(0, 140),
+                                conversationId: convId || '',
+                                deliveryId: dmDeliveryId,
+                                clientMsgId,
+                                channelId: PUSH_CHANNEL_IDS.messages
+                            }
+                        }, {
+                            eventType: 'direct_message',
+                            deliveryId: dmDeliveryId
+                        }).catch((e) => console.error('direct_message push error:', e.message));
+                    }
 
                     sendJson(ws, {
                         type: 'direct_message_ack',
@@ -1300,29 +1347,46 @@ wss.on('connection', (ws, req) => {
                             });
                         }
 
-                        sendPushToUser(distTargetUserId, {
-                            title: clientData.nickname || clientData.username || 'Yeni mesaj',
-                            body: 'Fotograf gonderdi',
-                            ttlSeconds: 3600,
-                            collapseKey: `direct_${String(dConvId || distTargetUserId).slice(0, 64)}`,
-                            channelId: PUSH_CHANNEL_IDS.messages,
-                            data: {
-                                type: 'direct_message',
-                                fromUserId: distSenderId,
-                                fromUsername: clientData.username || '',
-                                fromNickname: clientData.nickname || '',
-                                msgType: 'image',
-                                mediaId: dMediaId,
-                                text: 'Fotograf gonderdi',
-                                conversationId: dConvId || '',
+                        const imagePushDebounce = shouldDebouncePush({
+                            targetUserId: distTargetUserId,
+                            conversationId: dConvId || 'no-conversation',
+                            eventType: 'direct_image_send'
+                        });
+
+                        if (imagePushDebounce.debounced) {
+                            logDebouncedPush({
                                 deliveryId: imageDeliveryId,
-                                clientMsgId,
-                                channelId: PUSH_CHANNEL_IDS.messages
-                            }
-                        }, {
-                            eventType: 'direct_image_send',
-                            deliveryId: imageDeliveryId
-                        }).catch((e) => console.error('direct_image_send push error:', e.message));
+                                eventType: 'direct_image_debounced',
+                                targetUserId: distTargetUserId,
+                                conversationId: dConvId || null,
+                                channelId: PUSH_CHANNEL_IDS.messages,
+                                debounce: imagePushDebounce
+                            });
+                        } else {
+                            sendPushToUser(distTargetUserId, {
+                                title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                                body: 'Fotograf gonderdi',
+                                ttlSeconds: 3600,
+                                collapseKey: `direct_${String(dConvId || distTargetUserId).slice(0, 64)}`,
+                                channelId: PUSH_CHANNEL_IDS.messages,
+                                data: {
+                                    type: 'direct_message',
+                                    fromUserId: distSenderId,
+                                    fromUsername: clientData.username || '',
+                                    fromNickname: clientData.nickname || '',
+                                    msgType: 'image',
+                                    mediaId: dMediaId,
+                                    text: 'Fotograf gonderdi',
+                                    conversationId: dConvId || '',
+                                    deliveryId: imageDeliveryId,
+                                    clientMsgId,
+                                    channelId: PUSH_CHANNEL_IDS.messages
+                                }
+                            }, {
+                                eventType: 'direct_image_send',
+                                deliveryId: imageDeliveryId
+                            }).catch((e) => console.error('direct_image_send push error:', e.message));
+                        }
 
                         sendJson(ws, {
                             type: 'image_sent',

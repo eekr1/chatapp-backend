@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const DEFAULT_PUSH_CHANNEL_ID = 'talkx_default_v2';
-const MESSAGE_PUSH_CHANNEL_ID = 'talkx_messages_v2';
-const ADMIN_PUSH_CHANNEL_ID = 'talkx_admin_v2';
+const DEFAULT_PUSH_CHANNEL_ID = 'talkx_default_v3';
+const MESSAGE_PUSH_CHANNEL_ID = 'talkx_messages_v3';
+const ADMIN_PUSH_CHANNEL_ID = 'talkx_admin_v3';
 const KNOWN_CHANNEL_IDS = new Set([
     DEFAULT_PUSH_CHANNEL_ID,
     MESSAGE_PUSH_CHANNEL_ID,
