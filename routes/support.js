@@ -1,5 +1,6 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const multer = require('multer');
 const { pool } = require('../db');
 const { hashToken } = require('../utils/security');
 const { sendSupportReportEmail } = require('../utils/brevoSupport');
@@ -21,7 +22,8 @@ const MAX_DESCRIPTION = 2000;
 const MAX_FILES = 3;
 const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 const MAX_TOTAL_FILE_BYTES = 16 * 1024 * 1024; // 16 MB
-const MAX_MULTIPART_BODY_BYTES = MAX_TOTAL_FILE_BYTES + (2 * 1024 * 1024);
+const MAX_MULTIPART_FIELD_SIZE = 64 * 1024; // 64 KB per text field
+const MAX_MULTIPART_FIELDS = 12;
 const DEFAULT_SUPPORT_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const DEFAULT_SUPPORT_RATE_LIMIT_MAX = 10;
 
@@ -147,140 +149,95 @@ const authenticateOptional = async (req, res, next) => {
     }
 };
 
-const readRequestBuffer = (req, maxBytes) => new Promise((resolve, reject) => {
-    let total = 0;
-    const chunks = [];
+const isMultipartRequest = (req) => String(req.headers['content-type'] || '')
+    .toLowerCase()
+    .includes('multipart/form-data');
 
-    req.on('data', (chunk) => {
-        total += chunk.length;
-        if (total > maxBytes) {
-            reject(new Error('MULTIPART_TOO_LARGE'));
-            req.destroy();
-            return;
-        }
-        chunks.push(chunk);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-    req.on('aborted', () => reject(new Error('REQUEST_ABORTED')));
+const supportUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        files: MAX_FILES,
+        fileSize: MAX_FILE_BYTES,
+        fields: MAX_MULTIPART_FIELDS,
+        fieldSize: MAX_MULTIPART_FIELD_SIZE
+    }
 });
 
-const parseContentDisposition = (value) => {
-    const result = { type: '', params: {} };
-    const parts = String(value || '').split(';').map((v) => v.trim()).filter(Boolean);
-    if (!parts.length) return result;
-    result.type = parts[0].toLowerCase();
-    parts.slice(1).forEach((part) => {
-        const idx = part.indexOf('=');
-        if (idx <= 0) return;
-        const key = part.slice(0, idx).trim().toLowerCase();
-        let val = part.slice(idx + 1).trim();
-        if (val.startsWith('"') && val.endsWith('"')) {
-            val = val.slice(1, -1);
-        }
-        result.params[key] = val;
-    });
-    return result;
+const parseSupportMetadata = (value) => {
+    if (!value) return {};
+    if (typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string') return {};
+    try {
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        return parsed;
+    } catch {
+        return {};
+    }
 };
 
-const parseMultipartBody = (bodyBuffer, boundary) => {
-    const bodyLatin = bodyBuffer.toString('latin1');
-    const chunks = bodyLatin.split(`--${boundary}`);
-    const fields = {};
-    const files = [];
-
-    chunks.forEach((chunk) => {
-        if (!chunk || chunk === '--\r\n' || chunk === '--') return;
-        let part = chunk;
-        if (part.startsWith('\r\n')) part = part.slice(2);
-        if (part.endsWith('\r\n')) part = part.slice(0, -2);
-        if (part.endsWith('--')) part = part.slice(0, -2);
-        if (!part) return;
-
-        const sepIdx = part.indexOf('\r\n\r\n');
-        if (sepIdx < 0) return;
-
-        const rawHeaders = part.slice(0, sepIdx).split('\r\n');
-        const contentLatin = part.slice(sepIdx + 4);
-        const contentBuffer = Buffer.from(contentLatin, 'latin1');
-        const headers = {};
-
-        rawHeaders.forEach((line) => {
-            const idx = line.indexOf(':');
-            if (idx <= 0) return;
-            const key = line.slice(0, idx).trim().toLowerCase();
-            const val = line.slice(idx + 1).trim();
-            headers[key] = val;
+const handleSupportMulterError = (err, req, res) => {
+    if (!(err instanceof multer.MulterError)) {
+        console.error('Support multipart parse error:', err);
+        return res.status(400).json({
+            error: 'Sorun bildirimi verisi okunamadi.',
+            code: 'MULTIPART_PARSE_FAILED'
         });
+    }
 
-        const disposition = parseContentDisposition(headers['content-disposition']);
-        const fieldName = disposition.params.name;
-        if (!fieldName) return;
-
-        const fileName = disposition.params.filename || '';
-        const mimeType = cleanText(headers['content-type'], 120).toLowerCase() || 'application/octet-stream';
-
-        if (fieldName === 'media' && fileName) {
-            files.push({
-                fieldName,
-                originalname: normalizeFileName(fileName),
-                mimetype: mimeType,
-                size: contentBuffer.length,
-                buffer: contentBuffer
+    switch (err.code) {
+        case 'LIMIT_FILE_SIZE':
+            return res.status(400).json({
+                error: `Tek dosya boyutu en fazla ${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB olabilir.`,
+                code: 'MEDIA_FILE_SIZE_LIMIT'
             });
-            return;
-        }
-
-        fields[fieldName] = Buffer.from(contentBuffer).toString('utf8');
-    });
-
-    return { fields, files };
+        case 'LIMIT_FILE_COUNT':
+            return res.status(400).json({
+                error: `En fazla ${MAX_FILES} medya dosyasi ekleyebilirsiniz.`,
+                code: 'MEDIA_FILE_COUNT_LIMIT'
+            });
+        case 'LIMIT_UNEXPECTED_FILE':
+            return res.status(400).json({
+                error: 'Gecersiz medya alani.',
+                code: 'MEDIA_UNEXPECTED_FIELD'
+            });
+        case 'LIMIT_FIELD_VALUE':
+        case 'LIMIT_FIELD_COUNT':
+        case 'LIMIT_PART_COUNT':
+            return res.status(400).json({
+                error: 'Medya istegindeki alanlar gecersiz veya fazla buyuk.',
+                code: 'MULTIPART_FIELDS_INVALID'
+            });
+        default:
+            console.error('Support multipart multer error:', {
+                code: err.code,
+                message: err.message
+            });
+            return res.status(400).json({
+                error: 'Sorun bildirimi verisi okunamadi.',
+                code: 'MULTIPART_PARSE_FAILED'
+            });
+    }
 };
 
-const parseSupportPayload = async (req) => {
-    const contentType = String(req.headers['content-type'] || '').toLowerCase();
-    if (!contentType.includes('multipart/form-data')) {
-        const body = req.body && typeof req.body === 'object' ? req.body : {};
-        return {
-            payload: {
-                subject: body.subject,
-                description: body.description,
-                email: body.email,
-                metadata: body.metadata
-            },
-            mediaFiles: []
-        };
-    }
+const supportUploadMiddleware = (req, res, next) => {
+    if (!isMultipartRequest(req)) return next();
+    return supportUpload.array('media', MAX_FILES)(req, res, (err) => {
+        if (!err) return next();
+        return handleSupportMulterError(err, req, res);
+    });
+};
 
-    const boundaryMatch = contentType.match(/boundary=([^;]+)/i);
-    const boundary = boundaryMatch?.[1]?.trim();
-    if (!boundary) {
-        const err = new Error('INVALID_MULTIPART');
-        err.code = 'INVALID_MULTIPART';
-        throw err;
-    }
-
-    const rawBuffer = await readRequestBuffer(req, MAX_MULTIPART_BODY_BYTES);
-    const parsed = parseMultipartBody(rawBuffer, boundary.replace(/^"|"$/g, ''));
-    let metadata = {};
-
-    if (parsed.fields.metadata) {
-        try {
-            const maybeJson = JSON.parse(parsed.fields.metadata);
-            metadata = maybeJson && typeof maybeJson === 'object' ? maybeJson : {};
-        } catch {
-            metadata = {};
-        }
-    }
-
+const parseSupportPayload = (req) => {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
     return {
         payload: {
-            subject: parsed.fields.subject,
-            description: parsed.fields.description,
-            email: parsed.fields.email,
-            metadata
+            subject: body.subject,
+            description: body.description,
+            email: body.email,
+            metadata: parseSupportMetadata(body.metadata)
         },
-        mediaFiles: parsed.files || []
+        mediaFiles: Array.isArray(req.files) ? req.files : []
     };
 };
 
@@ -330,20 +287,8 @@ const validateMediaFiles = (files = []) => {
     return normalized;
 };
 
-router.post('/report', authenticateOptional, supportLimiter, async (req, res) => {
-    let requestData = null;
-    try {
-        requestData = await parseSupportPayload(req);
-    } catch (e) {
-        if (e.message === 'MULTIPART_TOO_LARGE') {
-            return res.status(400).json({ error: 'Medya boyutu limiti asildi.' });
-        }
-        if (e.code === 'INVALID_MULTIPART') {
-            return res.status(400).json({ error: 'Gecersiz medya istegi.' });
-        }
-        console.error('Support payload parse error:', e);
-        return res.status(400).json({ error: 'Sorun bildirimi verisi okunamadi.' });
-    }
+router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddleware, async (req, res) => {
+    const requestData = parseSupportPayload(req);
 
     const body = requestData?.payload || {};
     const subjectRaw = cleanText(body.subject, 40);
@@ -353,14 +298,23 @@ router.post('/report', authenticateOptional, supportLimiter, async (req, res) =>
     const metadata = body?.metadata && typeof body.metadata === 'object' ? body.metadata : {};
 
     if (!SUBJECTS.has(subject)) {
+        const bodyKeys = body && typeof body === 'object'
+            ? Object.keys(body).slice(0, 20)
+            : [];
         console.warn('[support] invalid_subject', {
+            isMultipart: isMultipartRequest(req),
+            bodyKeys,
+            filesCount: Array.isArray(requestData?.mediaFiles) ? requestData.mediaFiles.length : 0,
             contentType: cleanText(req.headers['content-type'], 120) || null,
             subjectRaw: subjectRaw || null,
             subjectNormalized: subject || null,
             hasAuthUser: Boolean(req.authUser),
             ipHint: getClientIp(req)
         });
-        return res.status(400).json({ error: 'Gecersiz konu secimi.' });
+        return res.status(400).json({
+            error: 'Gecersiz konu secimi.',
+            code: 'INVALID_SUBJECT'
+        });
     }
 
     if (!description || description.length < 10) {
@@ -375,7 +329,10 @@ router.post('/report', authenticateOptional, supportLimiter, async (req, res) =>
     try {
         mediaItems = validateMediaFiles(requestData?.mediaFiles || []);
     } catch (e) {
-        return res.status(400).json({ error: e.message || 'Medya dogrulamasi basarisiz.' });
+        return res.status(400).json({
+            error: e.message || 'Medya dogrulamasi basarisiz.',
+            code: e.code || 'MEDIA_VALIDATION_FAILED'
+        });
     }
 
     const appVersion = cleanText(metadata.appVersion, 80) || null;
