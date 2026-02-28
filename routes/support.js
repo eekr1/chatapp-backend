@@ -7,6 +7,14 @@ const { sendSupportReportEmail } = require('../utils/brevoSupport');
 const router = express.Router();
 
 const SUBJECTS = new Set(['connection', 'message', 'photo', 'other']);
+const SUBJECT_ALIASES = new Map([
+    ['baglanti', 'connection'],
+    ['bağlantı', 'connection'],
+    ['mesaj', 'message'],
+    ['foto', 'photo'],
+    ['diger', 'other'],
+    ['diğer', 'other']
+]);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIME_RE = /^(image|video)\//i;
 const MAX_DESCRIPTION = 2000;
@@ -14,16 +22,42 @@ const MAX_FILES = 3;
 const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 const MAX_TOTAL_FILE_BYTES = 16 * 1024 * 1024; // 16 MB
 const MAX_MULTIPART_BODY_BYTES = MAX_TOTAL_FILE_BYTES + (2 * 1024 * 1024);
-
-const supportLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    message: { error: 'Cok fazla sorun bildirimi. Lutfen daha sonra tekrar deneyin.' }
-});
+const DEFAULT_SUPPORT_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const DEFAULT_SUPPORT_RATE_LIMIT_MAX = 10;
 
 const cleanText = (value, max = 1000) => {
     if (typeof value !== 'string') return '';
     return value.trim().slice(0, max);
+};
+
+const toPositiveInt = (value, fallback) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.round(parsed);
+};
+
+const SUPPORT_RATE_LIMIT_WINDOW_MS = toPositiveInt(
+    process.env.SUPPORT_RATE_LIMIT_WINDOW_MS,
+    DEFAULT_SUPPORT_RATE_LIMIT_WINDOW_MS
+);
+const SUPPORT_RATE_LIMIT_MAX = toPositiveInt(
+    process.env.SUPPORT_RATE_LIMIT_MAX,
+    DEFAULT_SUPPORT_RATE_LIMIT_MAX
+);
+
+const toAscii = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const normalizeSubject = (value) => {
+    const normalized = cleanText(value, 40).toLowerCase();
+    if (!normalized) return null;
+    if (SUBJECTS.has(normalized)) return normalized;
+    if (SUBJECT_ALIASES.has(normalized)) return SUBJECT_ALIASES.get(normalized);
+    const ascii = toAscii(normalized);
+    if (SUBJECTS.has(ascii)) return ascii;
+    if (SUBJECT_ALIASES.has(ascii)) return SUBJECT_ALIASES.get(ascii);
+    return null;
 };
 
 const parseTimestamp = (value) => {
@@ -40,6 +74,37 @@ const getClientIp = (req) => {
     }
     return cleanText(req.ip || req.socket?.remoteAddress || '', 120) || null;
 };
+
+const getRateLimitKey = (req) => {
+    if (req.authUser?.user_id) return `user:${req.authUser.user_id}`;
+    const ip = getClientIp(req) || 'unknown';
+    return `ip:${ip}`;
+};
+
+const supportLimiter = rateLimit({
+    windowMs: SUPPORT_RATE_LIMIT_WINDOW_MS,
+    max: SUPPORT_RATE_LIMIT_MAX,
+    skipFailedRequests: true,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+        const key = getRateLimitKey(req);
+        req.supportRateLimitKey = key;
+        return key;
+    },
+    handler: (req, res) => {
+        const rl = req.rateLimit || {};
+        const resetDate = rl.resetTime ? new Date(rl.resetTime) : null;
+        const resetIso = resetDate && !Number.isNaN(resetDate.getTime()) ? resetDate.toISOString() : null;
+        console.warn('[support] rate_limited', {
+            limitKey: req.supportRateLimitKey || getRateLimitKey(req),
+            remaining: Number.isFinite(rl.remaining) ? rl.remaining : null,
+            reset: resetIso,
+            authUserPresent: Boolean(req.authUser)
+        });
+        return res.status(429).json({ error: 'Cok fazla sorun bildirimi. Lutfen daha sonra tekrar deneyin.' });
+    }
+});
 
 const normalizeFileName = (value, fallback = 'attachment.bin') => {
     const cleaned = String(value || '')
@@ -265,7 +330,7 @@ const validateMediaFiles = (files = []) => {
     return normalized;
 };
 
-router.post('/report', supportLimiter, authenticateOptional, async (req, res) => {
+router.post('/report', authenticateOptional, supportLimiter, async (req, res) => {
     let requestData = null;
     try {
         requestData = await parseSupportPayload(req);
@@ -281,12 +346,20 @@ router.post('/report', supportLimiter, authenticateOptional, async (req, res) =>
     }
 
     const body = requestData?.payload || {};
-    const subject = cleanText(body.subject, 40).toLowerCase();
+    const subjectRaw = cleanText(body.subject, 40);
+    const subject = normalizeSubject(subjectRaw);
     const description = cleanText(body.description, MAX_DESCRIPTION);
     const email = cleanText(body.email, 254);
     const metadata = body?.metadata && typeof body.metadata === 'object' ? body.metadata : {};
 
     if (!SUBJECTS.has(subject)) {
+        console.warn('[support] invalid_subject', {
+            contentType: cleanText(req.headers['content-type'], 120) || null,
+            subjectRaw: subjectRaw || null,
+            subjectNormalized: subject || null,
+            hasAuthUser: Boolean(req.authUser),
+            ipHint: getClientIp(req)
+        });
         return res.status(400).json({ error: 'Gecersiz konu secimi.' });
     }
 
