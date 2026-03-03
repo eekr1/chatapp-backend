@@ -105,7 +105,7 @@ const rateLimit = require('express-rate-limit');
 const authLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
     max: 50, // 50 requests per IP
-    message: { error: 'Ã‡ok fazla deneme. LÃ¼tfen bekleyin.' }
+    message: { error: 'Çok fazla deneme. Lütfen bekleyin.' }
 });
 
 const apiLimiter = rateLimit({
@@ -476,17 +476,17 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
 };
 
 const validateImageDataUrl = (dataUrl) => {
-    if (typeof dataUrl !== 'string') return { ok: false, reason: 'GeÃ§ersiz fotoÄŸraf verisi.' };
+    if (typeof dataUrl !== 'string') return { ok: false, reason: 'Geçersiz fotoğraf verisi.' };
     if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
-        return { ok: false, reason: 'GeÃ§ersiz fotoÄŸraf formatÄ±.' };
+        return { ok: false, reason: 'Geçersiz fotoğraf formatı.' };
     }
 
     const parts = dataUrl.split(',', 2);
-    if (parts.length !== 2) return { ok: false, reason: 'GeÃ§ersiz fotoÄŸraf verisi.' };
+    if (parts.length !== 2) return { ok: false, reason: 'Geçersiz fotoğraf verisi.' };
 
     const bytes = estimateBase64Bytes(parts[1]);
     if (bytes > MAX_IMAGE_BYTES) {
-        return { ok: false, reason: 'FotoÄŸraf boyutu 2MB sÄ±nÄ±rÄ±nÄ± aÅŸÄ±yor.' };
+        return { ok: false, reason: 'Fotoğraf boyutu 2MB sınırını aşıyor.' };
     }
 
     return { ok: true };
@@ -681,11 +681,11 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
 
 const joinQueue = async (ws) => {
     const clientData = activeClients.get(ws.clientId);
-    if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR', 'Kimlik doÄŸrulanamadÄ±.');
+    if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR', 'Kimlik doğrulanamadı.');
 
     // Require nickname (V6)
     if (!clientData.nickname) {
-        return sendError(ws, 'NO_NICKNAME', 'LÃ¼tfen Ã¶nce kullanÄ±cÄ± adÄ± belirleyin.');
+        return sendError(ws, 'NO_NICKNAME', 'Lütfen önce kullanıcı adı belirleyin.');
     }
 
     // Ban Check
@@ -695,7 +695,7 @@ const joinQueue = async (ws) => {
             sendJson(ws, { type: 'queued' });
             return;
         }
-        return sendError(ws, 'BANNED', `YasaklandÄ±nÄ±z. Sebep: ${ban.reason}`);
+        return sendError(ws, 'BANNED', `Yasaklandınız. Sebep: ${ban.reason}`);
     }
 
     leaveRoom(ws.clientId);
@@ -856,24 +856,24 @@ wss.on('connection', (ws, req) => {
                 // But since UI enforces login, this might mean "Session Expired"
                 // Let's send AUTH_ERROR if token was provided but failed.
                 if (data.token) {
-                    return sendError(ws, 'AUTH_ERROR', 'Oturum sÃ¼resi doldu.');
+                    return sendError(ws, 'AUTH_ERROR', 'Oturum süresi doldu.');
                 }
                 // If no token was provided at all (legacy client?), use getOrCreateUser
                 dbUser = await getOrCreateUser(deviceId, req.socket.remoteAddress);
                 isAnon = true;
             }
 
-            if (!dbUser) return sendError(ws, 'DB_ERROR', 'Sunucu hatasÄ±.');
+            if (!dbUser) return sendError(ws, 'DB_ERROR', 'Sunucu hatası.');
 
             // Check Status
             if (dbUser.status && dbUser.status !== 'active') {
-                return sendError(ws, 'BANNED', 'HesabÄ±nÄ±z askÄ±ya alÄ±nmÄ±ÅŸ.');
+                return sendError(ws, 'BANNED', 'Hesabınız askıya alınmış.');
             }
 
             // Check Bans
             const ban = await checkBan(dbUser.id);
             if (ban && ban.ban_type !== 'shadow') {
-                sendError(ws, 'BANNED', `YasaklandÄ±nÄ±z. BitiÅŸ: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'SÃ¼resiz'}. Sebep: ${ban.reason}`);
+                sendError(ws, 'BANNED', `Yasaklandınız. Bitiş: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'Süresiz'}. Sebep: ${ban.reason}`);
                 ws.close();
                 return;
             }
@@ -1189,7 +1189,7 @@ wss.on('connection', (ws, req) => {
                     isFriend = fRes.rows.length > 0;
                 } catch (e) { }
 
-                if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Sadece arkadaÅŸlarÄ±nÄ±za fotoÄŸraf gÃ¶nderebilirsiniz.');
+                if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Sadece arkadaşlarınıza fotoğraf gönderebilirsiniz.');
 
                 // Store
                 try {
@@ -1208,7 +1208,7 @@ wss.on('connection', (ws, req) => {
                             from: 'peer',
                             msgType: 'image',
                             mediaId: mediaId,
-                            text: 'ğŸ“¸ FotoÄŸraf' // Placeholder text
+                            text: 'Fotoğraf' // Placeholder text
                         });
                         // Admin Log
                         if (adminRoutes.logToAdmin) {
@@ -1237,7 +1237,7 @@ wss.on('connection', (ws, req) => {
             case 'fetch_image':
                 if (!data.mediaId) return;
                 if (!isUuid(data.mediaId)) {
-                    return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'GeÃ§ersiz medya kimliÄŸi.' });
+                    return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Geçersiz medya kimliği.' });
                 }
                 const clientDataFetch = activeClients.get(ws.clientId);
                 if (!clientDataFetch || !clientDataFetch.dbUserId) return;
@@ -1249,7 +1249,7 @@ wss.on('connection', (ws, req) => {
                     );
 
                     if (res.rows.length === 0) {
-                        return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Bu fotoÄŸraf silinmiÅŸ veya sÃ¼resi dolmuÅŸ.' });
+                        return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Bu fotoğraf silinmiş veya süresi dolmuş.' });
                     }
 
                     const item = res.rows[0];
@@ -1445,7 +1445,7 @@ wss.on('connection', (ws, req) => {
                         targetUser = tRes.rows[0];
                     } catch (e) { console.error(e); }
 
-                    if (!targetUser) return sendError(ws, 'NOT_FOUND', 'KullanÄ±cÄ± bulunamadÄ±.');
+                    if (!targetUser) return sendError(ws, 'NOT_FOUND', 'Kullanıcı bulunamadı.');
 
                     // 2. Check Friendship
                     let isFriend = false;
@@ -1457,7 +1457,7 @@ wss.on('connection', (ws, req) => {
                         isFriend = fRes.rows.length > 0;
                     } catch (e) { console.error(e); }
 
-                    if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Bu kullanÄ±cÄ± arkadaÅŸÄ±nÄ±z deÄŸil.');
+                    if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Bu kullanıcı arkadaşınız değil.');
 
                     // 3. Check if Target is Online
                     let targetClient = null;
@@ -1470,7 +1470,7 @@ wss.on('connection', (ws, req) => {
 
                     if (targetClient) {
                         // V13: Do NOT force leaveRoom anymore.
-                        // Establece que una sesiÃ³n directa PUEDE existir.
+                        // Keep direct chat session persistent across reconnects.
                         const conversationId = await findOrCreatePersistentConversation(meId, targetUser.id);
 
                         sendJson(ws, {
@@ -1481,7 +1481,7 @@ wss.on('connection', (ws, req) => {
                         });
                         return;
                     } else {
-                        return sendError(ws, 'OFFLINE', 'KullanÄ±cÄ± ÅŸu an Ã§evrimdÄ±ÅŸÄ±.');
+                        return sendError(ws, 'OFFLINE', 'Kullanıcı şu an çevrimdışı.');
                     }
                 }
                 break;
@@ -1611,7 +1611,7 @@ const handleReport = async (reporterClientId, roomId, reason) => {
             // Kick User
             const clientData = activeClients.get(reportedObj.clientId);
             if (clientData && clientData.ws) {
-                sendJson(clientData.ws, { type: 'ended', reason: 'banned', message: `HesabÄ±nÄ±z geÃ§ici olarak askÄ±ya alÄ±ndÄ±. SÃ¼re: ${banHours} saat.` });
+                sendJson(clientData.ws, { type: 'ended', reason: 'banned', message: `Hesabınız geçici olarak askıya alındı. Süre: ${banHours} saat.` });
                 clientData.ws.close();
             }
         }
