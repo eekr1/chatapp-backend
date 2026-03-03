@@ -3,6 +3,11 @@ const router = express.Router();
 const path = require('path');
 const { pool } = require('./db');
 const { getPushDiagnostics } = require('./utils/push');
+const {
+    fetchLegalSettings,
+    validateLegalContentPayload,
+    saveLegalSettings
+} = require('./utils/legalContent');
 
 const isEnvEnabled = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
 const hasSecureAdminPassword = () => {
@@ -80,6 +85,29 @@ router.get('/stats', async (req, res) => {
             activeConversations: active.rows[0].count
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/legal', async (req, res) => {
+    try {
+        const { item, updatedAt } = await fetchLegalSettings(pool);
+        res.json({ item, updatedAt });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.put('/legal', async (req, res) => {
+    const validation = validateLegalContentPayload(req.body);
+    if (!validation.ok) {
+        return res.status(400).json({ error: validation.error });
+    }
+
+    try {
+        const updatedAt = await saveLegalSettings(pool, validation.value);
+        res.json({ success: true, item: validation.value, updatedAt });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.get('/data', async (req, res) => {

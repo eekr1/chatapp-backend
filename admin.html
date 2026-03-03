@@ -47,6 +47,12 @@
     .media { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:10px; }
     .media .m { border:1px solid #ecf0f3; border-radius:8px; padding:8px; }
     .media img, .media video { width:100%; max-height:220px; object-fit:contain; background:#111; border-radius:8px; }
+    .legal-editor { display:flex; flex-direction:column; gap:12px; }
+    .legal-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
+    .legal-field { display:flex; flex-direction:column; gap:6px; }
+    .legal-field label { font-size:12px; color:#5f6d7a; font-weight:600; }
+    .legal-field textarea { border:1px solid #d8dbe2; border-radius:8px; padding:10px; resize:vertical; min-height:110px; font-family:Consolas,monospace; font-size:12px; }
+    .legal-status { font-size:12px; color:#5f6d7a; }
   </style>
 </head>
 <body>
@@ -74,6 +80,7 @@
         <button class="tab" onclick="switchTab('bans',event)">Yasaklar & Golge</button>
         <button class="tab" onclick="switchTab('profiles',event)">Profiller</button>
         <button class="tab" onclick="switchTab('app_reports',event)">Uygulama Raporlari</button>
+        <button class="tab" onclick="switchTab('legal',event)">Yasal Metinler</button>
         <button class="tab" onclick="switchTab('logs',event)">Canli Loglar</button>
       </div>
 
@@ -114,6 +121,7 @@
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
     const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
+    const val=id=>document.getElementById(id)?.value||'';
     const d=v=>v?new Date(v).toLocaleString():'-';
     const subject=v=>SUBJECT_LABELS[v]||v||'-';
     const brevo=v=>BREVO_LABELS[v]||v||'-';
@@ -192,9 +200,140 @@
     }
     function stopLogs(){ if(!logEventSource) return; logEventSource.close(); logEventSource=null; }
 
+    function renderLegalEditor(item,updatedAt){
+      const footer=item?.footer||{};
+      const docs=item?.documents||{};
+      const privacy=docs.privacy||{};
+      const terms=docs.terms||{};
+      const c=document.getElementById('content');
+      c.innerHTML=`
+        <div class="legal-editor">
+          <div class="legal-status">Son guncelleme: ${updatedAt?d(updatedAt):'-'}</div>
+          <div class="legal-grid">
+            <div class="legal-field">
+              <label>Footer slogan</label>
+              <input id="legal_tagline" type="text" value="${esc(footer.tagline||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Gizlilik link etiketi</label>
+              <input id="legal_privacy_label" type="text" value="${esc(footer.privacyLabel||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Gizlilik link URL</label>
+              <input id="legal_privacy_url" type="text" value="${esc(footer.privacyUrl||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Sartlar link etiketi</label>
+              <input id="legal_terms_label" type="text" value="${esc(footer.termsLabel||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Sartlar link URL</label>
+              <input id="legal_terms_url" type="text" value="${esc(footer.termsUrl||'')}" />
+            </div>
+          </div>
+
+          <div class="legal-grid">
+            <div class="legal-field">
+              <label>Privacy TR baslik</label>
+              <input id="legal_privacy_tr_title" type="text" value="${esc(privacy?.tr?.title||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Privacy EN baslik</label>
+              <input id="legal_privacy_en_title" type="text" value="${esc(privacy?.en?.title||'')}" />
+            </div>
+          </div>
+          <div class="legal-grid">
+            <div class="legal-field">
+              <label>Privacy TR icerik</label>
+              <textarea id="legal_privacy_tr_content">${esc(privacy?.tr?.content||'')}</textarea>
+            </div>
+            <div class="legal-field">
+              <label>Privacy EN icerik</label>
+              <textarea id="legal_privacy_en_content">${esc(privacy?.en?.content||'')}</textarea>
+            </div>
+          </div>
+
+          <div class="legal-grid">
+            <div class="legal-field">
+              <label>Terms TR baslik</label>
+              <input id="legal_terms_tr_title" type="text" value="${esc(terms?.tr?.title||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Terms EN baslik</label>
+              <input id="legal_terms_en_title" type="text" value="${esc(terms?.en?.title||'')}" />
+            </div>
+          </div>
+          <div class="legal-grid">
+            <div class="legal-field">
+              <label>Terms TR icerik</label>
+              <textarea id="legal_terms_tr_content">${esc(terms?.tr?.content||'')}</textarea>
+            </div>
+            <div class="legal-field">
+              <label>Terms EN icerik</label>
+              <textarea id="legal_terms_en_content">${esc(terms?.en?.content||'')}</textarea>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:4px">
+            <button class="btn btn-refresh" onclick="saveLegalContent()">Kaydet</button>
+            <span id="legal-save-status" class="legal-status"></span>
+          </div>
+        </div>`;
+    }
+
+    function collectLegalPayload(){
+      return {
+        footer:{
+          tagline:val('legal_tagline'),
+          privacyLabel:val('legal_privacy_label'),
+          privacyUrl:val('legal_privacy_url'),
+          termsLabel:val('legal_terms_label'),
+          termsUrl:val('legal_terms_url')
+        },
+        documents:{
+          privacy:{
+            tr:{title:val('legal_privacy_tr_title'),content:val('legal_privacy_tr_content')},
+            en:{title:val('legal_privacy_en_title'),content:val('legal_privacy_en_content')}
+          },
+          terms:{
+            tr:{title:val('legal_terms_tr_title'),content:val('legal_terms_tr_content')},
+            en:{title:val('legal_terms_en_title'),content:val('legal_terms_en_content')}
+          }
+        }
+      };
+    }
+
+    async function loadLegalEditor(){
+      const c=document.getElementById('content');
+      c.innerHTML='<p style="padding:16px;color:#7f8c8d">Yasal metinler yukleniyor...</p>';
+      try{
+        const r=await fetch('/admin/legal'); const x=await r.json();
+        if(!r.ok) throw new Error(x.error||'Yasal metinler okunamadi.');
+        renderLegalEditor(x.item||{},x.updatedAt||null);
+      }catch(e){
+        c.innerHTML=`<p style="padding:16px;color:#c0392b">Yasal metinler yuklenemedi: ${esc(e.message||e)}</p>`;
+      }
+    }
+
+    async function saveLegalContent(){
+      const status=document.getElementById('legal-save-status');
+      if(status) status.innerText='Kaydediliyor...';
+      try{
+        const payload=collectLegalPayload();
+        const r=await fetch('/admin/legal',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Kayit basarisiz');
+        if(status) status.innerText=`Kaydedildi: ${d(x.updatedAt||new Date().toISOString())}`;
+      }catch(e){
+        if(status) status.innerText='Kayit basarisiz';
+        alert(`Yasal metinler kaydedilemedi: ${e.message}`);
+      }
+    }
+
     async function loadContent(){
       const c=document.getElementById('content'); c.innerHTML='<p style="padding:16px;color:#7f8c8d">Veri getiriliyor...</p>';
       try{
+        if(currentTab==='legal'){ await loadLegalEditor(); return; }
         const q=document.getElementById('search-input')?.value||'';
         const r=await fetch(`/admin/data?type=${currentTab}&q=${encodeURIComponent(q)}`); const x=await r.json(); const items=x.items||[];
         if(!items.length){ c.innerHTML='<p style="padding:16px">Kayit bulunamadi.</p>'; return; }

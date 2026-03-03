@@ -15,6 +15,7 @@ const pushRoutes = require('./routes/push');
 const supportRoutes = require('./routes/support');
 const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 const { shouldDebouncePush } = require('./utils/pushDebounce');
+const { fetchLegalSettings } = require('./utils/legalContent');
 
 // Ensure DB Tables
 // Ensure DB Tables
@@ -122,6 +123,14 @@ app.use('/api', profileRoutes); // Mounting profile under /api since it's logica
 app.use('/api/push', pushRoutes);
 app.use('/friends', friendsRoutes);
 app.use('/support', supportRoutes);
+app.get('/api/legal', async (req, res) => {
+    try {
+        const { item, updatedAt } = await fetchLegalSettings(pool);
+        res.json({ ...item, updatedAt });
+    } catch (e) {
+        res.status(500).json({ error: 'Legal icerik okunamadi.' });
+    }
+});
 
 app.get('/health', (req, res) => {
     res.json({ ok: true });

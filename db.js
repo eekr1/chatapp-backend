@@ -180,6 +180,12 @@ const createTablesQuery = `
     PRIMARY KEY (blocker_id, blocked_id)
   );
 
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
   -- Migration
   DO $$
   BEGIN
@@ -252,6 +258,44 @@ const createTablesQuery = `
       CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
         ON messages(sender_id, client_msg_id)
         WHERE client_msg_id IS NOT NULL;
+
+      INSERT INTO app_settings (key, value, updated_at)
+      VALUES (
+        'legal_content_v1',
+        jsonb_build_object(
+          'footer', jsonb_build_object(
+            'tagline', 'Kimligini gizle, ozgurce konus.',
+            'privacyLabel', 'Gizlilik Politikasi',
+            'privacyUrl', '/privacy-policy',
+            'termsLabel', 'Kullanim Sartlari',
+            'termsUrl', '/terms-of-use'
+          ),
+          'documents', jsonb_build_object(
+            'privacy', jsonb_build_object(
+              'tr', jsonb_build_object(
+                'title', 'Gizlilik Politikasi',
+                'content', E'Bu metin admin panelinden guncellenebilir.\n\nKisisel verilerinizi yalnizca hizmetin sunulmasi, guvenlik ve yasal yukumlulukler kapsaminda isleriz.'
+              ),
+              'en', jsonb_build_object(
+                'title', 'Privacy Policy',
+                'content', E'This text can be updated from the admin panel.\n\nWe process your personal data only for service delivery, security, and legal compliance.'
+              )
+            ),
+            'terms', jsonb_build_object(
+              'tr', jsonb_build_object(
+                'title', 'Kullanim Sartlari',
+                'content', E'Bu metin admin panelinden guncellenebilir.\n\nUygulamayi kullanarak topluluk kurallarina ve gecerli mevzuata uygun davranmayi kabul edersiniz.'
+              ),
+              'en', jsonb_build_object(
+                'title', 'Terms of Use',
+                'content', E'This text can be updated from the admin panel.\n\nBy using the app, you agree to follow community rules and applicable laws.'
+              )
+            )
+          )
+        ),
+        NOW()
+      )
+      ON CONFLICT (key) DO NOTHING;
 
       -- V13 Fix: Drop legacy FK constraints on conversations to allow Auth Users
       BEGIN
