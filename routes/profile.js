@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
-const { hashToken } = require('../utils/security');
+const { hashToken, comparePassword, hashPassword } = require('../utils/security');
 
 // Middleware to authenticate user
 const authenticate = async (req, res, next) => {
@@ -91,6 +91,48 @@ router.put('/me/profile', authenticate, async (req, res) => {
     } catch (e) {
         console.error(e);
         res.status(500).json({ error: 'Sunucu hatası.' });
+    }
+});
+
+// PUT /me/password - Change password
+router.put('/me/password', authenticate, async (req, res) => {
+    const currentPassword = String(req.body?.current_password || '');
+    const newPassword = String(req.body?.new_password || '');
+
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'Mevcut sifre ve yeni sifre gerekli.' });
+    }
+    if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Yeni sifre en az 6 karakter olmali.' });
+    }
+    if (currentPassword === newPassword) {
+        return res.status(400).json({ error: 'Yeni sifre mevcut sifre ile ayni olamaz.' });
+    }
+
+    try {
+        const userRes = await pool.query(
+            'SELECT password_hash FROM users WHERE id = $1',
+            [req.user.user_id]
+        );
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+        }
+
+        const isValidCurrent = await comparePassword(currentPassword, userRes.rows[0].password_hash);
+        if (!isValidCurrent) {
+            return res.status(401).json({ error: 'Mevcut sifre hatali.' });
+        }
+
+        const newHash = await hashPassword(newPassword);
+        await pool.query(
+            'UPDATE users SET password_hash = $1, last_seen_at = NOW() WHERE id = $2',
+            [newHash, req.user.user_id]
+        );
+
+        return res.json({ success: true, message: 'Sifre guncellendi.' });
+    } catch (e) {
+        console.error('Password change error:', e);
+        return res.status(500).json({ error: 'Sunucu hatasi.' });
     }
 });
 
