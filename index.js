@@ -17,10 +17,6 @@ const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 const { shouldDebouncePush } = require('./utils/pushDebounce');
 const { fetchLegalSettings } = require('./utils/legalContent');
 
-// Ensure DB Tables
-// Ensure DB Tables
-ensureTables();
-
 // Global State (Only Transients)
 // Connected clients mapping: clientId -> { ws, dbUserId, deviceId, isShadowBanned, nickname }
 const activeClients = new Map();
@@ -1672,7 +1668,17 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../chatapp-frontend/dist/index.html'));
 });
 
-server.listen(port, () => {
-    console.log(`Backend running on ${port}`);
-});
+const startServer = async () => {
+    try {
+        await ensureTables();
+        server.listen(port, () => {
+            console.log(`Backend running on ${port}`);
+        });
+    } catch (error) {
+        console.error('Fatal startup error: database initialization failed.', error);
+        process.exit(1);
+    }
+};
+
+startServer();
 

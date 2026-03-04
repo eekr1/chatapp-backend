@@ -255,6 +255,8 @@ const createTablesQuery = `
       CREATE INDEX IF NOT EXISTS idx_support_reports_brevo_status ON support_reports(brevo_status);
       CREATE INDEX IF NOT EXISTS idx_support_report_media_report_id ON support_report_media(report_id);
       CREATE INDEX IF NOT EXISTS idx_support_report_media_created_at ON support_report_media(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks(blocker_id);
+      CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks(blocked_id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
         ON messages(sender_id, client_msg_id)
         WHERE client_msg_id IS NOT NULL;
@@ -310,13 +312,15 @@ const createTablesQuery = `
 
 
 const ensureTables = async () => {
+  const client = await pool.connect();
   try {
-    const client = await pool.connect();
     await client.query(createTablesQuery);
     console.log('Database tables ensured.');
-    client.release();
   } catch (err) {
     console.error('Error creating tables:', err);
+    throw err;
+  } finally {
+    client.release();
   }
 };
 

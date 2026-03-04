@@ -28,14 +28,17 @@ const authenticate = async (req, res, next) => {
 
 router.use(authenticate);
 
-const removeFriendshipAndConversation = async (userAId, userBId) => {
-    await pool.query(`
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
+
+const removeFriendshipAndConversation = async (db, userAId, userBId) => {
+    await db.query(`
         DELETE FROM friendships
         WHERE ((user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1))
     `, [userAId, userBId]);
 
     try {
-        await pool.query(`
+        await db.query(`
             DELETE FROM conversations
             WHERE (user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1)
         `, [userAId, userBId]);
@@ -183,20 +186,34 @@ router.post('/block', async (req, res) => {
     const myId = req.user.user_id;
     const { target_user_id } = req.body;
 
-    if (!target_user_id) return res.status(400).json({ error: 'Hedef kullanici gerekli.' });
-    if (target_user_id === myId) return res.status(400).json({ error: 'Kendini engelleyemezsin.' });
+    if (!target_user_id) {
+        return res.status(400).json({ error: 'Hedef kullanici gerekli.', code: 'INVALID_TARGET_ID' });
+    }
+    if (!isUuid(target_user_id)) {
+        return res.status(400).json({ error: 'Gecersiz hedef kullanici kimligi.', code: 'INVALID_TARGET_ID' });
+    }
+    if (target_user_id === myId) {
+        return res.status(400).json({ error: 'Kendini engelleyemezsin.', code: 'INVALID_TARGET_ID' });
+    }
 
+    const db = await pool.connect();
     try {
-        const targetRes = await pool.query('SELECT id FROM users WHERE id = $1', [target_user_id]);
-        if (targetRes.rows.length === 0) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+        await db.query('BEGIN');
 
-        await pool.query(`
+        const targetRes = await db.query('SELECT id FROM users WHERE id = $1', [target_user_id]);
+        if (targetRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+        }
+
+        await db.query(`
             INSERT INTO blocks (blocker_id, blocked_id)
             VALUES ($1, $2)
             ON CONFLICT DO NOTHING
         `, [myId, target_user_id]);
 
-        await removeFriendshipAndConversation(myId, target_user_id);
+        await removeFriendshipAndConversation(db, myId, target_user_id);
+        await db.query('COMMIT');
 
         if (req.notifyUser) {
             req.notifyUser(myId, { type: 'friend_refresh' });
@@ -205,8 +222,28 @@ router.post('/block', async (req, res) => {
 
         res.json({ success: true, message: 'Kullanici engellendi.' });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Sunucu hatasi.' });
+        try {
+            await db.query('ROLLBACK');
+        } catch {
+            // Ignore rollback errors.
+        }
+        console.error('friends:block failed', {
+            endpoint: '/friends/block',
+            actorUserId: myId,
+            targetUserId: target_user_id,
+            pgCode: e?.code || null,
+            message: e?.message || String(e)
+        });
+
+        if (e?.code === '22P02') {
+            return res.status(400).json({ error: 'Gecersiz hedef kullanici kimligi.', code: 'INVALID_TARGET_ID' });
+        }
+        if (e?.code === '42P01') {
+            return res.status(500).json({ error: 'Veritabani semasi hazir degil.', code: 'SCHEMA_NOT_READY' });
+        }
+        res.status(500).json({ error: 'Engelleme islemi su anda tamamlanamadi.', code: 'BLOCK_OPERATION_FAILED' });
+    } finally {
+        db.release();
     }
 });
 
@@ -215,8 +252,15 @@ router.post('/unblock', async (req, res) => {
     const myId = req.user.user_id;
     const { target_user_id } = req.body;
 
-    if (!target_user_id) return res.status(400).json({ error: 'Hedef kullanici gerekli.' });
-    if (target_user_id === myId) return res.status(400).json({ error: 'Gecersiz islem.' });
+    if (!target_user_id) {
+        return res.status(400).json({ error: 'Hedef kullanici gerekli.', code: 'INVALID_TARGET_ID' });
+    }
+    if (!isUuid(target_user_id)) {
+        return res.status(400).json({ error: 'Gecersiz hedef kullanici kimligi.', code: 'INVALID_TARGET_ID' });
+    }
+    if (target_user_id === myId) {
+        return res.status(400).json({ error: 'Gecersiz islem.', code: 'INVALID_TARGET_ID' });
+    }
 
     try {
         await pool.query(
@@ -231,8 +275,21 @@ router.post('/unblock', async (req, res) => {
 
         res.json({ success: true, message: 'Engel kaldirildi.' });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Sunucu hatasi.' });
+        console.error('friends:unblock failed', {
+            endpoint: '/friends/unblock',
+            actorUserId: myId,
+            targetUserId: target_user_id,
+            pgCode: e?.code || null,
+            message: e?.message || String(e)
+        });
+
+        if (e?.code === '22P02') {
+            return res.status(400).json({ error: 'Gecersiz hedef kullanici kimligi.', code: 'INVALID_TARGET_ID' });
+        }
+        if (e?.code === '42P01') {
+            return res.status(500).json({ error: 'Veritabani semasi hazir degil.', code: 'SCHEMA_NOT_READY' });
+        }
+        res.status(500).json({ error: 'Engel kaldirma islemi su anda tamamlanamadi.', code: 'BLOCK_OPERATION_FAILED' });
     }
 });
 
@@ -343,7 +400,7 @@ router.delete('/:friendId', async (req, res) => {
     const myId = req.user.user_id;
 
     try {
-        await removeFriendshipAndConversation(myId, friendId);
+        await removeFriendshipAndConversation(pool, myId, friendId);
         res.json({ success: true, message: 'Arkadas silindi.' });
     } catch (e) {
         console.error(e);
