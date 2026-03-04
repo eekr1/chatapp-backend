@@ -174,6 +174,7 @@ const createTablesQuery = `
   );
 
   CREATE TABLE IF NOT EXISTS blocks (
+    -- Intentionally no foreign keys: this table stores both auth users and anon users UUIDs.
     blocker_id UUID,
     blocked_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -188,11 +189,26 @@ const createTablesQuery = `
 
   -- Migration
   DO $$
+  DECLARE
+      _blocks_fk RECORD;
   BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users_anon' AND column_name='nickname') THEN
           ALTER TABLE users_anon ADD COLUMN nickname TEXT;
           ALTER TABLE users_anon ADD COLUMN nickname_set_at TIMESTAMPTZ;
       END IF;
+
+      -- Shared blocks model: drop legacy FK constraints so auth + anon IDs can coexist.
+      FOR _blocks_fk IN
+          SELECT c.conname
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE c.contype = 'f'
+            AND t.relname = 'blocks'
+            AND n.nspname = current_schema()
+      LOOP
+          EXECUTE format('ALTER TABLE blocks DROP CONSTRAINT IF EXISTS %I', _blocks_fk.conname);
+      END LOOP;
       
       CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
       CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_user_id);

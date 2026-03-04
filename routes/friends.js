@@ -241,6 +241,9 @@ router.post('/block', async (req, res) => {
         if (e?.code === '42P01') {
             return res.status(500).json({ error: 'Veritabani semasi hazir degil.', code: 'SCHEMA_NOT_READY' });
         }
+        if (e?.code === '23503') {
+            return res.status(500).json({ error: 'Veritabani blok semasi uyumsuz.', code: 'SCHEMA_NOT_READY' });
+        }
         res.status(500).json({ error: 'Engelleme islemi su anda tamamlanamadi.', code: 'BLOCK_OPERATION_FAILED' });
     } finally {
         db.release();
@@ -288,6 +291,9 @@ router.post('/unblock', async (req, res) => {
         }
         if (e?.code === '42P01') {
             return res.status(500).json({ error: 'Veritabani semasi hazir degil.', code: 'SCHEMA_NOT_READY' });
+        }
+        if (e?.code === '23503') {
+            return res.status(500).json({ error: 'Veritabani blok semasi uyumsuz.', code: 'SCHEMA_NOT_READY' });
         }
         res.status(500).json({ error: 'Engel kaldirma islemi su anda tamamlanamadi.', code: 'BLOCK_OPERATION_FAILED' });
     }
