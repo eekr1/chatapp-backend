@@ -54,7 +54,6 @@ const isTelemetryCandidatePath = (pathName = '/') => (
     || pathName.startsWith('/auth')
     || pathName.startsWith('/friends')
     || pathName.startsWith('/support')
-    || pathName.startsWith('/admin')
 );
 
 const isTelemetryExcludedPath = (pathName = '/') => {

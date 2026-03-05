@@ -384,6 +384,11 @@ const createTablesQuery = `
       CREATE INDEX IF NOT EXISTS idx_http_request_events_status_created_at ON http_request_events(status, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_http_request_metrics_minute_bucket ON http_request_metrics_minute(bucket_minute DESC);
       CREATE INDEX IF NOT EXISTS idx_http_request_metrics_minute_route_bucket ON http_request_metrics_minute(route, bucket_minute DESC);
+
+      -- One-time cleanup: remove admin panel traffic from telemetry history.
+      DELETE FROM http_request_events WHERE route LIKE '/admin%';
+      DELETE FROM http_request_metrics_minute WHERE route LIKE '/admin%';
+
       CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
         ON messages(sender_id, client_msg_id)
         WHERE client_msg_id IS NOT NULL;
