@@ -3,10 +3,11 @@ const router = express.Router();
 const { pool } = require('../db');
 const { hashToken } = require('../utils/security');
 const { calculateLegalStatus } = require('../utils/legalAcceptance');
+const { sendApiError, t, resolveRequestLang } = require('../utils/i18n');
 
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Oturum gerekli.' });
+    if (!authHeader) return sendApiError(req, res, 401, 'AUTH_REQUIRED');
 
     const token = authHeader.replace('Bearer ', '');
     const tokenHash = hashToken(token);
@@ -19,15 +20,15 @@ const authenticate = async (req, res, next) => {
             WHERE s.token_hash = $1 AND s.expires_at > NOW()
         `, [tokenHash]);
 
-        if (result.rows.length === 0) return res.status(401).json({ error: 'Oturum gecersiz.' });
+        if (result.rows.length === 0) return sendApiError(req, res, 401, 'AUTH_INVALID');
         if (result.rows[0].status !== 'active') {
-            return res.status(403).json({ error: 'Hesap aktif degil.' });
+            return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
         }
         const sessionUser = result.rows[0];
         const legalStatus = await calculateLegalStatus(pool, sessionUser.user_id);
         if (legalStatus.requiresReaccept) {
             return res.status(428).json({
-                error: 'Guncel kullanim sartlari ve gizlilik politikasi kabul edilmelidir.',
+                error: t(resolveRequestLang(req), 'errors.LEGAL_REACCEPT_REQUIRED', {}, 'Legal reaccept required.'),
                 code: 'LEGAL_REACCEPT_REQUIRED',
                 required_versions: legalStatus.required,
                 accepted_versions: legalStatus.accepted
@@ -36,7 +37,7 @@ const authenticate = async (req, res, next) => {
         req.user = sessionUser;
         next();
     } catch (e) {
-        res.status(500).json({ error: 'Hata.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 };
 
@@ -64,7 +65,7 @@ const removeFriendshipAndConversation = async (db, userAId, userBId) => {
 // Send Friend Request
 router.post('/request', async (req, res) => {
     const { target_username } = req.body;
-    if (!target_username) return res.status(400).json({ error: 'Kullanici adi gerekli.' });
+    if (!target_username) return sendApiError(req, res, 400, 'INVALID_INPUT');
 
     const myId = req.user.user_id;
 
@@ -72,15 +73,15 @@ router.post('/request', async (req, res) => {
         const targetRes = await pool.query('SELECT id FROM users WHERE username = $1', [target_username.toLowerCase()]);
         const target = targetRes.rows[0];
 
-        if (!target) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
-        if (target.id === myId) return res.status(400).json({ error: 'Kendine istek atamazsin.' });
+        if (!target) return sendApiError(req, res, 404, 'USER_NOT_FOUND');
+        if (target.id === myId) return sendApiError(req, res, 400, 'INVALID_INPUT');
 
         const blockCheck = await pool.query(`
             SELECT 1 FROM blocks
             WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)
         `, [myId, target.id]);
         if (blockCheck.rows.length > 0) {
-            return res.status(403).json({ error: 'Bu kullanici ile etkilesime gecemezsiniz.' });
+            return sendApiError(req, res, 403, 'INVALID_INPUT');
         }
 
         const exists = await pool.query(`
@@ -91,13 +92,13 @@ router.post('/request', async (req, res) => {
         if (exists.rows.length > 0) {
             const friendship = exists.rows[0];
             if (friendship.status === 'accepted') {
-                return res.status(400).json({ error: 'Zaten arkadassiniz.' });
+                return sendApiError(req, res, 400, 'ALREADY_FRIENDS');
             }
             if (friendship.status === 'pending') {
                 if (friendship.user_id === myId) {
-                    return res.status(400).json({ error: 'Istek zaten gonderilmis.' });
+                    return sendApiError(req, res, 400, 'FRIEND_REQUEST_ALREADY_SENT');
                 }
-                return res.status(400).json({ error: 'Bu kullanici zaten sana istek atmis. Istekleri kontrol et.' });
+                return sendApiError(req, res, 400, 'FRIEND_REQUEST_ALREADY_RECEIVED');
             }
         }
 
@@ -110,10 +111,10 @@ router.post('/request', async (req, res) => {
             req.notifyUser(target.id, { type: 'friend_refresh' });
         }
 
-        res.json({ success: true, message: 'Istek gonderildi.' });
+        res.json({ success: true, code: 'FRIEND_REQUEST_SENT' });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -166,7 +167,7 @@ router.get('/list', async (req, res) => {
         res.json({ success: true, friends, incoming, outgoing });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -191,7 +192,7 @@ router.get('/blocked', async (req, res) => {
         res.json({ success: true, blocked: result.rows });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -201,13 +202,13 @@ router.post('/block', async (req, res) => {
     const { target_user_id } = req.body;
 
     if (!target_user_id) {
-        return res.status(400).json({ error: 'Hedef kullanici gerekli.', code: 'INVALID_TARGET_ID' });
+        return sendApiError(req, res, 400, 'INVALID_TARGET_ID');
     }
     if (!isUuid(target_user_id)) {
-        return res.status(400).json({ error: 'Gecersiz hedef kullanici kimligi.', code: 'INVALID_TARGET_ID' });
+        return sendApiError(req, res, 400, 'INVALID_TARGET_ID');
     }
     if (target_user_id === myId) {
-        return res.status(400).json({ error: 'Kendini engelleyemezsin.', code: 'INVALID_TARGET_ID' });
+        return sendApiError(req, res, 400, 'SELF_ACTION_NOT_ALLOWED');
     }
 
     const db = await pool.connect();
@@ -217,7 +218,7 @@ router.post('/block', async (req, res) => {
         const targetRes = await db.query('SELECT id FROM users WHERE id = $1', [target_user_id]);
         if (targetRes.rows.length === 0) {
             await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+            return sendApiError(req, res, 404, 'USER_NOT_FOUND');
         }
 
         await db.query(`
@@ -234,7 +235,7 @@ router.post('/block', async (req, res) => {
             req.notifyUser(target_user_id, { type: 'friend_refresh' });
         }
 
-        res.json({ success: true, message: 'Kullanici engellendi.' });
+        res.json({ success: true, code: 'BLOCKED' });
     } catch (e) {
         try {
             await db.query('ROLLBACK');
@@ -250,15 +251,15 @@ router.post('/block', async (req, res) => {
         });
 
         if (e?.code === '22P02') {
-            return res.status(400).json({ error: 'Gecersiz hedef kullanici kimligi.', code: 'INVALID_TARGET_ID' });
+            return sendApiError(req, res, 400, 'INVALID_TARGET_ID');
         }
         if (e?.code === '42P01') {
-            return res.status(500).json({ error: 'Veritabani semasi hazir degil.', code: 'SCHEMA_NOT_READY' });
+            return sendApiError(req, res, 500, 'SCHEMA_NOT_READY');
         }
         if (e?.code === '23503') {
-            return res.status(500).json({ error: 'Veritabani blok semasi uyumsuz.', code: 'SCHEMA_NOT_READY' });
+            return sendApiError(req, res, 500, 'SCHEMA_NOT_READY');
         }
-        res.status(500).json({ error: 'Engelleme islemi su anda tamamlanamadi.', code: 'BLOCK_OPERATION_FAILED' });
+        return sendApiError(req, res, 500, 'BLOCK_OPERATION_FAILED');
     } finally {
         db.release();
     }
@@ -270,13 +271,13 @@ router.post('/unblock', async (req, res) => {
     const { target_user_id } = req.body;
 
     if (!target_user_id) {
-        return res.status(400).json({ error: 'Hedef kullanici gerekli.', code: 'INVALID_TARGET_ID' });
+        return sendApiError(req, res, 400, 'INVALID_TARGET_ID');
     }
     if (!isUuid(target_user_id)) {
-        return res.status(400).json({ error: 'Gecersiz hedef kullanici kimligi.', code: 'INVALID_TARGET_ID' });
+        return sendApiError(req, res, 400, 'INVALID_TARGET_ID');
     }
     if (target_user_id === myId) {
-        return res.status(400).json({ error: 'Gecersiz islem.', code: 'INVALID_TARGET_ID' });
+        return sendApiError(req, res, 400, 'SELF_ACTION_NOT_ALLOWED');
     }
 
     try {
@@ -290,7 +291,7 @@ router.post('/unblock', async (req, res) => {
             req.notifyUser(target_user_id, { type: 'friend_refresh' });
         }
 
-        res.json({ success: true, message: 'Engel kaldirildi.' });
+        res.json({ success: true, code: 'UNBLOCKED' });
     } catch (e) {
         console.error('friends:unblock failed', {
             endpoint: '/friends/unblock',
@@ -301,15 +302,15 @@ router.post('/unblock', async (req, res) => {
         });
 
         if (e?.code === '22P02') {
-            return res.status(400).json({ error: 'Gecersiz hedef kullanici kimligi.', code: 'INVALID_TARGET_ID' });
+            return sendApiError(req, res, 400, 'INVALID_TARGET_ID');
         }
         if (e?.code === '42P01') {
-            return res.status(500).json({ error: 'Veritabani semasi hazir degil.', code: 'SCHEMA_NOT_READY' });
+            return sendApiError(req, res, 500, 'SCHEMA_NOT_READY');
         }
         if (e?.code === '23503') {
-            return res.status(500).json({ error: 'Veritabani blok semasi uyumsuz.', code: 'SCHEMA_NOT_READY' });
+            return sendApiError(req, res, 500, 'SCHEMA_NOT_READY');
         }
-        res.status(500).json({ error: 'Engel kaldirma islemi su anda tamamlanamadi.', code: 'BLOCK_OPERATION_FAILED' });
+        return sendApiError(req, res, 500, 'BLOCK_OPERATION_FAILED');
     }
 });
 
@@ -326,17 +327,17 @@ router.post('/accept', async (req, res) => {
             RETURNING *
         `, [request_user_id, myId]);
 
-        if (result.rows.length === 0) return res.status(404).json({ error: 'Istek bulunamadi.' });
+        if (result.rows.length === 0) return sendApiError(req, res, 404, 'REQUEST_NOT_FOUND');
 
         if (req.notifyUser) {
             req.notifyUser(request_user_id, { type: 'friend_refresh' });
             req.notifyUser(myId, { type: 'friend_refresh' });
         }
 
-        res.json({ success: true, message: 'Kabul edildi.' });
+        res.json({ success: true, code: 'REQUEST_ACCEPTED' });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: 'Hata.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -351,10 +352,10 @@ router.post('/reject', async (req, res) => {
             WHERE ((user_id = $1 AND friend_user_id = $2) OR (user_id = $2 AND friend_user_id = $1))
         `, [myId, target_user_id]);
 
-        res.json({ success: true, message: 'Iliski silindi / reddedildi.' });
+        res.json({ success: true, code: 'REQUEST_REJECTED' });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: 'Hata.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -410,7 +411,7 @@ router.get('/history/:friendId', async (req, res) => {
         `, [myId, friendId]).catch((e) => console.error('Mark read error', e));
     } catch (e) {
         console.error('History API error:', e);
-        res.status(500).json({ error: 'Gecmis yuklenemedi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -421,10 +422,10 @@ router.delete('/:friendId', async (req, res) => {
 
     try {
         await removeFriendshipAndConversation(pool, myId, friendId);
-        res.json({ success: true, message: 'Arkadas silindi.' });
+        res.json({ success: true, code: 'FRIEND_DELETED' });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: 'Hata.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 

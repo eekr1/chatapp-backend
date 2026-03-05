@@ -211,6 +211,9 @@
 
     function renderLegalEditor(item,updatedAt){
       const footer=item?.footer||{};
+      const footerUrls=footer?.urls||{};
+      const footerTr=footer?.tr||{};
+      const footerEn=footer?.en||{};
       const versions=item?.versions||{};
       const docs=item?.documents||{};
       const privacy=docs.privacy||{};
@@ -222,24 +225,36 @@
           <div id="legal-placeholder-warning" class="warn" style="display:none"></div>
           <div class="legal-grid">
             <div class="legal-field">
-              <label>Footer slogan</label>
-              <input id="legal_tagline" type="text" value="${esc(footer.tagline||'')}" />
+              <label>Footer TR slogan</label>
+              <input id="legal_footer_tr_tagline" type="text" value="${esc(footerTr.tagline||'')}" />
             </div>
             <div class="legal-field">
-              <label>Gizlilik link etiketi</label>
-              <input id="legal_privacy_label" type="text" value="${esc(footer.privacyLabel||'')}" />
+              <label>Footer TR gizlilik etiketi</label>
+              <input id="legal_footer_tr_privacy_label" type="text" value="${esc(footerTr.privacyLabel||'')}" />
             </div>
             <div class="legal-field">
-              <label>Gizlilik link URL</label>
-              <input id="legal_privacy_url" type="text" value="${esc(footer.privacyUrl||'')}" />
+              <label>Footer TR sartlar etiketi</label>
+              <input id="legal_footer_tr_terms_label" type="text" value="${esc(footerTr.termsLabel||'')}" />
             </div>
             <div class="legal-field">
-              <label>Sartlar link etiketi</label>
-              <input id="legal_terms_label" type="text" value="${esc(footer.termsLabel||'')}" />
+              <label>Footer EN tagline</label>
+              <input id="legal_footer_en_tagline" type="text" value="${esc(footerEn.tagline||'')}" />
             </div>
             <div class="legal-field">
-              <label>Sartlar link URL</label>
-              <input id="legal_terms_url" type="text" value="${esc(footer.termsUrl||'')}" />
+              <label>Footer EN privacy label</label>
+              <input id="legal_footer_en_privacy_label" type="text" value="${esc(footerEn.privacyLabel||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Footer EN terms label</label>
+              <input id="legal_footer_en_terms_label" type="text" value="${esc(footerEn.termsLabel||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Gizlilik URL</label>
+              <input id="legal_footer_url_privacy" type="text" value="${esc(footerUrls.privacy||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Sartlar URL</label>
+              <input id="legal_footer_url_terms" type="text" value="${esc(footerUrls.terms||'')}" />
             </div>
           </div>
 
@@ -319,7 +334,12 @@
       if(!host) return;
       const payload=collectLegalPayload();
       const texts=[
-        payload?.footer?.tagline,
+        payload?.footer?.tr?.tagline,
+        payload?.footer?.tr?.privacyLabel,
+        payload?.footer?.tr?.termsLabel,
+        payload?.footer?.en?.tagline,
+        payload?.footer?.en?.privacyLabel,
+        payload?.footer?.en?.termsLabel,
         payload?.documents?.privacy?.tr?.title,
         payload?.documents?.privacy?.tr?.content,
         payload?.documents?.privacy?.en?.title,
@@ -342,11 +362,20 @@
     function collectLegalPayload(){
       return {
         footer:{
-          tagline:val('legal_tagline'),
-          privacyLabel:val('legal_privacy_label'),
-          privacyUrl:val('legal_privacy_url'),
-          termsLabel:val('legal_terms_label'),
-          termsUrl:val('legal_terms_url')
+          urls:{
+            privacy:val('legal_footer_url_privacy'),
+            terms:val('legal_footer_url_terms')
+          },
+          tr:{
+            tagline:val('legal_footer_tr_tagline'),
+            privacyLabel:val('legal_footer_tr_privacy_label'),
+            termsLabel:val('legal_footer_tr_terms_label')
+          },
+          en:{
+            tagline:val('legal_footer_en_tagline'),
+            privacyLabel:val('legal_footer_en_privacy_label'),
+            termsLabel:val('legal_footer_en_terms_label')
+          }
         },
         versions:{
           terms:val('legal_terms_version'),

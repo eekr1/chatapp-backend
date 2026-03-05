@@ -2,11 +2,20 @@ const LEGAL_SETTINGS_KEY = 'legal_content_v1';
 
 const DEFAULT_LEGAL_CONTENT = Object.freeze({
     footer: Object.freeze({
-        tagline: 'Kimligini gizle, ozgurce konus.',
-        privacyLabel: 'Gizlilik Politikasi',
-        privacyUrl: '/privacy-policy',
-        termsLabel: 'Kullanim Sartlari',
-        termsUrl: '/terms-of-use'
+        urls: Object.freeze({
+            privacy: '/privacy-policy',
+            terms: '/terms-of-use'
+        }),
+        tr: Object.freeze({
+            tagline: 'Kimligini gizle, ozgurce konus.',
+            privacyLabel: 'Gizlilik Politikasi',
+            termsLabel: 'Kullanim Sartlari'
+        }),
+        en: Object.freeze({
+            tagline: 'Hide your identity, speak freely.',
+            privacyLabel: 'Privacy Policy',
+            termsLabel: 'Terms of Use'
+        })
     }),
     versions: Object.freeze({
         terms: 'v1',
@@ -73,6 +82,15 @@ const isValidLegalUrl = (value) => {
     return /^https:\/\/[^\s]+$/i.test(trimmed);
 };
 
+const normalizeFooterLang = (value, fallback) => {
+    const source = isObject(value) ? value : {};
+    return {
+        tagline: normalizeText(source.tagline, fallback.tagline),
+        privacyLabel: normalizeText(source.privacyLabel, fallback.privacyLabel),
+        termsLabel: normalizeText(source.termsLabel, fallback.termsLabel)
+    };
+};
+
 const normalizeDocLang = (value, fallback) => {
     const source = isObject(value) ? value : {};
     return {
@@ -96,16 +114,37 @@ const normalizeLegalContent = (value) => {
     const versionsSource = isObject(source.versions) ? source.versions : {};
     const docsSource = isObject(source.documents) ? source.documents : {};
 
-    const privacyUrl = normalizeText(footerSource.privacyUrl, defaults.footer.privacyUrl);
-    const termsUrl = normalizeText(footerSource.termsUrl, defaults.footer.termsUrl);
+    const legacyPrivacyUrl = normalizeText(footerSource.privacyUrl, '');
+    const legacyTermsUrl = normalizeText(footerSource.termsUrl, '');
+
+    const urlsSource = isObject(footerSource.urls)
+        ? footerSource.urls
+        : {
+            privacy: legacyPrivacyUrl || defaults.footer.urls.privacy,
+            terms: legacyTermsUrl || defaults.footer.urls.terms
+        };
+
+    const privacyUrl = normalizeText(urlsSource.privacy, defaults.footer.urls.privacy);
+    const termsUrl = normalizeText(urlsSource.terms, defaults.footer.urls.terms);
+
+    // Backward compatibility: old single footer fields map to TR.
+    const legacyTrFallback = {
+        tagline: normalizeText(footerSource.tagline, defaults.footer.tr.tagline),
+        privacyLabel: normalizeText(footerSource.privacyLabel, defaults.footer.tr.privacyLabel),
+        termsLabel: normalizeText(footerSource.termsLabel, defaults.footer.tr.termsLabel)
+    };
+
+    const trSource = isObject(footerSource.tr) ? footerSource.tr : legacyTrFallback;
+    const enSource = isObject(footerSource.en) ? footerSource.en : {};
 
     return {
         footer: {
-            tagline: normalizeText(footerSource.tagline, defaults.footer.tagline),
-            privacyLabel: normalizeText(footerSource.privacyLabel, defaults.footer.privacyLabel),
-            privacyUrl: isValidLegalUrl(privacyUrl) ? privacyUrl : defaults.footer.privacyUrl,
-            termsLabel: normalizeText(footerSource.termsLabel, defaults.footer.termsLabel),
-            termsUrl: isValidLegalUrl(termsUrl) ? termsUrl : defaults.footer.termsUrl
+            urls: {
+                privacy: isValidLegalUrl(privacyUrl) ? privacyUrl : defaults.footer.urls.privacy,
+                terms: isValidLegalUrl(termsUrl) ? termsUrl : defaults.footer.urls.terms
+            },
+            tr: normalizeFooterLang(trSource, defaults.footer.tr),
+            en: normalizeFooterLang(enSource, defaults.footer.en)
         },
         versions: {
             terms: normalizeVersion(versionsSource.terms, defaults.versions.terms),
@@ -131,11 +170,14 @@ const validateLegalContentPayload = (value) => {
     }
 
     const rawChecks = [
-        [source?.footer?.tagline, 'Footer slogan'],
-        [source?.footer?.privacyLabel, 'Gizlilik link etiketi'],
-        [source?.footer?.privacyUrl, 'Gizlilik link URL'],
-        [source?.footer?.termsLabel, 'Sartlar link etiketi'],
-        [source?.footer?.termsUrl, 'Sartlar link URL'],
+        [source?.footer?.urls?.privacy || source?.footer?.privacyUrl, 'Gizlilik URL'],
+        [source?.footer?.urls?.terms || source?.footer?.termsUrl, 'Sartlar URL'],
+        [source?.footer?.tr?.tagline || source?.footer?.tagline, 'Footer TR slogan'],
+        [source?.footer?.tr?.privacyLabel || source?.footer?.privacyLabel, 'Footer TR gizlilik etiketi'],
+        [source?.footer?.tr?.termsLabel || source?.footer?.termsLabel, 'Footer TR sartlar etiketi'],
+        [source?.footer?.en?.tagline, 'Footer EN tagline'],
+        [source?.footer?.en?.privacyLabel, 'Footer EN privacy label'],
+        [source?.footer?.en?.termsLabel, 'Footer EN terms label'],
         [source?.versions?.terms, 'Terms versiyon'],
         [source?.versions?.privacy, 'Privacy versiyon'],
         [source?.documents?.privacy?.tr?.title, 'Privacy TR baslik'],
@@ -156,19 +198,22 @@ const validateLegalContentPayload = (value) => {
 
     const normalized = normalizeLegalContent(value);
 
-    if (!isValidLegalUrl(normalized.footer.privacyUrl)) {
+    if (!isValidLegalUrl(normalized.footer.urls.privacy)) {
         return { ok: false, error: 'Gizlilik URL gecersiz. Sadece /... veya https://... kabul edilir.' };
     }
-    if (!isValidLegalUrl(normalized.footer.termsUrl)) {
+    if (!isValidLegalUrl(normalized.footer.urls.terms)) {
         return { ok: false, error: 'Sartlar URL gecersiz. Sadece /... veya https://... kabul edilir.' };
     }
 
     const lengthChecks = [
-        [normalized.footer.tagline, LIMITS.tagline, 'Footer slogan'],
-        [normalized.footer.privacyLabel, LIMITS.label, 'Gizlilik link etiketi'],
-        [normalized.footer.privacyUrl, LIMITS.url, 'Gizlilik link URL'],
-        [normalized.footer.termsLabel, LIMITS.label, 'Sartlar link etiketi'],
-        [normalized.footer.termsUrl, LIMITS.url, 'Sartlar link URL'],
+        [normalized.footer.urls.privacy, LIMITS.url, 'Gizlilik URL'],
+        [normalized.footer.urls.terms, LIMITS.url, 'Sartlar URL'],
+        [normalized.footer.tr.tagline, LIMITS.tagline, 'Footer TR slogan'],
+        [normalized.footer.tr.privacyLabel, LIMITS.label, 'Footer TR gizlilik etiketi'],
+        [normalized.footer.tr.termsLabel, LIMITS.label, 'Footer TR sartlar etiketi'],
+        [normalized.footer.en.tagline, LIMITS.tagline, 'Footer EN tagline'],
+        [normalized.footer.en.privacyLabel, LIMITS.label, 'Footer EN privacy label'],
+        [normalized.footer.en.termsLabel, LIMITS.label, 'Footer EN terms label'],
         [normalized.versions.terms, LIMITS.version, 'Terms versiyon'],
         [normalized.versions.privacy, LIMITS.version, 'Privacy versiyon'],
         [normalized.documents.privacy.tr.title, LIMITS.title, 'Privacy TR baslik'],

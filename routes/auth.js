@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../db');
 const { hashPassword, comparePassword, generateSessionToken, hashToken } = require('../utils/security');
 const { fetchLegalSettings } = require('../utils/legalContent');
+const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
 
 const getClientIp = (req) => {
     const forwarded = req.headers['x-forwarded-for'];
@@ -22,28 +23,27 @@ router.post('/register', async (req, res) => {
         privacy_version
     } = req.body || {};
 
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Kullanici adi ve sifre gerekli.' });
-    }
+    const lang = resolveRequestLang(req);
+    if (!username || !password) return sendApiError(req, res, 400, 'INVALID_INPUT');
 
     const cleanUsername = String(username).trim().toLowerCase();
     if (cleanUsername.length < 3) {
-        return res.status(400).json({ error: 'Kullanici adi en az 3 karakter olmali.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
     if (String(password).length < 6) {
-        return res.status(400).json({ error: 'Sifre en az 6 karakter olmali.' });
+        return sendApiError(req, res, 400, 'WEAK_PASSWORD');
     }
     if (!/^[a-z0-9_]+$/.test(cleanUsername)) {
-        return res.status(400).json({ error: 'Kullanici adi sadece harf, rakam ve alt cizgi icerebilir.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
     if (terms_accepted !== true) {
-        return res.status(400).json({ error: 'Kayit icin kullanim sartlari ve gizlilik politikasi kabul edilmelidir.' });
+        return sendApiError(req, res, 400, 'LEGAL_ACCEPT_REQUIRED');
     }
 
     const submittedTermsVersion = String(terms_version || '').trim();
     const submittedPrivacyVersion = String(privacy_version || '').trim();
     if (!submittedTermsVersion || !submittedPrivacyVersion) {
-        return res.status(400).json({ error: 'Sozlesme versiyon bilgisi eksik.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     try {
@@ -55,9 +55,10 @@ router.post('/register', async (req, res) => {
             submittedTermsVersion !== expectedTermsVersion
             || submittedPrivacyVersion !== expectedPrivacyVersion
         ) {
-            return res.status(400).json({ error: 'Sozlesme versiyonu guncel degil. Lutfen sayfayi yenileyip tekrar deneyin.' });
+            return sendApiError(req, res, 400, 'LEGAL_VERSION_MISMATCH');
         }
 
+        const requestedLocale = normalizeLang(req.body?.locale || req.headers['x-talkx-lang'] || lang, 'en');
         const hashedPassword = await hashPassword(String(password));
         const requestIp = getClientIp(req);
         const requestUserAgent = String(req.headers['user-agent'] || '').trim().slice(0, 400) || null;
@@ -73,8 +74,8 @@ router.post('/register', async (req, res) => {
             const user = userRes.rows[0];
 
             await client.query(
-                'INSERT INTO profiles (user_id, display_name) VALUES ($1, $2)',
-                [user.id, user.username]
+                'INSERT INTO profiles (user_id, display_name, locale) VALUES ($1, $2, $3)',
+                [user.id, user.username, requestedLocale]
             );
 
             await client.query(
@@ -85,7 +86,14 @@ router.post('/register', async (req, res) => {
             );
 
             await client.query('COMMIT');
-            return res.json({ success: true, user: { id: user.id, username: user.username } });
+            return res.json({
+                success: true,
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    locale: requestedLocale
+                }
+            });
         } catch (e) {
             await client.query('ROLLBACK');
             throw e;
@@ -94,32 +102,45 @@ router.post('/register', async (req, res) => {
         }
     } catch (e) {
         if (e.code === '23505') {
-            return res.status(409).json({ error: 'Bu kullanici adi zaten alinmis.' });
+            return res.status(409).json({
+                error: lang === 'tr' ? 'Bu kullanici adi zaten alinmis.' : 'This username is already taken.',
+                code: 'USERNAME_TAKEN'
+            });
         }
         console.error('Register Error:', e);
-        return res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
 // Login
 router.post('/login', async (req, res) => {
+    const lang = resolveRequestLang(req);
     const { username, password, device_id } = req.body || {};
-    if (!username || !password) return res.status(400).json({ error: 'Eksik bilgi.' });
+    if (!username || !password) return sendApiError(req, res, 400, 'INVALID_INPUT');
 
     const cleanUsername = String(username).trim().toLowerCase();
 
     try {
-        const userRes = await pool.query('SELECT * FROM users WHERE username = $1', [cleanUsername]);
+        const userRes = await pool.query(
+            `SELECT u.*, p.locale
+             FROM users u
+             LEFT JOIN profiles p ON p.user_id = u.id
+             WHERE u.username = $1`,
+            [cleanUsername]
+        );
         const user = userRes.rows[0];
 
-        if (!user) return res.status(401).json({ error: 'Kullanici adi veya sifre hatali.' });
+        if (!user) return sendApiError(req, res, 401, 'BAD_CREDENTIALS');
 
         if (user.status !== 'active') {
-            return res.status(403).json({ error: 'Hesabiniz aktif degil.' });
+            return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
         }
 
         const match = await comparePassword(String(password), user.password_hash);
-        if (!match) return res.status(401).json({ error: 'Kullanici adi veya sifre hatali.' });
+        if (!match) return sendApiError(req, res, 401, 'BAD_CREDENTIALS');
+
+        const requestedLocale = normalizeLang(req.body?.locale || req.headers['x-talkx-lang'] || user.locale || lang, 'en');
+        await pool.query('UPDATE profiles SET locale = $1, updated_at = NOW() WHERE user_id = $2', [requestedLocale, user.id]);
 
         const token = generateSessionToken();
         const tokenHash = hashToken(token);
@@ -135,11 +156,11 @@ router.post('/login', async (req, res) => {
         return res.json({
             success: true,
             token,
-            user: { id: user.id, username: user.username }
+            user: { id: user.id, username: user.username, locale: requestedLocale }
         });
     } catch (e) {
         console.error('Login Error:', e);
-        return res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -156,7 +177,7 @@ router.post('/logout', async (req, res) => {
         return res.json({ success: true });
     } catch (e) {
         console.error('Logout Error:', e);
-        return res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 

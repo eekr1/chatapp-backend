@@ -16,6 +16,7 @@ const supportRoutes = require('./routes/support');
 const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 const { shouldDebouncePush } = require('./utils/pushDebounce');
 const { fetchLegalSettings } = require('./utils/legalContent');
+const { normalizeLang, resolveRequestLang, resolveLangFromHeaders, t } = require('./utils/i18n');
 
 // Global State (Only Transients)
 // Connected clients mapping: clientId -> { ws, dbUserId, deviceId, isShadowBanned, nickname }
@@ -101,12 +102,25 @@ const rateLimit = require('express-rate-limit');
 const authLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
     max: 50, // 50 requests per IP
-    message: { error: 'Çok fazla deneme. Lütfen bekleyin.' }
+    handler: (req, res) => {
+        const lang = resolveRequestLang(req);
+        return res.status(429).json({
+            error: t(lang, 'errors.RATE_LIMIT', {}, 'Too many attempts. Please wait.'),
+            code: 'RATE_LIMIT'
+        });
+    }
 });
 
 const apiLimiter = rateLimit({
     windowMs: 10 * 60 * 1000,
     max: 300, // 300 requests per IP
+    handler: (req, res) => {
+        const lang = resolveRequestLang(req);
+        return res.status(429).json({
+            error: t(lang, 'errors.RATE_LIMIT', {}, 'Too many attempts. Please wait.'),
+            code: 'RATE_LIMIT'
+        });
+    }
 });
 
 app.use('/auth', authLimiter);
@@ -124,7 +138,11 @@ app.get('/api/legal', async (req, res) => {
         const { item, updatedAt } = await fetchLegalSettings(pool);
         res.json({ ...item, updatedAt });
     } catch (e) {
-        res.status(500).json({ error: 'Legal icerik okunamadi.' });
+        const lang = resolveRequestLang(req);
+        res.status(500).json({
+            error: t(lang, 'errors.SERVER_ERROR', {}, 'Server error.'),
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
@@ -170,8 +188,34 @@ const sendJson = (ws, data) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
 };
 
-const sendError = (ws, code, message, extra = {}) => {
-    sendJson(ws, { type: 'error', code, message, ...extra });
+const resolveWsLang = (ws) => {
+    const fromClient = activeClients.get(ws.clientId)?.lang || null;
+    const fromSocket = ws.prefLang || null;
+    return normalizeLang(fromClient || fromSocket, 'en');
+};
+
+const resolveUserLang = async (userId, fallback = 'en') => {
+    try {
+        if (!userId) return normalizeLang(fallback, 'en');
+        const online = [...activeClients.values()].find((client) => client.dbUserId === userId);
+        if (online?.lang) return normalizeLang(online.lang, fallback);
+        const res = await pool.query(
+            'SELECT locale FROM profiles WHERE user_id = $1 LIMIT 1',
+            [userId]
+        );
+        const locale = res.rows[0]?.locale;
+        return normalizeLang(locale, fallback);
+    } catch (e) {
+        console.warn('resolveUserLang fallback:', e?.message || e);
+        return normalizeLang(fallback, 'en');
+    }
+};
+
+const sendError = (ws, code, message = null, extra = {}) => {
+    const lang = resolveWsLang(ws);
+    const fallback = t(lang, 'ws.SERVER_ERROR', {}, 'Server error.');
+    const resolvedMessage = message || t(lang, `ws.${code}`, {}, fallback);
+    sendJson(ws, { type: 'error', code, message: resolvedMessage, ...extra });
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -472,17 +516,17 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
 };
 
 const validateImageDataUrl = (dataUrl) => {
-    if (typeof dataUrl !== 'string') return { ok: false, reason: 'Geçersiz fotoğraf verisi.' };
+    if (typeof dataUrl !== 'string') return { ok: false, reason: 'Invalid image payload.' };
     if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
-        return { ok: false, reason: 'Geçersiz fotoğraf formatı.' };
+        return { ok: false, reason: 'Invalid image format.' };
     }
 
     const parts = dataUrl.split(',', 2);
-    if (parts.length !== 2) return { ok: false, reason: 'Geçersiz fotoğraf verisi.' };
+    if (parts.length !== 2) return { ok: false, reason: 'Invalid image payload.' };
 
     const bytes = estimateBase64Bytes(parts[1]);
     if (bytes > MAX_IMAGE_BYTES) {
-        return { ok: false, reason: 'Fotoğraf boyutu 2MB sınırını aşıyor.' };
+        return { ok: false, reason: 'Image exceeds 2MB limit.' };
     }
 
     return { ok: true };
@@ -677,11 +721,11 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
 
 const joinQueue = async (ws) => {
     const clientData = activeClients.get(ws.clientId);
-    if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR', 'Kimlik doğrulanamadı.');
+    if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR');
 
     // Require nickname (V6)
     if (!clientData.nickname) {
-        return sendError(ws, 'NO_NICKNAME', 'Lütfen önce kullanıcı adı belirleyin.');
+        return sendError(ws, 'NO_NICKNAME');
     }
 
     // Ban Check
@@ -691,7 +735,12 @@ const joinQueue = async (ws) => {
             sendJson(ws, { type: 'queued' });
             return;
         }
-        return sendError(ws, 'BANNED', `Yasaklandınız. Sebep: ${ban.reason}`);
+        const lang = resolveWsLang(ws);
+        return sendError(
+            ws,
+            'BANNED',
+            t(lang, 'ws.BANNED_REASON', { reason: ban.reason || '-' }, t(lang, 'ws.BANNED', {}, 'Account is suspended.'))
+        );
     }
 
     leaveRoom(ws.clientId);
@@ -793,6 +842,7 @@ wss.on('connection', (ws, req) => {
     ws.clientId = uuidv4();
     ws.isAlive = true;
     ws.limiter = { count: 0, lastReset: Date.now() }; // Security: Rate Limiter Init
+    ws.prefLang = resolveLangFromHeaders(req.headers || {});
     ws.on('pong', heartbeat);
 
     broadcastOnlineCount();
@@ -812,12 +862,13 @@ wss.on('connection', (ws, req) => {
 
         if (ws.limiter.count > 5) {
             if (ws.limiter.count > 10) return ws.close(); // Hard Limit
-            sendError(ws, 'RATE_LIMIT', 'Cok hizli mesaj atiyorsunuz.');
+            sendError(ws, 'RATE_LIMIT');
             return;
         }
 
         if (data.type === 'hello_ack') {
             const deviceId = data.deviceId;
+            const requestedLang = normalizeLang(data.lang || ws.prefLang, 'en');
             let dbUser = null;
             let isAnon = false;
 
@@ -852,24 +903,32 @@ wss.on('connection', (ws, req) => {
                 // But since UI enforces login, this might mean "Session Expired"
                 // Let's send AUTH_ERROR if token was provided but failed.
                 if (data.token) {
-                    return sendError(ws, 'AUTH_ERROR', 'Oturum süresi doldu.');
+                    return sendError(ws, 'AUTH_ERROR');
                 }
                 // If no token was provided at all (legacy client?), use getOrCreateUser
                 dbUser = await getOrCreateUser(deviceId, req.socket.remoteAddress);
                 isAnon = true;
             }
 
-            if (!dbUser) return sendError(ws, 'DB_ERROR', 'Sunucu hatası.');
+            if (!dbUser) return sendError(ws, 'DB_ERROR');
 
             // Check Status
             if (dbUser.status && dbUser.status !== 'active') {
-                return sendError(ws, 'BANNED', 'Hesabınız askıya alınmış.');
+                return sendError(ws, 'BANNED');
             }
 
             // Check Bans
             const ban = await checkBan(dbUser.id);
             if (ban && ban.ban_type !== 'shadow') {
-                sendError(ws, 'BANNED', `Yasaklandınız. Bitiş: ${ban.ban_until ? new Date(ban.ban_until).toLocaleString() : 'Süresiz'}. Sebep: ${ban.reason}`);
+                const lang = requestedLang || resolveWsLang(ws);
+                const untilText = ban.ban_until
+                    ? new Date(ban.ban_until).toLocaleString()
+                    : t(lang, 'ws.BANNED_INDEFINITE', {}, 'Indefinite');
+                sendError(
+                    ws,
+                    'BANNED',
+                    t(lang, 'ws.BANNED_UNTIL_REASON', { until: untilText, reason: ban.reason || '-' }, t(lang, 'ws.BANNED', {}, 'Account is suspended.'))
+                );
                 ws.close();
                 return;
             }
@@ -882,10 +941,11 @@ wss.on('connection', (ws, req) => {
                 isShadowBanned: isShadow,
                 nickname: dbUser.nickname, // Display Name
                 username: dbUser.username,  // V13: Store unique username
-                platform: data.platform === 'android' ? 'android' : 'web'
+                platform: data.platform === 'android' ? 'android' : 'web',
+                lang: requestedLang
             });
 
-            sendJson(ws, { type: 'welcome', nickname: dbUser.nickname });
+            sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang });
             return;
         }
 
@@ -954,13 +1014,13 @@ wss.on('connection', (ws, req) => {
                     const dmSenderId = clientData.dbUserId;
 
                     if (!dmTargetUserId || !dmText) {
-                        sendError(ws, 'SERVER_ERROR', 'Gecersiz mesaj istegi.', { clientMsgId: clientMsgId || undefined });
+                        sendError(ws, 'INVALID_MESSAGE_REQUEST', null, { clientMsgId: clientMsgId || undefined });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId: clientMsgId || null, status: 'failed' });
                         break;
                     }
 
                     if (!clientMsgId) {
-                        sendError(ws, 'SERVER_ERROR', 'Mesaj kimligi gecersiz.');
+                        sendError(ws, 'INVALID_MESSAGE_ID');
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId: null, status: 'failed' });
                         break;
                     }
@@ -971,13 +1031,13 @@ wss.on('connection', (ws, req) => {
                             [dmSenderId, dmTargetUserId]
                         );
                         if (fCheck.rows.length === 0) {
-                            sendError(ws, 'NOT_FRIEND', 'Sadece arkadaslariniza mesaj atabilirsiniz.', { clientMsgId });
+                            sendError(ws, 'NOT_FRIEND', null, { clientMsgId });
                             sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                             break;
                         }
                     } catch (e) {
                         console.error('direct_message friendship check error:', e.message);
-                        sendError(ws, 'SERVER_ERROR', 'Arkadaslik kontrolu basarisiz.', { clientMsgId });
+                        sendError(ws, 'FRIENDSHIP_CHECK_FAILED', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                         break;
                     }
@@ -987,13 +1047,13 @@ wss.on('connection', (ws, req) => {
                         convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
                     } catch (e) {
                         console.error('direct_message conversation error:', e.message);
-                        sendError(ws, 'SERVER_ERROR', 'Sohbet olusturulamadi.', { clientMsgId });
+                        sendError(ws, 'CONVERSATION_CREATE_FAILED', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                         break;
                     }
 
                     if (!convId) {
-                        sendError(ws, 'SERVER_ERROR', 'Sohbet olusturulamadi.', { clientMsgId });
+                        sendError(ws, 'CONVERSATION_CREATE_FAILED', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                         break;
                     }
@@ -1018,7 +1078,7 @@ wss.on('connection', (ws, req) => {
                         }
                     } catch (e) {
                         console.error('direct_message persist error:', e.message);
-                        sendError(ws, 'SERVER_ERROR', 'Mesaj kaydedilemedi.', { clientMsgId });
+                        sendError(ws, 'MESSAGE_PERSIST_FAILED', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                         break;
                     }
@@ -1074,8 +1134,9 @@ wss.on('connection', (ws, req) => {
                             debounce: dmPushDebounce
                         });
                     } else {
+                        const dmTargetLang = await resolveUserLang(dmTargetUserId, normalizeLang(dmTargetClient?.lang, 'en'));
                         sendPushToUser(dmTargetUserId, {
-                            title: clientData.nickname || clientData.username || 'Yeni mesaj',
+                            title: clientData.nickname || clientData.username || t(dmTargetLang, 'ws.NEW_MESSAGE', {}, 'New message'),
                             body: dmText.slice(0, 140),
                             ttlSeconds: 3600,
                             collapseKey: `direct_${String(convId || dmTargetUserId).slice(0, 64)}`,
@@ -1163,7 +1224,7 @@ wss.on('connection', (ws, req) => {
                 if (!data.roomId || !data.imageData) return;
                 {
                     const v = validateImageDataUrl(data.imageData);
-                    if (!v.ok) return sendError(ws, 'INVALID_IMAGE', v.reason);
+                    if (!v.ok) return sendError(ws, 'INVALID_IMAGE');
                 }
                 const iRoomId = userRoomMap.get(ws.clientId);
                 if (iRoomId !== data.roomId) return;
@@ -1185,7 +1246,7 @@ wss.on('connection', (ws, req) => {
                     isFriend = fRes.rows.length > 0;
                 } catch (e) { }
 
-                if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Sadece arkadaşlarınıza fotoğraf gönderebilirsiniz.');
+                if (!isFriend) return sendError(ws, 'NOT_FRIEND');
 
                 // Store
                 try {
@@ -1204,7 +1265,7 @@ wss.on('connection', (ws, req) => {
                             from: 'peer',
                             msgType: 'image',
                             mediaId: mediaId,
-                            text: 'Fotoğraf' // Placeholder text
+                            text: t(resolveWsLang(iRoom.sockets[iReceiver.clientId]), 'ws.PHOTO_SENT', {}, 'Photo sent')
                         });
                         // Admin Log
                         if (adminRoutes.logToAdmin) {
@@ -1233,7 +1294,12 @@ wss.on('connection', (ws, req) => {
             case 'fetch_image':
                 if (!data.mediaId) return;
                 if (!isUuid(data.mediaId)) {
-                    return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Geçersiz medya kimliği.' });
+                    return sendJson(ws, {
+                        type: 'image_error',
+                        code: 'INVALID_MEDIA_ID',
+                        mediaId: data.mediaId,
+                        message: t(resolveWsLang(ws), 'ws.INVALID_MEDIA_ID', {}, 'Invalid media id.')
+                    });
                 }
                 const clientDataFetch = activeClients.get(ws.clientId);
                 if (!clientDataFetch || !clientDataFetch.dbUserId) return;
@@ -1245,7 +1311,12 @@ wss.on('connection', (ws, req) => {
                     );
 
                     if (res.rows.length === 0) {
-                        return sendJson(ws, { type: 'image_error', mediaId: data.mediaId, message: 'Bu fotoğraf silinmiş veya süresi dolmuş.' });
+                        return sendJson(ws, {
+                            type: 'image_error',
+                            code: 'MEDIA_EXPIRED',
+                            mediaId: data.mediaId,
+                            message: t(resolveWsLang(ws), 'ws.MEDIA_EXPIRED', {}, 'Photo expired.')
+                        });
                     }
 
                     const item = res.rows[0];
@@ -1263,20 +1334,20 @@ wss.on('connection', (ws, req) => {
                     const clientMsgId = toClientMsgId(data.clientMsgId);
 
                     if (!distTargetUserId || !data.imageData) {
-                        sendError(ws, 'SERVER_ERROR', 'Gecersiz fotograf istegi.', { clientMsgId: clientMsgId || undefined });
+                        sendError(ws, 'INVALID_PHOTO_REQUEST', null, { clientMsgId: clientMsgId || undefined });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId: clientMsgId || null, status: 'failed' });
                         break;
                     }
 
                     if (!clientMsgId) {
-                        sendError(ws, 'SERVER_ERROR', 'Mesaj kimligi gecersiz.');
+                        sendError(ws, 'INVALID_MESSAGE_ID');
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId: null, status: 'failed' });
                         break;
                     }
 
                     const v = validateImageDataUrl(data.imageData);
                     if (!v.ok) {
-                        sendError(ws, 'SERVER_ERROR', v.reason, { clientMsgId });
+                        sendError(ws, 'INVALID_IMAGE', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                         break;
                     }
@@ -1287,7 +1358,7 @@ wss.on('connection', (ws, req) => {
                             [distSenderId, distTargetUserId]
                         );
                         if (fRes.rows.length === 0) {
-                            sendError(ws, 'NOT_FRIEND', 'Sadece arkadaslariniza fotograf gonderebilirsiniz.', { clientMsgId });
+                            sendError(ws, 'NOT_FRIEND', null, { clientMsgId });
                             sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                             break;
                         }
@@ -1311,7 +1382,7 @@ wss.on('connection', (ws, req) => {
 
                         const dConvId = await findOrCreatePersistentConversation(distSenderId, distTargetUserId);
                         if (!dConvId) {
-                            sendError(ws, 'SERVER_ERROR', 'Sohbet olusturulamadi.', { clientMsgId });
+                            sendError(ws, 'CONVERSATION_CREATE_FAILED', null, { clientMsgId });
                             sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                             break;
                         }
@@ -1324,7 +1395,7 @@ wss.on('connection', (ws, req) => {
 
                         const messageInsert = await pool.query(
                             'INSERT INTO messages (conversation_id, sender_id, client_msg_id, text, msg_type, media_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-                            [dConvId, distSenderId, clientMsgId, 'Fotograf gonderildi', 'image', dMediaId]
+                            [dConvId, distSenderId, clientMsgId, 'Photo sent', 'image', dMediaId]
                         );
                         const serverMessageId = messageInsert.rows[0].id;
 
@@ -1336,6 +1407,8 @@ wss.on('connection', (ws, req) => {
                             }
                         }
 
+                        const dTargetLang = await resolveUserLang(distTargetUserId, normalizeLang(dTargetClient?.lang, 'en'));
+                        const localizedPhotoText = t(dTargetLang, 'ws.PHOTO_SENT', {}, 'Photo sent');
                         const imageDeliveryId = uuidv4();
                         if (dTargetClient) {
                             sendJson(dTargetClient.ws, {
@@ -1345,7 +1418,7 @@ wss.on('connection', (ws, req) => {
                                 fromNickname: clientData.nickname,
                                 msgType: 'image',
                                 mediaId: dMediaId,
-                                text: 'Fotograf gonderdi',
+                                text: localizedPhotoText,
                                 conversationId: dConvId,
                                 deliveryId: imageDeliveryId,
                                 clientMsgId
@@ -1369,8 +1442,8 @@ wss.on('connection', (ws, req) => {
                             });
                         } else {
                             sendPushToUser(distTargetUserId, {
-                                title: clientData.nickname || clientData.username || 'Yeni mesaj',
-                                body: 'Fotograf gonderdi',
+                                title: clientData.nickname || clientData.username || t(dTargetLang, 'ws.NEW_MESSAGE', {}, 'New message'),
+                                body: localizedPhotoText,
                                 ttlSeconds: 3600,
                                 collapseKey: `direct_${String(dConvId || distTargetUserId).slice(0, 64)}`,
                                 channelId: PUSH_CHANNEL_IDS.messages,
@@ -1381,7 +1454,7 @@ wss.on('connection', (ws, req) => {
                                     fromNickname: clientData.nickname || '',
                                     msgType: 'image',
                                     mediaId: dMediaId,
-                                    text: 'Fotograf gonderdi',
+                                    text: localizedPhotoText,
                                     conversationId: dConvId || '',
                                     deliveryId: imageDeliveryId,
                                     clientMsgId,
@@ -1410,7 +1483,7 @@ wss.on('connection', (ws, req) => {
                         });
                     } catch (e) {
                         console.error('direct_image_send error', e);
-                        sendError(ws, 'SERVER_ERROR', 'Fotograf gonderilemedi.', { clientMsgId });
+                        sendError(ws, 'PHOTO_SEND_FAILED', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                     }
                 }
@@ -1424,7 +1497,11 @@ wss.on('connection', (ws, req) => {
                     } else if (data.targetUserId) {
                         // Friend report (V13 Extension)
                         logReport(clientData.dbUserId, data.targetUserId, data.conversationId || null, data.reason);
-                        sendJson(ws, { type: 'success', message: 'Raporunuz iletildi.' });
+                        sendJson(ws, {
+                            type: 'success',
+                            code: 'REPORT_OK',
+                            message: t(resolveWsLang(ws), 'ws.REPORT_OK', {}, 'Your report has been sent.')
+                        });
                     }
                 }
                 break;
@@ -1441,7 +1518,7 @@ wss.on('connection', (ws, req) => {
                         targetUser = tRes.rows[0];
                     } catch (e) { console.error(e); }
 
-                    if (!targetUser) return sendError(ws, 'NOT_FOUND', 'Kullanıcı bulunamadı.');
+                    if (!targetUser) return sendError(ws, 'NOT_FOUND');
 
                     // 2. Check Friendship
                     let isFriend = false;
@@ -1453,7 +1530,7 @@ wss.on('connection', (ws, req) => {
                         isFriend = fRes.rows.length > 0;
                     } catch (e) { console.error(e); }
 
-                    if (!isFriend) return sendError(ws, 'NOT_FRIEND', 'Bu kullanıcı arkadaşınız değil.');
+                    if (!isFriend) return sendError(ws, 'NOT_FRIEND');
 
                     // 3. Check if Target is Online
                     let targetClient = null;
@@ -1477,7 +1554,7 @@ wss.on('connection', (ws, req) => {
                         });
                         return;
                     } else {
-                        return sendError(ws, 'OFFLINE', 'Kullanıcı şu an çevrimdışı.');
+                        return sendError(ws, 'OFFLINE');
                     }
                 }
                 break;

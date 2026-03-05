@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../db');
 const { hashToken, comparePassword, hashPassword } = require('../utils/security');
 const { calculateLegalStatus, getRequiredLegalVersions } = require('../utils/legalAcceptance');
+const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
 
 const DELETE_CONFIRM_TEXT = 'HESABIMI SIL';
 
@@ -14,8 +15,8 @@ const getClientIp = (req) => {
     return String(req.ip || req.socket?.remoteAddress || '').trim().slice(0, 120) || null;
 };
 
-const sendLegalReacceptRequired = (res, legalStatus) => res.status(428).json({
-    error: 'Guncel kullanim sartlari ve gizlilik politikasi kabul edilmelidir.',
+const sendLegalReacceptRequired = (req, res, legalStatus) => res.status(428).json({
+    error: t(resolveRequestLang(req), 'errors.LEGAL_REACCEPT_REQUIRED', {}, 'Legal reaccept required.'),
     code: 'LEGAL_REACCEPT_REQUIRED',
     required_versions: legalStatus?.required || null,
     accepted_versions: legalStatus?.accepted || null
@@ -23,7 +24,7 @@ const sendLegalReacceptRequired = (res, legalStatus) => res.status(428).json({
 
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Oturum acmaniz gerekiyor.' });
+    if (!authHeader) return sendApiError(req, res, 401, 'AUTH_REQUIRED');
 
     const token = authHeader.replace('Bearer ', '');
     const tokenHash = hashToken(token);
@@ -38,19 +39,19 @@ const authenticate = async (req, res, next) => {
         );
 
         if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Oturum gecersiz veya suresi dolmus.' });
+            return sendApiError(req, res, 401, 'AUTH_INVALID');
         }
 
         const sessionUser = result.rows[0];
         if (sessionUser.status !== 'active') {
-            return res.status(403).json({ error: 'Hesap aktif degil.' });
+            return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
         }
 
         req.user = sessionUser;
         return next();
     } catch (e) {
         console.error('Auth Middleware Error:', e);
-        return res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 };
 
@@ -58,13 +59,13 @@ const requireLegalAcceptance = async (req, res, next) => {
     try {
         const legalStatus = await calculateLegalStatus(pool, req.user.user_id);
         if (legalStatus.requiresReaccept) {
-            return sendLegalReacceptRequired(res, legalStatus);
+            return sendLegalReacceptRequired(req, res, legalStatus);
         }
         req.legalStatus = legalStatus;
         return next();
     } catch (e) {
         console.error('Legal acceptance check error:', e);
-        return res.status(500).json({ error: 'Legal kontrolu yapilamadi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 };
 
@@ -74,19 +75,19 @@ router.get('/me', authenticate, async (req, res) => {
         const result = await pool.query(
             `SELECT
                 u.id, u.username, u.created_at,
-                p.display_name, p.avatar_url, p.bio, p.tags
+                p.display_name, p.avatar_url, p.bio, p.tags, p.locale
              FROM users u
              LEFT JOIN profiles p ON u.id = p.user_id
              WHERE u.id = $1`,
             [req.user.user_id]
         );
 
-        if (result.rows.length === 0) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+        if (result.rows.length === 0) return sendApiError(req, res, 404, 'USER_NOT_FOUND');
 
         return res.json({ success: true, user: result.rows[0] });
     } catch (e) {
         console.error('GET /me error:', e);
-        return res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -102,7 +103,7 @@ router.get('/me/legal-status', authenticate, async (req, res) => {
         });
     } catch (e) {
         console.error('GET /me/legal-status error:', e);
-        return res.status(500).json({ error: 'Legal durum bilgisi alinamadi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -112,14 +113,15 @@ router.post('/me/legal-accept', authenticate, async (req, res) => {
     const privacyVersion = String(req.body?.privacy_version || '').trim();
 
     if (!termsVersion || !privacyVersion) {
-        return res.status(400).json({ error: 'Terms ve privacy versiyonlari zorunludur.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     try {
         const required = await getRequiredLegalVersions(pool);
         if (termsVersion !== required.terms || privacyVersion !== required.privacy) {
             return res.status(400).json({
-                error: 'Guncel versiyon ile kabul edilmelidir.',
+                error: t(resolveRequestLang(req), 'errors.LEGAL_VERSION_MISMATCH', {}, 'Legal version mismatch.'),
+                code: 'LEGAL_VERSION_MISMATCH',
                 required_versions: required
             });
         }
@@ -148,16 +150,20 @@ router.post('/me/legal-accept', authenticate, async (req, res) => {
         });
     } catch (e) {
         console.error('POST /me/legal-accept error:', e);
-        return res.status(500).json({ error: 'Legal kabul kaydedilemedi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
 // PUT /me/profile - Update profile
 router.put('/me/profile', authenticate, requireLegalAcceptance, async (req, res) => {
-    const { display_name, avatar_url, bio, tags } = req.body || {};
+    const { display_name, avatar_url, bio, tags, locale } = req.body || {};
+    const normalizedLocale = locale === undefined ? undefined : normalizeLang(locale, null);
 
     if (display_name && !String(display_name).trim()) {
-        return res.status(400).json({ error: 'Gorunen isim bos olamaz.' });
+        return sendApiError(req, res, 400, 'PROFILE_NAME_REQUIRED');
+    }
+    if (locale !== undefined && !normalizedLocale) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     try {
@@ -168,8 +174,9 @@ router.put('/me/profile', authenticate, requireLegalAcceptance, async (req, res)
                 avatar_url = COALESCE($2, avatar_url),
                 bio = COALESCE($3, bio),
                 tags = COALESCE($4, tags),
+                locale = COALESCE($5, locale),
                 updated_at = NOW()
-            WHERE user_id = $5
+            WHERE user_id = $6
             RETURNING *
         `;
         const values = [
@@ -177,6 +184,7 @@ router.put('/me/profile', authenticate, requireLegalAcceptance, async (req, res)
             avatar_url || null,
             bio || null,
             tags ? JSON.stringify(tags) : null,
+            normalizedLocale || null,
             req.user.user_id
         ];
 
@@ -184,7 +192,7 @@ router.put('/me/profile', authenticate, requireLegalAcceptance, async (req, res)
         return res.json({ success: true, profile: result.rows[0] });
     } catch (e) {
         console.error('PUT /me/profile error:', e);
-        return res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -194,13 +202,13 @@ router.put('/me/password', authenticate, requireLegalAcceptance, async (req, res
     const newPassword = String(req.body?.new_password || '');
 
     if (!currentPassword || !newPassword) {
-        return res.status(400).json({ error: 'Mevcut sifre ve yeni sifre gerekli.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
     if (newPassword.length < 6) {
-        return res.status(400).json({ error: 'Yeni sifre en az 6 karakter olmali.' });
+        return sendApiError(req, res, 400, 'WEAK_PASSWORD');
     }
     if (currentPassword === newPassword) {
-        return res.status(400).json({ error: 'Yeni sifre mevcut sifre ile ayni olamaz.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     try {
@@ -209,12 +217,12 @@ router.put('/me/password', authenticate, requireLegalAcceptance, async (req, res
             [req.user.user_id]
         );
         if (userRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+            return sendApiError(req, res, 404, 'USER_NOT_FOUND');
         }
 
         const isValidCurrent = await comparePassword(currentPassword, userRes.rows[0].password_hash);
         if (!isValidCurrent) {
-            return res.status(401).json({ error: 'Mevcut sifre hatali.' });
+            return sendApiError(req, res, 401, 'BAD_CREDENTIALS');
         }
 
         const newHash = await hashPassword(newPassword);
@@ -223,10 +231,13 @@ router.put('/me/password', authenticate, requireLegalAcceptance, async (req, res
             [newHash, req.user.user_id]
         );
 
-        return res.json({ success: true, message: 'Sifre guncellendi.' });
+        return res.json({
+            success: true,
+            message: t(resolveRequestLang(req), 'profile.PASSWORD_UPDATED', {}, 'Password updated.')
+        });
     } catch (e) {
         console.error('Password change error:', e);
-        return res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -236,10 +247,10 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
     const confirmText = String(req.body?.confirm_text || '').trim();
 
     if (!currentPassword) {
-        return res.status(400).json({ error: 'Mevcut sifre gerekli.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
     if (confirmText !== DELETE_CONFIRM_TEXT) {
-        return res.status(400).json({ error: `Onay metni tam olarak "${DELETE_CONFIRM_TEXT}" olmalidir.` });
+        return sendApiError(req, res, 400, 'DELETE_CONFIRM_REQUIRED');
     }
 
     const db = await pool.connect();
@@ -256,19 +267,19 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
 
         if (!userRes.rows.length) {
             await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+            return sendApiError(req, res, 404, 'USER_NOT_FOUND');
         }
 
         const dbUser = userRes.rows[0];
         if (dbUser.status !== 'active' && dbUser.status !== 'pending_deletion') {
             await db.query('ROLLBACK');
-            return res.status(403).json({ error: 'Hesap durumu bu isleme uygun degil.' });
+            return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
         }
 
         const isValidPassword = await comparePassword(currentPassword, dbUser.password_hash);
         if (!isValidPassword) {
             await db.query('ROLLBACK');
-            return res.status(401).json({ error: 'Mevcut sifre hatali.' });
+            return sendApiError(req, res, 401, 'BAD_CREDENTIALS');
         }
 
         const existingRequested = await db.query(
@@ -297,7 +308,10 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
         await db.query('DELETE FROM sessions WHERE user_id = $1', [dbUser.id]);
 
         await db.query('COMMIT');
-        return res.json({ success: true, message: 'Silme talebiniz alindi.' });
+        return res.json({
+            success: true,
+            message: t(resolveRequestLang(req), 'profile.DELETE_REQUEST_RECEIVED', {}, 'Deletion request received.')
+        });
     } catch (e) {
         try {
             await db.query('ROLLBACK');
@@ -305,7 +319,7 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
             // ignore rollback errors
         }
         console.error('Delete request error:', e);
-        return res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     } finally {
         db.release();
     }

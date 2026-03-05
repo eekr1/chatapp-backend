@@ -40,6 +40,7 @@ const createTablesQuery = `
     avatar_url TEXT,
     bio TEXT,
     tags JSONB DEFAULT '[]',
+    locale TEXT CHECK (locale IN ('tr', 'en')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
@@ -277,6 +278,18 @@ const createTablesQuery = `
           ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT FALSE;
       END IF;
 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='locale') THEN
+          ALTER TABLE profiles ADD COLUMN locale TEXT;
+      END IF;
+      BEGIN
+        ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_locale_check;
+        ALTER TABLE profiles
+          ADD CONSTRAINT profiles_locale_check
+          CHECK (locale IS NULL OR locale IN ('tr', 'en'));
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'profiles locale check constraint update skipped: %', SQLERRM;
+      END;
+
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='media_id') THEN
           ALTER TABLE messages ADD COLUMN media_id UUID;
       END IF;
@@ -350,11 +363,20 @@ const createTablesQuery = `
         'legal_content_v1',
         jsonb_build_object(
           'footer', jsonb_build_object(
-            'tagline', 'Kimligini gizle, ozgurce konus.',
-            'privacyLabel', 'Gizlilik Politikasi',
-            'privacyUrl', '/privacy-policy',
-            'termsLabel', 'Kullanim Sartlari',
-            'termsUrl', '/terms-of-use'
+            'urls', jsonb_build_object(
+              'privacy', '/privacy-policy',
+              'terms', '/terms-of-use'
+            ),
+            'tr', jsonb_build_object(
+              'tagline', 'Kimligini gizle, ozgurce konus.',
+              'privacyLabel', 'Gizlilik Politikasi',
+              'termsLabel', 'Kullanim Sartlari'
+            ),
+            'en', jsonb_build_object(
+              'tagline', 'Hide your identity, speak freely.',
+              'privacyLabel', 'Privacy Policy',
+              'termsLabel', 'Terms of Use'
+            )
           ),
           'versions', jsonb_build_object(
             'terms', 'v1',
@@ -406,6 +428,40 @@ const createTablesQuery = `
           value->'versions' IS NULL
           OR COALESCE(value->'versions'->>'terms', '') = ''
           OR COALESCE(value->'versions'->>'privacy', '') = ''
+        );
+
+      UPDATE app_settings
+      SET
+        value = jsonb_set(
+          value,
+          '{footer}',
+          jsonb_build_object(
+            'urls', jsonb_build_object(
+              'privacy', COALESCE(NULLIF(value->'footer'->>'privacyUrl', ''), COALESCE(value->'footer'->'urls'->>'privacy', '/privacy-policy')),
+              'terms', COALESCE(NULLIF(value->'footer'->>'termsUrl', ''), COALESCE(value->'footer'->'urls'->>'terms', '/terms-of-use'))
+            ),
+            'tr', jsonb_build_object(
+              'tagline', COALESCE(NULLIF(value->'footer'->>'tagline', ''), COALESCE(value->'footer'->'tr'->>'tagline', 'Kimligini gizle, ozgurce konus.')),
+              'privacyLabel', COALESCE(NULLIF(value->'footer'->>'privacyLabel', ''), COALESCE(value->'footer'->'tr'->>'privacyLabel', 'Gizlilik Politikasi')),
+              'termsLabel', COALESCE(NULLIF(value->'footer'->>'termsLabel', ''), COALESCE(value->'footer'->'tr'->>'termsLabel', 'Kullanim Sartlari'))
+            ),
+            'en', jsonb_build_object(
+              'tagline', COALESCE(value->'footer'->'en'->>'tagline', 'Hide your identity, speak freely.'),
+              'privacyLabel', COALESCE(value->'footer'->'en'->>'privacyLabel', 'Privacy Policy'),
+              'termsLabel', COALESCE(value->'footer'->'en'->>'termsLabel', 'Terms of Use')
+            )
+          ),
+          true
+        ),
+        updated_at = NOW()
+      WHERE key = 'legal_content_v1'
+        AND (
+          value->'footer'->'urls' IS NULL
+          OR value->'footer'->'tr' IS NULL
+          OR value->'footer'->'en' IS NULL
+          OR (value->'footer' ? 'privacyUrl')
+          OR (value->'footer' ? 'termsUrl')
+          OR (value->'footer' ? 'tagline')
         );
 
       -- V13 Fix: Drop legacy FK constraints on conversations to allow Auth Users

@@ -3,10 +3,11 @@ const router = express.Router();
 const { pool } = require('../db');
 const { hashToken } = require('../utils/security');
 const { calculateLegalStatus } = require('../utils/legalAcceptance');
+const { sendApiError, t, resolveRequestLang } = require('../utils/i18n');
 
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Oturum gerekli.' });
+    if (!authHeader) return sendApiError(req, res, 401, 'AUTH_REQUIRED');
 
     const token = authHeader.replace('Bearer ', '');
     const tokenHash = hashToken(token);
@@ -20,15 +21,15 @@ const authenticate = async (req, res, next) => {
             [tokenHash]
         );
 
-        if (result.rows.length === 0) return res.status(401).json({ error: 'Oturum gecersiz.' });
+        if (result.rows.length === 0) return sendApiError(req, res, 401, 'AUTH_INVALID');
         if (result.rows[0].status !== 'active') {
-            return res.status(403).json({ error: 'Hesap aktif degil.' });
+            return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
         }
         const sessionUser = result.rows[0];
         const legalStatus = await calculateLegalStatus(pool, sessionUser.user_id);
         if (legalStatus.requiresReaccept) {
             return res.status(428).json({
-                error: 'Guncel kullanim sartlari ve gizlilik politikasi kabul edilmelidir.',
+                error: t(resolveRequestLang(req), 'errors.LEGAL_REACCEPT_REQUIRED', {}, 'Legal reaccept required.'),
                 code: 'LEGAL_REACCEPT_REQUIRED',
                 required_versions: legalStatus.required,
                 accepted_versions: legalStatus.accepted
@@ -38,7 +39,7 @@ const authenticate = async (req, res, next) => {
         next();
     } catch (e) {
         console.error('Push auth error:', e);
-        res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 };
 
@@ -49,7 +50,7 @@ router.post('/register', async (req, res) => {
     const platform = (req.body.platform || 'android').trim().toLowerCase();
     const deviceId = (req.body.deviceId || '').trim() || null;
 
-    if (!token) return res.status(400).json({ error: 'Push token gerekli.' });
+    if (!token) return sendApiError(req, res, 400, 'INVALID_INPUT');
 
     try {
         await pool.query(
@@ -82,7 +83,7 @@ router.post('/register', async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error('Push register error:', e);
-        res.status(500).json({ error: 'Push kaydi basarisiz.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 
@@ -91,7 +92,7 @@ router.post('/unregister', async (req, res) => {
     const deviceId = (req.body.deviceId || '').trim();
 
     if (!token && !deviceId) {
-        return res.status(400).json({ error: 'token veya deviceId gerekli.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     try {
@@ -113,7 +114,7 @@ router.post('/unregister', async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error('Push unregister error:', e);
-        res.status(500).json({ error: 'Push kaydi kaldirilamadi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
 

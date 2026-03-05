@@ -5,6 +5,7 @@ const { pool } = require('../db');
 const { hashToken } = require('../utils/security');
 const { sendSupportReportEmail } = require('../utils/brevoSupport');
 const { calculateLegalStatus } = require('../utils/legalAcceptance');
+const { sendApiError, t, resolveRequestLang } = require('../utils/i18n');
 
 const router = express.Router();
 
@@ -105,7 +106,7 @@ const supportLimiter = rateLimit({
             reset: resetIso,
             authUserPresent: Boolean(req.authUser)
         });
-        return res.status(429).json({ error: 'Cok fazla sorun bildirimi. Lutfen daha sonra tekrar deneyin.' });
+        return sendApiError(req, res, 429, 'RATE_LIMIT');
     }
 });
 
@@ -126,7 +127,7 @@ const authenticateOptional = async (req, res, next) => {
     }
 
     const token = authHeader.replace('Bearer ', '').trim();
-    if (!token) return res.status(401).json({ error: 'Gecersiz oturum.' });
+    if (!token) return sendApiError(req, res, 401, 'AUTH_INVALID');
 
     try {
         const tokenHash = hashToken(token);
@@ -139,16 +140,16 @@ const authenticateOptional = async (req, res, next) => {
         );
 
         if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Oturum gecersiz veya suresi dolmus.' });
+            return sendApiError(req, res, 401, 'AUTH_INVALID');
         }
         const sessionUser = result.rows[0];
         if (sessionUser.status !== 'active') {
-            return res.status(403).json({ error: 'Hesap aktif degil.' });
+            return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
         }
         const legalStatus = await calculateLegalStatus(pool, sessionUser.user_id);
         if (legalStatus.requiresReaccept) {
             return res.status(428).json({
-                error: 'Guncel kullanim sartlari ve gizlilik politikasi kabul edilmelidir.',
+                error: t(resolveRequestLang(req), 'errors.LEGAL_REACCEPT_REQUIRED', {}, 'Legal reaccept required.'),
                 code: 'LEGAL_REACCEPT_REQUIRED',
                 required_versions: legalStatus.required,
                 accepted_versions: legalStatus.accepted
@@ -159,7 +160,7 @@ const authenticateOptional = async (req, res, next) => {
         next();
     } catch (e) {
         console.error('Support optional auth error:', e);
-        res.status(500).json({ error: 'Sunucu hatasi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 };
 
@@ -193,44 +194,26 @@ const parseSupportMetadata = (value) => {
 const handleSupportMulterError = (err, req, res) => {
     if (!(err instanceof multer.MulterError)) {
         console.error('Support multipart parse error:', err);
-        return res.status(400).json({
-            error: 'Sorun bildirimi verisi okunamadi.',
-            code: 'MULTIPART_PARSE_FAILED'
-        });
+        return sendApiError(req, res, 400, 'MULTIPART_PARSE_FAILED');
     }
 
     switch (err.code) {
         case 'LIMIT_FILE_SIZE':
-            return res.status(400).json({
-                error: `Tek dosya boyutu en fazla ${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB olabilir.`,
-                code: 'MEDIA_FILE_SIZE_LIMIT'
-            });
+            return sendApiError(req, res, 400, 'MEDIA_FILE_SIZE_LIMIT');
         case 'LIMIT_FILE_COUNT':
-            return res.status(400).json({
-                error: `En fazla ${MAX_FILES} medya dosyasi ekleyebilirsiniz.`,
-                code: 'MEDIA_FILE_COUNT_LIMIT'
-            });
+            return sendApiError(req, res, 400, 'MEDIA_FILE_COUNT_LIMIT');
         case 'LIMIT_UNEXPECTED_FILE':
-            return res.status(400).json({
-                error: 'Gecersiz medya alani.',
-                code: 'MEDIA_UNEXPECTED_FIELD'
-            });
+            return sendApiError(req, res, 400, 'MEDIA_UNEXPECTED_FIELD');
         case 'LIMIT_FIELD_VALUE':
         case 'LIMIT_FIELD_COUNT':
         case 'LIMIT_PART_COUNT':
-            return res.status(400).json({
-                error: 'Medya istegindeki alanlar gecersiz veya fazla buyuk.',
-                code: 'MULTIPART_FIELDS_INVALID'
-            });
+            return sendApiError(req, res, 400, 'MULTIPART_FIELDS_INVALID');
         default:
             console.error('Support multipart multer error:', {
                 code: err.code,
                 message: err.message
             });
-            return res.status(400).json({
-                error: 'Sorun bildirimi verisi okunamadi.',
-                code: 'MULTIPART_PARSE_FAILED'
-            });
+            return sendApiError(req, res, 400, 'MULTIPART_PARSE_FAILED');
     }
 };
 
@@ -258,7 +241,7 @@ const parseSupportPayload = (req) => {
 const validateMediaFiles = (files = []) => {
     if (!Array.isArray(files)) return [];
     if (files.length > MAX_FILES) {
-        const err = new Error(`En fazla ${MAX_FILES} medya dosyasi ekleyebilirsiniz.`);
+        const err = new Error('Media file count exceeded.');
         err.code = 'MEDIA_FILE_COUNT_LIMIT';
         throw err;
     }
@@ -268,23 +251,23 @@ const validateMediaFiles = (files = []) => {
         const mimeType = cleanText(file.mimetype, 120).toLowerCase();
         const size = Number(file.size) || 0;
         if (!MIME_RE.test(mimeType)) {
-            const err = new Error(`Desteklenmeyen medya tipi: ${mimeType || 'unknown'}`);
+            const err = new Error(`Unsupported media type: ${mimeType || 'unknown'}`);
             err.code = 'MEDIA_MIME_INVALID';
             throw err;
         }
         if (size <= 0) {
-            const err = new Error('Bos medya dosyasi kabul edilmez.');
+            const err = new Error('Empty media file is not allowed.');
             err.code = 'MEDIA_EMPTY_FILE';
             throw err;
         }
         if (size > MAX_FILE_BYTES) {
-            const err = new Error(`Tek dosya boyutu en fazla ${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB olabilir.`);
+            const err = new Error('Single media file size exceeded.');
             err.code = 'MEDIA_FILE_SIZE_LIMIT';
             throw err;
         }
         totalBytes += size;
         if (totalBytes > MAX_TOTAL_FILE_BYTES) {
-            const err = new Error(`Toplam medya boyutu en fazla ${Math.round(MAX_TOTAL_FILE_BYTES / (1024 * 1024))} MB olabilir.`);
+            const err = new Error('Total media size exceeded.');
             err.code = 'MEDIA_TOTAL_SIZE_LIMIT';
             throw err;
         }
@@ -325,28 +308,23 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
             hasAuthUser: Boolean(req.authUser),
             ipHint: getClientIp(req)
         });
-        return res.status(400).json({
-            error: 'Gecersiz konu secimi.',
-            code: 'INVALID_SUBJECT'
-        });
+        return sendApiError(req, res, 400, 'INVALID_SUBJECT');
     }
 
     if (!description || description.length < 10) {
-        return res.status(400).json({ error: 'Aciklama en az 10 karakter olmali.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     if (email && !EMAIL_RE.test(email)) {
-        return res.status(400).json({ error: 'E-posta formati gecersiz.' });
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     let mediaItems = [];
     try {
         mediaItems = validateMediaFiles(requestData?.mediaFiles || []);
     } catch (e) {
-        return res.status(400).json({
-            error: e.message || 'Medya dogrulamasi basarisiz.',
-            code: e.code || 'MEDIA_VALIDATION_FAILED'
-        });
+        const code = e?.code || 'MEDIA_VALIDATION_FAILED';
+        return sendApiError(req, res, 400, code);
     }
 
     const appVersion = cleanText(metadata.appVersion, 80) || null;
@@ -414,7 +392,7 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
     } catch (e) {
         await dbClient.query('ROLLBACK');
         console.error('Support report create error:', e);
-        return res.status(500).json({ error: 'Sorun bildirimi alinamadi.' });
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
     } finally {
         dbClient.release();
     }
