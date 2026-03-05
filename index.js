@@ -24,6 +24,86 @@ const activeClients = new Map();
 
 const app = express();
 const port = process.env.PORT || 3000;
+const REQUEST_TELEMETRY_SAMPLE_RATE = 0.2;
+const REQUEST_TELEMETRY_SLOW_MS = 1500;
+const REQUEST_TELEMETRY_EVENTS_RETENTION_DAYS = 7;
+const REQUEST_TELEMETRY_METRICS_RETENTION_DAYS = 30;
+const REQUEST_TELEMETRY_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const REQUEST_TELEMETRY_CLEANUP_CHANCE = 0.02;
+const REQUEST_TELEMETRY_STATIC_FILE_RE = /\.(css|js|mjs|map|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|otf|mp4|webm|ogg)$/i;
+const UUID_SEGMENT_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/ig;
+const NUMERIC_SEGMENT_RE = /\/\d+(?=\/|$)/g;
+const requestTelemetryCleanupState = { running: false, lastRunAt: 0 };
+
+const toTelemetryPath = (rawUrl = '/') => {
+    const raw = String(rawUrl || '/').split('?')[0].trim() || '/';
+    return raw.startsWith('/') ? raw : `/${raw}`;
+};
+
+const normalizeTelemetryRoute = (value = '/') => {
+    let route = toTelemetryPath(value)
+        .replace(UUID_SEGMENT_RE, ':uuid')
+        .replace(NUMERIC_SEGMENT_RE, '/:id')
+        .replace(/\/{2,}/g, '/');
+    if (route.length > 180) route = route.slice(0, 180);
+    return route || '/';
+};
+
+const isTelemetryCandidatePath = (pathName = '/') => (
+    pathName.startsWith('/api')
+    || pathName.startsWith('/auth')
+    || pathName.startsWith('/friends')
+    || pathName.startsWith('/support')
+    || pathName.startsWith('/admin')
+);
+
+const isTelemetryExcludedPath = (pathName = '/') => {
+    if (pathName === '/health') return true;
+    if (pathName === '/admin/stream') return true;
+    if (pathName.startsWith('/admin/assets/')) return true;
+    if (pathName.startsWith('/assets/')) return true;
+    if (pathName.startsWith('/sounds/')) return true;
+    if (REQUEST_TELEMETRY_STATIC_FILE_RE.test(pathName)) return true;
+    return false;
+};
+
+const resolveTelemetryRouteTag = (req, fallbackPath) => {
+    const routePath = typeof req?.route?.path === 'string' ? req.route.path : '';
+    if (routePath) {
+        const base = typeof req?.baseUrl === 'string' ? req.baseUrl : '';
+        return normalizeTelemetryRoute(`${base}${routePath}`);
+    }
+    return normalizeTelemetryRoute(fallbackPath);
+};
+
+const maybeCleanupRequestTelemetry = () => {
+    const now = Date.now();
+    if (requestTelemetryCleanupState.running) return;
+    if (now - requestTelemetryCleanupState.lastRunAt < REQUEST_TELEMETRY_CLEANUP_INTERVAL_MS) return;
+    if (Math.random() > REQUEST_TELEMETRY_CLEANUP_CHANCE) return;
+
+    requestTelemetryCleanupState.running = true;
+    requestTelemetryCleanupState.lastRunAt = now;
+
+    Promise.all([
+        pool.query(
+            `DELETE FROM http_request_events
+             WHERE created_at < NOW() - ($1::text || ' days')::interval`,
+            [REQUEST_TELEMETRY_EVENTS_RETENTION_DAYS]
+        ),
+        pool.query(
+            `DELETE FROM http_request_metrics_minute
+             WHERE bucket_minute < NOW() - ($1::text || ' days')::interval`,
+            [REQUEST_TELEMETRY_METRICS_RETENTION_DAYS]
+        )
+    ])
+        .catch((e) => {
+            console.warn('request telemetry cleanup failed:', e?.message || e);
+        })
+        .finally(() => {
+            requestTelemetryCleanupState.running = false;
+        });
+};
 
 // Middleware to expose online status
 app.use((req, res, next) => {
@@ -94,6 +174,79 @@ app.use(cors((req, callback) => {
     console.warn('CORS blocked for origin:', origin, 'path:', req.path);
     return callback(null, { ...baseCorsOptions, origin: false });
 }));
+
+app.use((req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
+
+    const startedAt = Date.now();
+    const requestPath = toTelemetryPath(req.originalUrl || req.url || req.path || '/');
+    if (!isTelemetryCandidatePath(requestPath) || isTelemetryExcludedPath(requestPath)) {
+        return next();
+    }
+
+    const requestId = String(req.get('x-request-id') || '').trim() || uuidv4();
+    res.on('finish', () => {
+        const finishedAt = Date.now();
+        const durationMs = Math.max(0, finishedAt - startedAt);
+        const status = Number(res.statusCode) || 0;
+        const statusClass = `${Math.floor(Math.max(100, status) / 100)}xx`;
+        const isError = status >= 500;
+        const isSlow = durationMs >= REQUEST_TELEMETRY_SLOW_MS;
+        const sampleReason = isError ? 'error' : (isSlow ? 'slow' : 'sampled');
+        const shouldStoreEvent = isError || isSlow || Math.random() < REQUEST_TELEMETRY_SAMPLE_RATE;
+        const routeTag = resolveTelemetryRouteTag(req, requestPath);
+        const responseSizeRaw = Number.parseInt(String(res.getHeader('content-length') || ''), 10);
+        const responseSizeBytes = Number.isFinite(responseSizeRaw) && responseSizeRaw >= 0
+            ? responseSizeRaw
+            : null;
+
+        pool.query(
+            `INSERT INTO http_request_metrics_minute
+              (bucket_minute, method, route, status_class, req_count, error_count, slow_count, total_duration_ms, updated_at)
+             VALUES (date_trunc('minute', NOW()), $1, $2, $3, 1, $4, $5, $6, NOW())
+             ON CONFLICT (bucket_minute, method, route, status_class)
+             DO UPDATE SET
+               req_count = http_request_metrics_minute.req_count + 1,
+               error_count = http_request_metrics_minute.error_count + EXCLUDED.error_count,
+               slow_count = http_request_metrics_minute.slow_count + EXCLUDED.slow_count,
+               total_duration_ms = http_request_metrics_minute.total_duration_ms + EXCLUDED.total_duration_ms,
+               updated_at = NOW()`,
+            [
+                req.method || 'GET',
+                routeTag,
+                statusClass,
+                isError ? 1 : 0,
+                isSlow ? 1 : 0,
+                durationMs
+            ]
+        ).catch((e) => {
+            console.warn('request telemetry metrics insert failed:', e?.message || e);
+        });
+
+        if (shouldStoreEvent) {
+            pool.query(
+                `INSERT INTO http_request_events
+                  (method, route, status, duration_ms, response_size_bytes, request_id, sample_reason, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+                [
+                    req.method || 'GET',
+                    routeTag,
+                    status,
+                    durationMs,
+                    responseSizeBytes,
+                    requestId,
+                    sampleReason
+                ]
+            ).catch((e) => {
+                console.warn('request telemetry event insert failed:', e?.message || e);
+            });
+        }
+
+        maybeCleanupRequestTelemetry();
+    });
+
+    next();
+});
 
 
 // Security: Rate Limiters

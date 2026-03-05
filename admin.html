@@ -78,6 +78,8 @@
       <div class="card"><div class="t">Uygulama Raporlari (24s)</div><div class="v" id="s_support_reports">-</div><div class="s">support bildirimi</div></div>
       <div class="card"><div class="t">Push (60 dk)</div><div class="v" id="s_push_rate">-%</div><div class="s" id="s_push_total">0 gonderim / 0 hata</div></div>
       <div class="card"><div class="t">Push Firebase</div><div class="v" id="s_push_enabled">-</div><div class="s" id="s_push_project">proje: -</div><div class="s" id="s_push_devices">aktif cihaz: -</div></div>
+      <div class="card"><div class="t">API P95 (60 dk)</div><div class="v" id="s_perf_p95">-</div><div class="s" id="s_perf_req">0 istek</div></div>
+      <div class="card"><div class="t">API Hata Orani (60 dk)</div><div class="v" id="s_perf_err">-%</div><div class="s" id="s_perf_slow">0 yavas istek</div></div>
     </div>
 
     <div class="panel">
@@ -89,6 +91,7 @@
         <button class="tab" onclick="switchTab('legal',event)">Yasal Metinler</button>
         <button class="tab" onclick="switchTab('deletion_requests',event)">Silme Talepleri</button>
         <button class="tab" onclick="switchTab('audit_logs',event)">Audit Log</button>
+        <button class="tab" onclick="switchTab('performance',event)">Performans</button>
         <button class="tab" onclick="switchTab('logs',event)">Canli Loglar</button>
       </div>
 
@@ -126,6 +129,7 @@
   <script>
     let currentTab='reports';
     let currentDeletionStatus='requested';
+    let currentPerformanceHours=24;
     let logEventSource=null;
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
@@ -135,7 +139,7 @@
     const subject=v=>SUBJECT_LABELS[v]||v||'-';
     const brevo=v=>BREVO_LABELS[v]||v||'-';
 
-    function refreshAll(){loadStats();loadPushHealth();loadPushDiagnostics();loadContent();}
+    function refreshAll(){loadStats();loadPushHealth();loadPushDiagnostics();loadPerformanceSummaryCard();loadContent();}
 
     async function loadStats(){
       try{
@@ -179,6 +183,26 @@
       }catch(e){
         enabled.innerText='-'; enabled.style.color='#2c3e50'; project.innerText='proje: -'; devices.innerText='aktif cihaz: -';
         host.innerHTML=`<div>Teshis verisi alinamadi: ${esc(e.message||e)}</div>`;
+      }
+    }
+
+    async function loadPerformanceSummaryCard(){
+      const p95El=document.getElementById('s_perf_p95');
+      const reqEl=document.getElementById('s_perf_req');
+      const errEl=document.getElementById('s_perf_err');
+      const slowEl=document.getElementById('s_perf_slow');
+      if(!p95El||!reqEl||!errEl||!slowEl) return;
+      try{
+        const r=await fetch('/admin/performance/overview?hours=1');const x=await r.json();if(!r.ok) throw new Error(x.error||'hata');
+        p95El.innerText=`${Number(x.p95_ms||0).toFixed(1)}ms`;
+        reqEl.innerText=`${Number(x.total_requests||0)} istek`;
+        errEl.innerText=`${Number(x.error_rate||0).toFixed(2)}%`;
+        slowEl.innerText=`${Number(x.slow_requests||0)} yavas istek`;
+      }catch(e){
+        p95El.innerText='-';
+        reqEl.innerText='performans okunamadi';
+        errEl.innerText='-%';
+        slowEl.innerText='-';
       }
     }
 
@@ -596,12 +620,134 @@
       }
     }
 
+    function renderPerformanceView(overview,timeseries,slowItems){
+      const c=document.getElementById('content');
+      const hours=Number(overview?.hours||currentPerformanceHours||24);
+      const topSlow=Array.isArray(overview?.top_slow_routes)?overview.top_slow_routes:[];
+      const topErr=Array.isArray(overview?.top_error_routes)?overview.top_error_routes:[];
+      const series=Array.isArray(timeseries)?timeseries:[];
+      const slow=Array.isArray(slowItems)?slowItems:[];
+      const hoursOptions=[1,3,6,12,24,48,72,168];
+      const optionsHtml=hoursOptions
+        .map((h)=>`<option value="${h}" ${h===hours?'selected':''}>${h} saat</option>`)
+        .join('');
+
+      let html=`
+        <div class="row">
+          <label for="perf-hours"><strong>Pencere</strong></label>
+          <select id="perf-hours">${optionsHtml}</select>
+          <button class="btn btn-refresh" onclick="changePerformanceHours()">Yenile</button>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="k">Toplam Istek</div><div class="n">${Number(overview?.total_requests||0)}</div></div>
+          <div class="metric"><div class="k">Hata Orani</div><div class="n">${Number(overview?.error_rate||0).toFixed(2)}%</div></div>
+          <div class="metric"><div class="k">P50/P95/P99</div><div class="n" style="font-size:16px">${Number(overview?.p50_ms||0).toFixed(1)} / ${Number(overview?.p95_ms||0).toFixed(1)} / ${Number(overview?.p99_ms||0).toFixed(1)} ms</div></div>
+          <div class="metric"><div class="k">Yavas Istek</div><div class="n">${Number(overview?.slow_requests||0)}</div></div>
+        </div>
+      `;
+
+      html+='<h3>Trend (dakikalik)</h3>';
+      if(!series.length){
+        html+='<p class="deletion-row-note">Trend verisi yok.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead><tr><th>Dakika</th><th>Istek</th><th>Hata</th><th>P95 (ms)</th></tr></thead>
+            <tbody>
+        `;
+        series.slice(-180).forEach((row)=>{
+          html+=`<tr><td>${d(row.bucket)}</td><td>${Number(row.req_count||0)}</td><td>${Number(row.error_count||0)}</td><td>${Number(row.p95_ms||0).toFixed(1)}</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      html+='<h3>En Yavas Route (orneklem)</h3>';
+      if(!topSlow.length){
+        html+='<p class="deletion-row-note">Yavas route verisi yok.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead><tr><th>Route</th><th>Ornek</th><th>Ort (ms)</th><th>P95 (ms)</th><th>Max (ms)</th></tr></thead>
+            <tbody>
+        `;
+        topSlow.forEach((row)=>{
+          html+=`<tr><td><code>${esc(row.method||'GET')} ${esc(row.route||'-')}</code></td><td>${Number(row.sample_count||0)}</td><td>${Number(row.avg_ms||0).toFixed(1)}</td><td>${Number(row.p95_ms||0).toFixed(1)}</td><td>${Number(row.max_ms||0)}</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      html+='<h3>Hata Ureten Route</h3>';
+      if(!topErr.length){
+        html+='<p class="deletion-row-note">Hata route verisi yok.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead><tr><th>Route</th><th>Istek</th><th>Hata</th><th>Hata Orani</th></tr></thead>
+            <tbody>
+        `;
+        topErr.forEach((row)=>{
+          html+=`<tr><td><code>${esc(row.method||'GET')} ${esc(row.route||'-')}</code></td><td>${Number(row.req_count||0)}</td><td>${Number(row.error_count||0)}</td><td>${Number(row.error_rate||0).toFixed(2)}%</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      html+='<h3>En Yavas Istekler (ham olay)</h3>';
+      if(!slow.length){
+        html+='<p class="deletion-row-note">Yavas istek listesi bos.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead><tr><th>Tarih</th><th>Route</th><th>Status</th><th>Sure (ms)</th><th>Boyut</th><th>Sebep</th></tr></thead>
+            <tbody>
+        `;
+        slow.forEach((row)=>{
+          html+=`<tr><td>${d(row.created_at)}</td><td><code>${esc(row.method||'GET')} ${esc(row.route||'-')}</code></td><td>${Number(row.status||0)}</td><td>${Number(row.duration_ms||0)}</td><td>${row.response_size_bytes!=null?Number(row.response_size_bytes):'-'}</td><td>${esc(row.sample_reason||'-')}</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      c.innerHTML=html;
+    }
+
+    function changePerformanceHours(){
+      const next=Number(val('perf-hours'))||24;
+      currentPerformanceHours=Math.max(1,Math.min(24*14,next));
+      loadPerformanceTab();
+    }
+
+    async function loadPerformanceTab(){
+      const c=document.getElementById('content');
+      c.innerHTML='<p style="padding:16px;color:#7f8c8d">Performans verisi yukleniyor...</p>';
+      try{
+        const hours=Math.max(1,Math.min(24*14,currentPerformanceHours||24));
+        const [overviewRes,timeseriesRes,slowRes]=await Promise.all([
+          fetch(`/admin/performance/overview?hours=${hours}`),
+          fetch(`/admin/performance/timeseries?hours=${hours}`),
+          fetch(`/admin/performance/slow-requests?hours=${hours}&limit=100&minDurationMs=1500`)
+        ]);
+        const overviewJson=await overviewRes.json();
+        const timeseriesJson=await timeseriesRes.json();
+        const slowJson=await slowRes.json();
+        if(!overviewRes.ok) throw new Error(overviewJson.error||'Overview okunamadi.');
+        if(!timeseriesRes.ok) throw new Error(timeseriesJson.error||'Trend okunamadi.');
+        if(!slowRes.ok) throw new Error(slowJson.error||'Yavas istekler okunamadi.');
+        renderPerformanceView(
+          overviewJson||{},
+          Array.isArray(timeseriesJson.series)?timeseriesJson.series:[],
+          Array.isArray(slowJson.items)?slowJson.items:[]
+        );
+      }catch(e){
+        c.innerHTML=`<p style="padding:16px;color:#c0392b">Performans verisi yuklenemedi: ${esc(e.message||e)}</p>`;
+      }
+    }
+
     async function loadContent(){
       const c=document.getElementById('content'); c.innerHTML='<p style="padding:16px;color:#7f8c8d">Veri getiriliyor...</p>';
       try{
         if(currentTab==='legal'){ await loadLegalEditor(); return; }
         if(currentTab==='deletion_requests'){ await loadDeletionRequests(); return; }
         if(currentTab==='audit_logs'){ await loadAuditLogs(); return; }
+        if(currentTab==='performance'){ await loadPerformanceTab(); return; }
         const q=document.getElementById('search-input')?.value||'';
         const r=await fetch(`/admin/data?type=${currentTab}&q=${encodeURIComponent(q)}`); const x=await r.json(); const items=x.items||[];
         if(!items.length){ c.innerHTML='<p style="padding:16px">Kayit bulunamadi.</p>'; return; }
@@ -721,7 +867,7 @@
       const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const raw=await r.text(); const x=(()=>{try{return raw?JSON.parse(raw):{};}catch{return{};}})();
       if(!r.ok) throw new Error(x.error||'Istek basarisiz');
-      loadContent(); loadStats();
+      loadContent(); loadStats(); loadPerformanceSummaryCard();
     }
     async function actionBan(userId,days,reason){ if(!confirm('Kullaniciyi yasaklamak istiyor musunuz?')) return; await apiPost('/admin/ban',{userId,days,reason}); }
     async function actionShadow(userId,reason){ if(!confirm('Kullaniciyi golge yasaga almak istiyor musunuz?')) return; await apiPost('/admin/ban',{userId,days:0,type:'shadow',reason}); }
@@ -732,7 +878,7 @@
     async function actionRejectDeletion(requestId){ if(!confirm('Silme talebini reddetmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reject`,{}); }
     async function actionReactivateDeletion(requestId){ if(!confirm('Bu kullaniciyi yeniden aktif etmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reactivate`,{}); }
 
-    loadStats(); loadPushHealth(); loadPushDiagnostics(); applySearchUI(); loadContent();
+    loadStats(); loadPushHealth(); loadPushDiagnostics(); loadPerformanceSummaryCard(); applySearchUI(); loadContent();
   </script>
 </body>
 </html>

@@ -49,6 +49,8 @@ const normalizeDeletionStatus = (value) => {
     if (!normalized) return 'requested';
     return ALLOWED_DELETION_REQUEST_STATUS.has(normalized) ? normalized : null;
 };
+const clampHours = (value, fallback = 24) => Math.max(1, Math.min(24 * 14, Number(value) || fallback));
+const clampLimit = (value, fallback = 100, max = 200) => Math.max(1, Math.min(max, Number(value) || fallback));
 const logAdminAudit = async (dbOrPool, {
     actorAdmin = 'admin',
     actionType,
@@ -636,6 +638,175 @@ router.get('/push/logs', async (req, res) => {
         res.json({ items: result.rows });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/performance/overview', async (req, res) => {
+    const hours = clampHours(req.query.hours, 24);
+    try {
+        const totalsRes = await pool.query(
+            `SELECT
+                COALESCE(SUM(req_count), 0)::bigint AS total_requests,
+                COALESCE(SUM(error_count), 0)::bigint AS error_requests,
+                COALESCE(SUM(total_duration_ms), 0)::bigint AS total_duration_ms,
+                COALESCE(SUM(slow_count), 0)::bigint AS slow_requests
+             FROM http_request_metrics_minute
+             WHERE bucket_minute > NOW() - ($1::text || ' hours')::interval`,
+            [hours]
+        );
+
+        const percentilesRes = await pool.query(
+            `SELECT
+                COALESCE(ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p50_ms,
+                COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p95_ms,
+                COALESCE(ROUND(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p99_ms
+             FROM http_request_events
+             WHERE created_at > NOW() - ($1::text || ' hours')::interval`,
+            [hours]
+        );
+
+        const topSlowRoutesRes = await pool.query(
+            `SELECT
+                method,
+                route,
+                COUNT(*)::int AS sample_count,
+                COALESCE(ROUND(AVG(duration_ms)::numeric, 1), 0)::float8 AS avg_ms,
+                COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p95_ms,
+                COALESCE(MAX(duration_ms), 0)::int AS max_ms
+             FROM http_request_events
+             WHERE created_at > NOW() - ($1::text || ' hours')::interval
+             GROUP BY method, route
+             HAVING COUNT(*) >= 3
+             ORDER BY p95_ms DESC, avg_ms DESC
+             LIMIT 10`,
+            [hours]
+        );
+
+        const topErrorRoutesRes = await pool.query(
+            `SELECT
+                method,
+                route,
+                COALESCE(SUM(req_count), 0)::int AS req_count,
+                COALESCE(SUM(error_count), 0)::int AS error_count,
+                CASE
+                    WHEN COALESCE(SUM(req_count), 0) > 0
+                    THEN ROUND((COALESCE(SUM(error_count), 0)::numeric * 100.0) / COALESCE(SUM(req_count), 0), 2)
+                    ELSE 0
+                END::float8 AS error_rate
+             FROM http_request_metrics_minute
+             WHERE bucket_minute > NOW() - ($1::text || ' hours')::interval
+             GROUP BY method, route
+             HAVING COALESCE(SUM(error_count), 0) > 0
+             ORDER BY error_count DESC, error_rate DESC
+             LIMIT 10`,
+            [hours]
+        );
+
+        const totals = totalsRes.rows[0] || {};
+        const percentiles = percentilesRes.rows[0] || {};
+        const totalRequests = Number(totals.total_requests) || 0;
+        const errorRequests = Number(totals.error_requests) || 0;
+        const errorRate = totalRequests > 0
+            ? Math.round((errorRequests * 10000) / totalRequests) / 100
+            : 0;
+
+        return res.json({
+            hours,
+            total_requests: totalRequests,
+            error_requests: errorRequests,
+            error_rate: errorRate,
+            slow_requests: Number(totals.slow_requests) || 0,
+            avg_ms: totalRequests > 0
+                ? Math.round(((Number(totals.total_duration_ms) || 0) / totalRequests) * 10) / 10
+                : 0,
+            p50_ms: Number(percentiles.p50_ms) || 0,
+            p95_ms: Number(percentiles.p95_ms) || 0,
+            p99_ms: Number(percentiles.p99_ms) || 0,
+            top_slow_routes: topSlowRoutesRes.rows || [],
+            top_error_routes: topErrorRoutesRes.rows || []
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/performance/timeseries', async (req, res) => {
+    const hours = clampHours(req.query.hours, 24);
+    try {
+        const countRes = await pool.query(
+            `SELECT
+                bucket_minute AS bucket,
+                COALESCE(SUM(req_count), 0)::int AS req_count,
+                COALESCE(SUM(error_count), 0)::int AS error_count
+             FROM http_request_metrics_minute
+             WHERE bucket_minute > NOW() - ($1::text || ' hours')::interval
+             GROUP BY bucket_minute
+             ORDER BY bucket_minute ASC`,
+            [hours]
+        );
+
+        const p95Res = await pool.query(
+            `SELECT
+                date_trunc('minute', created_at) AS bucket,
+                COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p95_ms
+             FROM http_request_events
+             WHERE created_at > NOW() - ($1::text || ' hours')::interval
+             GROUP BY date_trunc('minute', created_at)
+             ORDER BY date_trunc('minute', created_at) ASC`,
+            [hours]
+        );
+
+        const p95ByBucket = new Map();
+        for (const row of p95Res.rows || []) {
+            const key = row.bucket instanceof Date ? row.bucket.toISOString() : String(row.bucket || '');
+            p95ByBucket.set(key, Number(row.p95_ms) || 0);
+        }
+
+        const series = (countRes.rows || []).map((row) => {
+            const key = row.bucket instanceof Date ? row.bucket.toISOString() : String(row.bucket || '');
+            return {
+                bucket: key,
+                req_count: Number(row.req_count) || 0,
+                error_count: Number(row.error_count) || 0,
+                p95_ms: p95ByBucket.get(key) || 0
+            };
+        });
+
+        return res.json({ hours, series });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/performance/slow-requests', async (req, res) => {
+    const hours = clampHours(req.query.hours, 24);
+    const limit = clampLimit(req.query.limit, 100, 200);
+    const minDurationMs = Math.max(250, Math.min(60000, Number(req.query.minDurationMs) || 1500));
+    try {
+        const result = await pool.query(
+            `SELECT
+                method,
+                route,
+                status,
+                duration_ms,
+                response_size_bytes,
+                request_id,
+                sample_reason,
+                created_at
+             FROM http_request_events
+             WHERE created_at > NOW() - ($1::text || ' hours')::interval
+               AND duration_ms >= $2
+             ORDER BY duration_ms DESC, created_at DESC
+             LIMIT $3`,
+            [hours, minDurationMs, limit]
+        );
+        return res.json({
+            hours,
+            minDurationMs,
+            items: result.rows || []
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
     }
 });
 

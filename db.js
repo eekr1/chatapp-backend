@@ -219,6 +219,31 @@ const createTablesQuery = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS http_request_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    method TEXT NOT NULL,
+    route TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    response_size_bytes INTEGER,
+    request_id TEXT,
+    sample_reason TEXT NOT NULL DEFAULT 'sampled',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS http_request_metrics_minute (
+    bucket_minute TIMESTAMPTZ NOT NULL,
+    method TEXT NOT NULL,
+    route TEXT NOT NULL,
+    status_class TEXT NOT NULL,
+    req_count INTEGER NOT NULL DEFAULT 0,
+    error_count INTEGER NOT NULL DEFAULT 0,
+    slow_count INTEGER NOT NULL DEFAULT 0,
+    total_duration_ms BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (bucket_minute, method, route, status_class)
+  );
+
   CREATE OR REPLACE FUNCTION prevent_admin_action_audit_mutation()
   RETURNS trigger
   LANGUAGE plpgsql
@@ -354,6 +379,11 @@ const createTablesQuery = `
       CREATE INDEX IF NOT EXISTS idx_admin_action_audit_created_at ON admin_action_audit(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_admin_action_audit_action_created ON admin_action_audit(action_type, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_admin_action_audit_actor_created ON admin_action_audit(actor_admin, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_http_request_events_created_at ON http_request_events(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_http_request_events_route_created_at ON http_request_events(route, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_http_request_events_status_created_at ON http_request_events(status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_http_request_metrics_minute_bucket ON http_request_metrics_minute(bucket_minute DESC);
+      CREATE INDEX IF NOT EXISTS idx_http_request_metrics_minute_route_bucket ON http_request_metrics_minute(route, bucket_minute DESC);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
         ON messages(sender_id, client_msg_id)
         WHERE client_msg_id IS NOT NULL;
