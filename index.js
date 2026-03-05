@@ -1146,13 +1146,8 @@ wss.on('connection', (ws, req) => {
                                 text: data.text
                             });
 
-                            // V13: Persist Message if Persistent Conversation
-                            if (room.conversationId) {
-                                pool.query(
-                                    'INSERT INTO messages (conversation_id, sender_id, text, msg_type) VALUES ($1, $2, $3, $4)',
-                                    [room.conversationId, clientData.dbUserId, data.text, 'text']
-                                ).catch(e => console.error('Message persist error:', e));
-                            }
+                            // Anonymous room messages are intentionally ephemeral.
+                            // Persistence is only supported in friend/direct conversations.
                         }
                     }
                 }
