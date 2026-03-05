@@ -32,6 +32,7 @@ const basicAuth = (req, res, next) => {
     const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
 
     if (login && password && login === auth.login && password === auth.password) {
+        req.adminUser = login;
         return next();
     }
 
@@ -41,6 +42,13 @@ const basicAuth = (req, res, next) => {
 
 router.use(basicAuth);
 router.use('/assets', express.static(path.join(__dirname, 'public', 'admin')));
+
+const ALLOWED_DELETION_REQUEST_STATUS = new Set(['requested', 'completed', 'rejected']);
+const normalizeDeletionStatus = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return 'requested';
+    return ALLOWED_DELETION_REQUEST_STATUS.has(normalized) ? normalized : null;
+};
 
 // Admin Dashboard HTML (Serve Static File)
 router.get('/', (req, res) => {
@@ -578,6 +586,194 @@ router.get('/push/logs', async (req, res) => {
         res.json({ items: result.rows });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/deletion-requests', async (req, res) => {
+    const status = normalizeDeletionStatus(req.query.status);
+    if (!status) {
+        return res.status(400).json({ error: 'Gecersiz status. requested|completed|rejected beklenir.' });
+    }
+
+    try {
+        const result = await pool.query(
+            `SELECT
+                r.id,
+                r.user_id,
+                r.username_snapshot,
+                r.status,
+                r.requested_at,
+                r.reviewed_at,
+                r.reviewed_by,
+                r.note,
+                u.username AS current_username,
+                u.status AS user_status,
+                p.display_name
+             FROM account_deletion_requests r
+             LEFT JOIN users u ON u.id = r.user_id
+             LEFT JOIN profiles p ON p.user_id = r.user_id
+             WHERE r.status = $1
+             ORDER BY r.requested_at DESC
+             LIMIT 250`,
+            [status]
+        );
+        return res.json({ items: result.rows });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/deletion-requests/:id/approve-delete', async (req, res) => {
+    const requestId = String(req.params.id || '').trim();
+    const adminUser = String(req.adminUser || 'admin').slice(0, 120);
+    const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
+    if (!requestId) return res.status(400).json({ error: 'Talep kimligi gerekli.' });
+
+    const db = await pool.connect();
+    try {
+        await db.query('BEGIN');
+
+        const requestRes = await db.query(
+            `SELECT id, user_id, username_snapshot, status
+             FROM account_deletion_requests
+             WHERE id = $1
+             FOR UPDATE`,
+            [requestId]
+        );
+        if (!requestRes.rows.length) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Silme talebi bulunamadi.' });
+        }
+
+        const deletionRequest = requestRes.rows[0];
+        if (deletionRequest.status !== 'requested') {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Sadece requested durumundaki talepler silinebilir.' });
+        }
+
+        const userId = deletionRequest.user_id;
+
+        await db.query('DELETE FROM friendships WHERE user_id = $1 OR friend_user_id = $1', [userId]);
+        await db.query('DELETE FROM blocks WHERE blocker_id = $1 OR blocked_id = $1', [userId]);
+        await db.query('DELETE FROM messages WHERE sender_id = $1', [userId]);
+        await db.query('DELETE FROM conversations WHERE user_a_id = $1 OR user_b_id = $1', [userId]);
+        await db.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+
+        await db.query(
+            `UPDATE account_deletion_requests
+             SET status = 'completed', reviewed_at = NOW(), reviewed_by = $1, note = $2
+             WHERE id = $3`,
+            [adminUser, note, requestId]
+        );
+
+        await db.query('DELETE FROM users WHERE id = $1', [userId]);
+
+        await db.query('COMMIT');
+        return res.json({ success: true });
+    } catch (e) {
+        try {
+            await db.query('ROLLBACK');
+        } catch {
+            // ignore rollback errors
+        }
+        console.error('deletion approve failed', { requestId, adminUser, message: e?.message || e });
+        return res.status(500).json({ error: 'Kalici silme tamamlanamadi.' });
+    } finally {
+        db.release();
+    }
+});
+
+router.post('/deletion-requests/:id/reject', async (req, res) => {
+    const requestId = String(req.params.id || '').trim();
+    const adminUser = String(req.adminUser || 'admin').slice(0, 120);
+    const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
+    if (!requestId) return res.status(400).json({ error: 'Talep kimligi gerekli.' });
+
+    const db = await pool.connect();
+    try {
+        await db.query('BEGIN');
+
+        const requestRes = await db.query(
+            `SELECT id, user_id
+             FROM account_deletion_requests
+             WHERE id = $1
+             FOR UPDATE`,
+            [requestId]
+        );
+        if (!requestRes.rows.length) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Silme talebi bulunamadi.' });
+        }
+
+        const userId = requestRes.rows[0].user_id;
+
+        await db.query(
+            `UPDATE account_deletion_requests
+             SET status = 'rejected', reviewed_at = NOW(), reviewed_by = $1, note = $2
+             WHERE id = $3`,
+            [adminUser, note, requestId]
+        );
+        await db.query('UPDATE users SET status = \'active\' WHERE id = $1', [userId]);
+
+        await db.query('COMMIT');
+        return res.json({ success: true });
+    } catch (e) {
+        try {
+            await db.query('ROLLBACK');
+        } catch {
+            // ignore rollback errors
+        }
+        console.error('deletion reject failed', { requestId, adminUser, message: e?.message || e });
+        return res.status(500).json({ error: 'Talep reddedilemedi.' });
+    } finally {
+        db.release();
+    }
+});
+
+router.post('/deletion-requests/:id/reactivate', async (req, res) => {
+    const requestId = String(req.params.id || '').trim();
+    const adminUser = String(req.adminUser || 'admin').slice(0, 120);
+    const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
+    if (!requestId) return res.status(400).json({ error: 'Talep kimligi gerekli.' });
+
+    const db = await pool.connect();
+    try {
+        await db.query('BEGIN');
+
+        const requestRes = await db.query(
+            `SELECT id, user_id
+             FROM account_deletion_requests
+             WHERE id = $1
+             FOR UPDATE`,
+            [requestId]
+        );
+        if (!requestRes.rows.length) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Silme talebi bulunamadi.' });
+        }
+
+        const userId = requestRes.rows[0].user_id;
+
+        await db.query('UPDATE users SET status = \'active\' WHERE id = $1', [userId]);
+        await db.query(
+            `UPDATE account_deletion_requests
+             SET status = 'rejected', reviewed_at = NOW(), reviewed_by = $1, note = $2
+             WHERE id = $3`,
+            [adminUser, note, requestId]
+        );
+
+        await db.query('COMMIT');
+        return res.json({ success: true });
+    } catch (e) {
+        try {
+            await db.query('ROLLBACK');
+        } catch {
+            // ignore rollback errors
+        }
+        console.error('deletion reactivate failed', { requestId, adminUser, message: e?.message || e });
+        return res.status(500).json({ error: 'Kullanici yeniden aktif edilemedi.' });
+    } finally {
+        db.release();
     }
 });
 

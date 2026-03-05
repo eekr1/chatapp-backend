@@ -2,130 +2,162 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { hashPassword, comparePassword, generateSessionToken, hashToken } = require('../utils/security');
+const { fetchLegalSettings } = require('../utils/legalContent');
+
+const getClientIp = (req) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.trim()) {
+        return forwarded.split(',')[0].trim().slice(0, 120);
+    }
+    return String(req.ip || req.socket?.remoteAddress || '').trim().slice(0, 120) || null;
+};
 
 // Register
 router.post('/register', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Kullanıcı adı ve şifre gerekli.' });
+    const {
+        username,
+        password,
+        terms_accepted,
+        terms_version,
+        privacy_version
+    } = req.body || {};
 
-    const cleanUsername = username.trim().toLowerCase();
-    if (cleanUsername.length < 3) return res.status(400).json({ error: 'Kullanıcı adı en az 3 karakter olmalı.' });
-    if (password.length < 6) return res.status(400).json({ error: 'Şifre en az 6 karakter olmalı.' });
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Kullanici adi ve sifre gerekli.' });
+    }
 
-    // Username regex check (alphanumeric, underscore)
+    const cleanUsername = String(username).trim().toLowerCase();
+    if (cleanUsername.length < 3) {
+        return res.status(400).json({ error: 'Kullanici adi en az 3 karakter olmali.' });
+    }
+    if (String(password).length < 6) {
+        return res.status(400).json({ error: 'Sifre en az 6 karakter olmali.' });
+    }
     if (!/^[a-z0-9_]+$/.test(cleanUsername)) {
-        return res.status(400).json({ error: 'Kullanıcı adı sadece harf, rakam ve alt çizgi içerebilir.' });
+        return res.status(400).json({ error: 'Kullanici adi sadece harf, rakam ve alt cizgi icerebilir.' });
+    }
+    if (terms_accepted !== true) {
+        return res.status(400).json({ error: 'Kayit icin kullanim sartlari ve gizlilik politikasi kabul edilmelidir.' });
+    }
+
+    const submittedTermsVersion = String(terms_version || '').trim();
+    const submittedPrivacyVersion = String(privacy_version || '').trim();
+    if (!submittedTermsVersion || !submittedPrivacyVersion) {
+        return res.status(400).json({ error: 'Sozlesme versiyon bilgisi eksik.' });
     }
 
     try {
-        const hashedPassword = await hashPassword(password);
+        const { item: legalItem } = await fetchLegalSettings(pool);
+        const expectedTermsVersion = String(legalItem?.versions?.terms || 'v1');
+        const expectedPrivacyVersion = String(legalItem?.versions?.privacy || 'v1');
 
-        // Transaction to ensuring user + profile created
+        if (
+            submittedTermsVersion !== expectedTermsVersion
+            || submittedPrivacyVersion !== expectedPrivacyVersion
+        ) {
+            return res.status(400).json({ error: 'Sozlesme versiyonu guncel degil. Lutfen sayfayi yenileyip tekrar deneyin.' });
+        }
+
+        const hashedPassword = await hashPassword(String(password));
+        const requestIp = getClientIp(req);
+        const requestUserAgent = String(req.headers['user-agent'] || '').trim().slice(0, 400) || null;
+
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
             const userRes = await client.query(
-                'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, created_at',
+                'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username',
                 [cleanUsername, hashedPassword]
             );
             const user = userRes.rows[0];
 
-            // Create empty profile
             await client.query(
                 'INSERT INTO profiles (user_id, display_name) VALUES ($1, $2)',
-                [user.id, user.username] // Default display_name = username
+                [user.id, user.username]
+            );
+
+            await client.query(
+                `INSERT INTO legal_acceptances
+                  (user_id, terms_version, privacy_version, accepted_at, ip, user_agent)
+                 VALUES ($1, $2, $3, NOW(), $4, $5)`,
+                [user.id, submittedTermsVersion, submittedPrivacyVersion, requestIp, requestUserAgent]
             );
 
             await client.query('COMMIT');
-            res.json({ success: true, user: { id: user.id, username: user.username } });
+            return res.json({ success: true, user: { id: user.id, username: user.username } });
         } catch (e) {
             await client.query('ROLLBACK');
             throw e;
         } finally {
             client.release();
         }
-
     } catch (e) {
-        if (e.code === '23505') return res.status(409).json({ error: 'Bu kullanıcı adı zaten alınmış.' });
+        if (e.code === '23505') {
+            return res.status(409).json({ error: 'Bu kullanici adi zaten alinmis.' });
+        }
         console.error('Register Error:', e);
-        res.status(500).json({ error: 'Sunucu hatası.' });
+        return res.status(500).json({ error: 'Sunucu hatasi.' });
     }
 });
 
 // Login
 router.post('/login', async (req, res) => {
-    const { username, password, device_id } = req.body;
+    const { username, password, device_id } = req.body || {};
     if (!username || !password) return res.status(400).json({ error: 'Eksik bilgi.' });
 
-    const cleanUsername = username.trim().toLowerCase();
+    const cleanUsername = String(username).trim().toLowerCase();
 
     try {
         const userRes = await pool.query('SELECT * FROM users WHERE username = $1', [cleanUsername]);
         const user = userRes.rows[0];
 
-        if (!user) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı.' });
+        if (!user) return res.status(401).json({ error: 'Kullanici adi veya sifre hatali.' });
 
         if (user.status !== 'active') {
-            return res.status(403).json({ error: 'Hesabınız askıya alınmış veya engellenmiş.' });
+            return res.status(403).json({ error: 'Hesabiniz aktif degil.' });
         }
 
-        const match = await comparePassword(password, user.password_hash);
-        if (!match) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı.' });
+        const match = await comparePassword(String(password), user.password_hash);
+        if (!match) return res.status(401).json({ error: 'Kullanici adi veya sifre hatali.' });
 
-        // Generate Session
         const token = generateSessionToken();
         const tokenHash = hashToken(token);
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
         await pool.query(
             'INSERT INTO sessions (token_hash, user_id, device_id, expires_at) VALUES ($1, $2, $3, $4)',
             [tokenHash, user.id, device_id || 'unknown', expiresAt]
         );
 
-        // Update Last Seen
         await pool.query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [user.id]);
 
-        res.json({
+        return res.json({
             success: true,
             token,
             user: { id: user.id, username: user.username }
         });
-
     } catch (e) {
         console.error('Login Error:', e);
-        res.status(500).json({ error: 'Sunucu hatası.' });
+        return res.status(500).json({ error: 'Sunucu hatasi.' });
     }
 });
 
 // Logout
 router.post('/logout', async (req, res) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.json({ success: true }); // Already logged out effectively
+    if (!authHeader) return res.json({ success: true });
 
     const token = authHeader.replace('Bearer ', '');
     const tokenHash = hashToken(token);
 
     try {
         await pool.query('DELETE FROM sessions WHERE token_hash = $1', [tokenHash]);
-        res.json({ success: true });
+        return res.json({ success: true });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Sunucu hatası' });
+        console.error('Logout Error:', e);
+        return res.status(500).json({ error: 'Sunucu hatasi.' });
     }
 });
-
-// Refresh Token can be added if needed, but long-lived access token sessions are fine for this simplistic usage. 
-// User asked for "refresh rotate" opsiyonel but explicitly in Milestone 1 list.
-// "POST /auth/refresh -> refresh rotate"
-// Currently I implemented "Long Lived Session Token". 
-// To strictly follow "Access + Refresh" pattern, I would need short lived access token + long lived refresh token.
-// The prompted plan says "POST /auth/login -> access + refresh".
-// I will stick to a single "Session Token" for simplicity unless User insists on separate Access/Refresh, 
-// OR I can treating this session token as the "Refresh Token" and issuing mostly opaque access tokens? 
-// Re-reading user request: "login -> access + refresh".
-// I'll stick to single token for now as it's simpler for "just username/password" unless I want to implement full oauth-like flow.
-// Actually, single token (session) is "Refresh Token" effectively if it rotates.
-// I will skip separate access token for now to keep it simple, straightforward persistent session.
 
 module.exports = router;

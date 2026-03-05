@@ -12,13 +12,16 @@ const authenticate = async (req, res, next) => {
 
     try {
         const result = await pool.query(`
-            SELECT s.*, u.username
+            SELECT s.*, u.username, u.status
             FROM sessions s
             JOIN users u ON s.user_id = u.id
             WHERE s.token_hash = $1 AND s.expires_at > NOW()
         `, [tokenHash]);
 
         if (result.rows.length === 0) return res.status(401).json({ error: 'Oturum gecersiz.' });
+        if (result.rows[0].status !== 'active') {
+            return res.status(403).json({ error: 'Hesap aktif degil.' });
+        }
         req.user = result.rows[0];
         next();
     } catch (e) {

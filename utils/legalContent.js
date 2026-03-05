@@ -8,6 +8,10 @@ const DEFAULT_LEGAL_CONTENT = Object.freeze({
         termsLabel: 'Kullanim Sartlari',
         termsUrl: '/terms-of-use'
     }),
+    versions: Object.freeze({
+        terms: 'v1',
+        privacy: 'v1'
+    }),
     documents: Object.freeze({
         privacy: Object.freeze({
             tr: Object.freeze({
@@ -36,6 +40,7 @@ const LIMITS = Object.freeze({
     tagline: 240,
     label: 80,
     url: 500,
+    version: 40,
     title: 180,
     content: 30000
 });
@@ -52,6 +57,12 @@ const normalizeText = (value, fallback = '') => {
 const normalizeContent = (value, fallback = '') => {
     if (typeof value !== 'string') return fallback;
     return value.replace(/\r\n/g, '\n').trim();
+};
+
+const normalizeVersion = (value, fallback = 'v1') => {
+    if (typeof value !== 'string') return fallback;
+    const normalized = value.trim();
+    return normalized || fallback;
 };
 
 const isValidLegalUrl = (value) => {
@@ -82,6 +93,7 @@ const normalizeLegalContent = (value) => {
     const defaults = cloneDefault();
     const source = isObject(value) ? value : {};
     const footerSource = isObject(source.footer) ? source.footer : {};
+    const versionsSource = isObject(source.versions) ? source.versions : {};
     const docsSource = isObject(source.documents) ? source.documents : {};
 
     const privacyUrl = normalizeText(footerSource.privacyUrl, defaults.footer.privacyUrl);
@@ -94,6 +106,10 @@ const normalizeLegalContent = (value) => {
             privacyUrl: isValidLegalUrl(privacyUrl) ? privacyUrl : defaults.footer.privacyUrl,
             termsLabel: normalizeText(footerSource.termsLabel, defaults.footer.termsLabel),
             termsUrl: isValidLegalUrl(termsUrl) ? termsUrl : defaults.footer.termsUrl
+        },
+        versions: {
+            terms: normalizeVersion(versionsSource.terms, defaults.versions.terms),
+            privacy: normalizeVersion(versionsSource.privacy, defaults.versions.privacy)
         },
         documents: {
             privacy: normalizeDocument(docsSource.privacy, defaults.documents.privacy),
@@ -120,6 +136,8 @@ const validateLegalContentPayload = (value) => {
         [source?.footer?.privacyUrl, 'Gizlilik link URL'],
         [source?.footer?.termsLabel, 'Sartlar link etiketi'],
         [source?.footer?.termsUrl, 'Sartlar link URL'],
+        [source?.versions?.terms, 'Terms versiyon'],
+        [source?.versions?.privacy, 'Privacy versiyon'],
         [source?.documents?.privacy?.tr?.title, 'Privacy TR baslik'],
         [source?.documents?.privacy?.tr?.content, 'Privacy TR icerik'],
         [source?.documents?.privacy?.en?.title, 'Privacy EN baslik'],
@@ -151,6 +169,8 @@ const validateLegalContentPayload = (value) => {
         [normalized.footer.privacyUrl, LIMITS.url, 'Gizlilik link URL'],
         [normalized.footer.termsLabel, LIMITS.label, 'Sartlar link etiketi'],
         [normalized.footer.termsUrl, LIMITS.url, 'Sartlar link URL'],
+        [normalized.versions.terms, LIMITS.version, 'Terms versiyon'],
+        [normalized.versions.privacy, LIMITS.version, 'Privacy versiyon'],
         [normalized.documents.privacy.tr.title, LIMITS.title, 'Privacy TR baslik'],
         [normalized.documents.privacy.tr.content, LIMITS.content, 'Privacy TR icerik'],
         [normalized.documents.privacy.en.title, LIMITS.title, 'Privacy EN baslik'],

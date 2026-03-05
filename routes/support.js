@@ -130,7 +130,7 @@ const authenticateOptional = async (req, res, next) => {
     try {
         const tokenHash = hashToken(token);
         const result = await pool.query(
-            `SELECT s.user_id, u.username
+            `SELECT s.user_id, u.username, u.status
              FROM sessions s
              JOIN users u ON u.id = s.user_id
              WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
@@ -139,6 +139,9 @@ const authenticateOptional = async (req, res, next) => {
 
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'Oturum gecersiz veya suresi dolmus.' });
+        }
+        if (result.rows[0].status !== 'active') {
+            return res.status(403).json({ error: 'Hesap aktif degil.' });
         }
 
         req.authUser = result.rows[0];

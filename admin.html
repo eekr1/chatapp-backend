@@ -53,6 +53,7 @@
     .legal-field label { font-size:12px; color:#5f6d7a; font-weight:600; }
     .legal-field textarea { border:1px solid #d8dbe2; border-radius:8px; padding:10px; resize:vertical; min-height:110px; font-family:Consolas,monospace; font-size:12px; }
     .legal-status { font-size:12px; color:#5f6d7a; }
+    .deletion-row-note { font-size:12px; color:#5f6d7a; margin-bottom:8px; }
   </style>
 </head>
 <body>
@@ -81,6 +82,7 @@
         <button class="tab" onclick="switchTab('profiles',event)">Profiller</button>
         <button class="tab" onclick="switchTab('app_reports',event)">Uygulama Raporlari</button>
         <button class="tab" onclick="switchTab('legal',event)">Yasal Metinler</button>
+        <button class="tab" onclick="switchTab('deletion_requests',event)">Silme Talepleri</button>
         <button class="tab" onclick="switchTab('logs',event)">Canli Loglar</button>
       </div>
 
@@ -117,6 +119,7 @@
 
   <script>
     let currentTab='reports';
+    let currentDeletionStatus='requested';
     let logEventSource=null;
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
@@ -202,6 +205,7 @@
 
     function renderLegalEditor(item,updatedAt){
       const footer=item?.footer||{};
+      const versions=item?.versions||{};
       const docs=item?.documents||{};
       const privacy=docs.privacy||{};
       const terms=docs.terms||{};
@@ -229,6 +233,17 @@
             <div class="legal-field">
               <label>Sartlar link URL</label>
               <input id="legal_terms_url" type="text" value="${esc(footer.termsUrl||'')}" />
+            </div>
+          </div>
+
+          <div class="legal-grid">
+            <div class="legal-field">
+              <label>Terms versiyon</label>
+              <input id="legal_terms_version" type="text" value="${esc(versions.terms||'v1')}" />
+            </div>
+            <div class="legal-field">
+              <label>Privacy versiyon</label>
+              <input id="legal_privacy_version" type="text" value="${esc(versions.privacy||'v1')}" />
             </div>
           </div>
 
@@ -290,6 +305,10 @@
           termsLabel:val('legal_terms_label'),
           termsUrl:val('legal_terms_url')
         },
+        versions:{
+          terms:val('legal_terms_version'),
+          privacy:val('legal_privacy_version')
+        },
         documents:{
           privacy:{
             tr:{title:val('legal_privacy_tr_title'),content:val('legal_privacy_tr_content')},
@@ -330,10 +349,94 @@
       }
     }
 
+    function renderDeletionRequests(items){
+      const c=document.getElementById('content');
+      const status=currentDeletionStatus;
+      let html=`
+        <div class="row">
+          <label for="deletion-status-filter"><strong>Durum</strong></label>
+          <select id="deletion-status-filter" onchange="changeDeletionStatus(this.value)">
+            <option value="requested" ${status==='requested'?'selected':''}>requested</option>
+            <option value="rejected" ${status==='rejected'?'selected':''}>rejected</option>
+            <option value="completed" ${status==='completed'?'selected':''}>completed</option>
+          </select>
+          <button class="btn btn-refresh" onclick="loadDeletionRequests()">Yenile</button>
+        </div>
+      `;
+
+      if(!items.length){
+        html+=`<p class="deletion-row-note">Bu filtrede talep bulunamadi.</p>`;
+        c.innerHTML=html;
+        return;
+      }
+
+      html+=`
+        <table>
+          <thead>
+            <tr>
+              <th>Talep</th>
+              <th>Kullanici</th>
+              <th>Durum</th>
+              <th>Istenen</th>
+              <th>Inceleyen</th>
+              <th>Not</th>
+              <th>Islem</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      items.forEach((it)=>{
+        const canApprove=status==='requested';
+        const canReject=status==='requested';
+        const canReactivate=status==='rejected';
+        html+=`
+          <tr>
+            <td>${esc(it.id||'-')}</td>
+            <td>
+              <strong>${esc(it.current_username||it.username_snapshot||'-')}</strong><br/>
+              <small>${esc(it.display_name||'-')}</small>
+            </td>
+            <td>${esc(it.status||'-')}</td>
+            <td>${d(it.requested_at)}</td>
+            <td>${esc(it.reviewed_by||'-')}<br/><small>${d(it.reviewed_at)}</small></td>
+            <td>${esc(it.note||'-')}</td>
+            <td>
+              ${canApprove?`<button class="btn btn-delete" onclick="actionApproveDeletion('${esc(it.id)}')">Kalici Sil</button>`:''}
+              ${canReject?`<button class="btn btn-unban" onclick="actionRejectDeletion('${esc(it.id)}')">Reddet</button>`:''}
+              ${canReactivate?`<button class="btn btn-refresh" onclick="actionReactivateDeletion('${esc(it.id)}')">Aktif Et</button>`:''}
+            </td>
+          </tr>
+        `;
+      });
+
+      html+='</tbody></table>';
+      c.innerHTML=html;
+    }
+
+    function changeDeletionStatus(value){
+      currentDeletionStatus=value||'requested';
+      loadDeletionRequests();
+    }
+
+    async function loadDeletionRequests(){
+      const c=document.getElementById('content');
+      c.innerHTML='<p style="padding:16px;color:#7f8c8d">Silme talepleri yukleniyor...</p>';
+      try{
+        const r=await fetch(`/admin/deletion-requests?status=${encodeURIComponent(currentDeletionStatus)}`);
+        const x=await r.json();
+        if(!r.ok) throw new Error(x.error||'Silme talepleri okunamadi.');
+        renderDeletionRequests(Array.isArray(x.items)?x.items:[]);
+      }catch(e){
+        c.innerHTML=`<p style="padding:16px;color:#c0392b">Silme talepleri yuklenemedi: ${esc(e.message||e)}</p>`;
+      }
+    }
+
     async function loadContent(){
       const c=document.getElementById('content'); c.innerHTML='<p style="padding:16px;color:#7f8c8d">Veri getiriliyor...</p>';
       try{
         if(currentTab==='legal'){ await loadLegalEditor(); return; }
+        if(currentTab==='deletion_requests'){ await loadDeletionRequests(); return; }
         const q=document.getElementById('search-input')?.value||'';
         const r=await fetch(`/admin/data?type=${currentTab}&q=${encodeURIComponent(q)}`); const x=await r.json(); const items=x.items||[];
         if(!items.length){ c.innerHTML='<p style="padding:16px">Kayit bulunamadi.</p>'; return; }
@@ -460,6 +563,9 @@
     async function actionUnban(userId){ if(!confirm('Yasagi kaldirmak istiyor musunuz?')) return; await apiPost('/admin/unban',{userId}); }
     async function actionUnblock(blockerId,blockedId){ if(!confirm('Bu engeli kaldirmak istiyor musunuz?')) return; await apiPost('/admin/unblock',{blockerId,blockedId}); closeModal(); }
     async function actionRemoveFriend(userId,friendId){ if(!confirm('Arkadasligi silmek istiyor musunuz?')) return; await apiPost('/admin/remove-friend',{userId,friendId}); closeModal(); }
+    async function actionApproveDeletion(requestId){ if(!confirm('Bu hesabi kalici olarak silmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/approve-delete`,{}); }
+    async function actionRejectDeletion(requestId){ if(!confirm('Silme talebini reddetmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reject`,{}); }
+    async function actionReactivateDeletion(requestId){ if(!confirm('Bu kullaniciyi yeniden aktif etmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reactivate`,{}); }
 
     loadStats(); loadPushHealth(); loadPushDiagnostics(); applySearchUI(); loadContent();
   </script>

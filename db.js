@@ -187,6 +187,27 @@ const createTablesQuery = `
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS legal_acceptances (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    terms_version TEXT NOT NULL,
+    privacy_version TEXT NOT NULL,
+    accepted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ip TEXT,
+    user_agent TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS account_deletion_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    username_snapshot TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'requested',
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by TEXT,
+    note TEXT
+  );
+
   -- Migration
   DO $$
   DECLARE
@@ -273,6 +294,11 @@ const createTablesQuery = `
       CREATE INDEX IF NOT EXISTS idx_support_report_media_created_at ON support_report_media(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks(blocker_id);
       CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks(blocked_id);
+      CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user_accepted ON legal_acceptances(user_id, accepted_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_account_deletion_requests_status_requested ON account_deletion_requests(status, requested_at DESC);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_account_deletion_requests_user_requested
+        ON account_deletion_requests(user_id)
+        WHERE status = 'requested';
       CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
         ON messages(sender_id, client_msg_id)
         WHERE client_msg_id IS NOT NULL;
@@ -287,6 +313,10 @@ const createTablesQuery = `
             'privacyUrl', '/privacy-policy',
             'termsLabel', 'Kullanim Sartlari',
             'termsUrl', '/terms-of-use'
+          ),
+          'versions', jsonb_build_object(
+            'terms', 'v1',
+            'privacy', 'v1'
           ),
           'documents', jsonb_build_object(
             'privacy', jsonb_build_object(
@@ -314,6 +344,27 @@ const createTablesQuery = `
         NOW()
       )
       ON CONFLICT (key) DO NOTHING;
+
+      UPDATE app_settings
+      SET
+        value = jsonb_set(
+          jsonb_set(
+            value,
+            '{versions,terms}',
+            to_jsonb(COALESCE(NULLIF(value->'versions'->>'terms', ''), 'v1')),
+            true
+          ),
+          '{versions,privacy}',
+          to_jsonb(COALESCE(NULLIF(value->'versions'->>'privacy', ''), 'v1')),
+          true
+        ),
+        updated_at = NOW()
+      WHERE key = 'legal_content_v1'
+        AND (
+          value->'versions' IS NULL
+          OR COALESCE(value->'versions'->>'terms', '') = ''
+          OR COALESCE(value->'versions'->>'privacy', '') = ''
+        );
 
       -- V13 Fix: Drop legacy FK constraints on conversations to allow Auth Users
       BEGIN

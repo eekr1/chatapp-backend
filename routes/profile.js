@@ -3,72 +3,75 @@ const router = express.Router();
 const { pool } = require('../db');
 const { hashToken, comparePassword, hashPassword } = require('../utils/security');
 
-// Middleware to authenticate user
+const DELETE_CONFIRM_TEXT = 'HESABIMI SIL';
+
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Oturum açmanız gerekiyor.' });
+    if (!authHeader) return res.status(401).json({ error: 'Oturum acmaniz gerekiyor.' });
 
     const token = authHeader.replace('Bearer ', '');
     const tokenHash = hashToken(token);
 
     try {
-        const result = await pool.query(`
-            SELECT s.*, u.username, u.status 
-            FROM sessions s
-            JOIN users u ON s.user_id = u.id
-            WHERE s.token_hash = $1 AND s.expires_at > NOW()
-        `, [tokenHash]);
+        const result = await pool.query(
+            `SELECT s.*, u.username, u.status
+             FROM sessions s
+             JOIN users u ON s.user_id = u.id
+             WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
+            [tokenHash]
+        );
 
         if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Oturum geçersiz veya süresi dolmuş.' });
+            return res.status(401).json({ error: 'Oturum gecersiz veya suresi dolmus.' });
         }
 
-        req.user = result.rows[0]; // active session user
-        next();
+        const sessionUser = result.rows[0];
+        if (sessionUser.status !== 'active') {
+            return res.status(403).json({ error: 'Hesap aktif degil.' });
+        }
+
+        req.user = sessionUser;
+        return next();
     } catch (e) {
         console.error('Auth Middleware Error:', e);
-        res.status(500).json({ error: 'Sunucu hatası.' });
+        return res.status(500).json({ error: 'Sunucu hatasi.' });
     }
 };
 
 // GET /me - Get own profile
 router.get('/me', authenticate, async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT 
+        const result = await pool.query(
+            `SELECT
                 u.id, u.username, u.created_at,
                 p.display_name, p.avatar_url, p.bio, p.tags
-            FROM users u
-            LEFT JOIN profiles p ON u.id = p.user_id
-            WHERE u.id = $1
-        `, [req.user.user_id]);
+             FROM users u
+             LEFT JOIN profiles p ON u.id = p.user_id
+             WHERE u.id = $1`,
+            [req.user.user_id]
+        );
 
-        if (result.rows.length === 0) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
 
-        res.json({ success: true, user: result.rows[0] });
+        return res.json({ success: true, user: result.rows[0] });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Sunucu hatası.' });
+        console.error('GET /me error:', e);
+        return res.status(500).json({ error: 'Sunucu hatasi.' });
     }
 });
 
 // PUT /me/profile - Update profile
 router.put('/me/profile', authenticate, async (req, res) => {
-    const { display_name, avatar_url, bio, tags } = req.body;
+    const { display_name, avatar_url, bio, tags } = req.body || {};
 
-    // Validations
-    if (display_name && display_name.trim().length === 0) {
-        return res.status(400).json({ error: 'Görünen isim boş olamaz.' });
+    if (display_name && !String(display_name).trim()) {
+        return res.status(400).json({ error: 'Gorunen isim bos olamaz.' });
     }
-
-    // Default to existing username if display_name is missing?
-    // User requested: "görünen isim değiştirilebilecek birde altta değiştirilemez şekilde kullanıcı adı yazıcak"
-    // So display_name is key.
 
     try {
         const query = `
-            UPDATE profiles 
-            SET 
+            UPDATE profiles
+            SET
                 display_name = COALESCE($1, display_name),
                 avatar_url = COALESCE($2, avatar_url),
                 bio = COALESCE($3, bio),
@@ -86,11 +89,10 @@ router.put('/me/profile', authenticate, async (req, res) => {
         ];
 
         const result = await pool.query(query, values);
-        res.json({ success: true, profile: result.rows[0] });
-
+        return res.json({ success: true, profile: result.rows[0] });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Sunucu hatası.' });
+        console.error('PUT /me/profile error:', e);
+        return res.status(500).json({ error: 'Sunucu hatasi.' });
     }
 });
 
@@ -133,6 +135,87 @@ router.put('/me/password', authenticate, async (req, res) => {
     } catch (e) {
         console.error('Password change error:', e);
         return res.status(500).json({ error: 'Sunucu hatasi.' });
+    }
+});
+
+// POST /me/delete-request - Create account deletion request
+router.post('/me/delete-request', authenticate, async (req, res) => {
+    const currentPassword = String(req.body?.current_password || '');
+    const confirmText = String(req.body?.confirm_text || '').trim();
+
+    if (!currentPassword) {
+        return res.status(400).json({ error: 'Mevcut sifre gerekli.' });
+    }
+    if (confirmText !== DELETE_CONFIRM_TEXT) {
+        return res.status(400).json({ error: `Onay metni tam olarak "${DELETE_CONFIRM_TEXT}" olmalidir.` });
+    }
+
+    const db = await pool.connect();
+    try {
+        await db.query('BEGIN');
+
+        const userRes = await db.query(
+            `SELECT id, username, password_hash, status
+             FROM users
+             WHERE id = $1
+             FOR UPDATE`,
+            [req.user.user_id]
+        );
+
+        if (!userRes.rows.length) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+        }
+
+        const dbUser = userRes.rows[0];
+        if (dbUser.status !== 'active' && dbUser.status !== 'pending_deletion') {
+            await db.query('ROLLBACK');
+            return res.status(403).json({ error: 'Hesap durumu bu isleme uygun degil.' });
+        }
+
+        const isValidPassword = await comparePassword(currentPassword, dbUser.password_hash);
+        if (!isValidPassword) {
+            await db.query('ROLLBACK');
+            return res.status(401).json({ error: 'Mevcut sifre hatali.' });
+        }
+
+        const existingRequested = await db.query(
+            `SELECT id
+             FROM account_deletion_requests
+             WHERE user_id = $1 AND status = 'requested'
+             LIMIT 1`,
+            [dbUser.id]
+        );
+
+        if (!existingRequested.rows.length) {
+            await db.query(
+                `INSERT INTO account_deletion_requests
+                  (user_id, username_snapshot, status, requested_at)
+                 VALUES ($1, $2, 'requested', NOW())`,
+                [dbUser.id, dbUser.username]
+            );
+        }
+
+        await db.query(
+            `UPDATE users
+             SET status = 'pending_deletion', last_seen_at = NOW()
+             WHERE id = $1`,
+            [dbUser.id]
+        );
+        await db.query('DELETE FROM sessions WHERE user_id = $1', [dbUser.id]);
+
+        await db.query('COMMIT');
+        return res.json({ success: true, message: 'Silme talebiniz alindi.' });
+    } catch (e) {
+        try {
+            await db.query('ROLLBACK');
+        } catch {
+            // ignore rollback errors
+        }
+        console.error('Delete request error:', e);
+        return res.status(500).json({ error: 'Sunucu hatasi.' });
+    } finally {
+        db.release();
     }
 });
 
