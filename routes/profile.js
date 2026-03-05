@@ -2,8 +2,24 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { hashToken, comparePassword, hashPassword } = require('../utils/security');
+const { calculateLegalStatus, getRequiredLegalVersions } = require('../utils/legalAcceptance');
 
 const DELETE_CONFIRM_TEXT = 'HESABIMI SIL';
+
+const getClientIp = (req) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.trim()) {
+        return forwarded.split(',')[0].trim().slice(0, 120);
+    }
+    return String(req.ip || req.socket?.remoteAddress || '').trim().slice(0, 120) || null;
+};
+
+const sendLegalReacceptRequired = (res, legalStatus) => res.status(428).json({
+    error: 'Guncel kullanim sartlari ve gizlilik politikasi kabul edilmelidir.',
+    code: 'LEGAL_REACCEPT_REQUIRED',
+    required_versions: legalStatus?.required || null,
+    accepted_versions: legalStatus?.accepted || null
+});
 
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -38,6 +54,20 @@ const authenticate = async (req, res, next) => {
     }
 };
 
+const requireLegalAcceptance = async (req, res, next) => {
+    try {
+        const legalStatus = await calculateLegalStatus(pool, req.user.user_id);
+        if (legalStatus.requiresReaccept) {
+            return sendLegalReacceptRequired(res, legalStatus);
+        }
+        req.legalStatus = legalStatus;
+        return next();
+    } catch (e) {
+        console.error('Legal acceptance check error:', e);
+        return res.status(500).json({ error: 'Legal kontrolu yapilamadi.' });
+    }
+};
+
 // GET /me - Get own profile
 router.get('/me', authenticate, async (req, res) => {
     try {
@@ -60,8 +90,70 @@ router.get('/me', authenticate, async (req, res) => {
     }
 });
 
+// GET /me/legal-status
+router.get('/me/legal-status', authenticate, async (req, res) => {
+    try {
+        const status = await calculateLegalStatus(pool, req.user.user_id);
+        return res.json({
+            success: true,
+            required_versions: status.required,
+            accepted_versions: status.accepted,
+            requires_reaccept: status.requiresReaccept
+        });
+    } catch (e) {
+        console.error('GET /me/legal-status error:', e);
+        return res.status(500).json({ error: 'Legal durum bilgisi alinamadi.' });
+    }
+});
+
+// POST /me/legal-accept
+router.post('/me/legal-accept', authenticate, async (req, res) => {
+    const termsVersion = String(req.body?.terms_version || '').trim();
+    const privacyVersion = String(req.body?.privacy_version || '').trim();
+
+    if (!termsVersion || !privacyVersion) {
+        return res.status(400).json({ error: 'Terms ve privacy versiyonlari zorunludur.' });
+    }
+
+    try {
+        const required = await getRequiredLegalVersions(pool);
+        if (termsVersion !== required.terms || privacyVersion !== required.privacy) {
+            return res.status(400).json({
+                error: 'Guncel versiyon ile kabul edilmelidir.',
+                required_versions: required
+            });
+        }
+
+        await pool.query(
+            `INSERT INTO legal_acceptances
+              (user_id, terms_version, privacy_version, accepted_at, ip, user_agent)
+             VALUES ($1, $2, $3, NOW(), $4, $5)`,
+            [
+                req.user.user_id,
+                required.terms,
+                required.privacy,
+                getClientIp(req),
+                String(req.headers['user-agent'] || '').trim().slice(0, 400) || null
+            ]
+        );
+
+        return res.json({
+            success: true,
+            required_versions: required,
+            accepted_versions: {
+                terms: required.terms,
+                privacy: required.privacy,
+                accepted_at: new Date().toISOString()
+            }
+        });
+    } catch (e) {
+        console.error('POST /me/legal-accept error:', e);
+        return res.status(500).json({ error: 'Legal kabul kaydedilemedi.' });
+    }
+});
+
 // PUT /me/profile - Update profile
-router.put('/me/profile', authenticate, async (req, res) => {
+router.put('/me/profile', authenticate, requireLegalAcceptance, async (req, res) => {
     const { display_name, avatar_url, bio, tags } = req.body || {};
 
     if (display_name && !String(display_name).trim()) {
@@ -97,7 +189,7 @@ router.put('/me/profile', authenticate, async (req, res) => {
 });
 
 // PUT /me/password - Change password
-router.put('/me/password', authenticate, async (req, res) => {
+router.put('/me/password', authenticate, requireLegalAcceptance, async (req, res) => {
     const currentPassword = String(req.body?.current_password || '');
     const newPassword = String(req.body?.new_password || '');
 
@@ -139,7 +231,7 @@ router.put('/me/password', authenticate, async (req, res) => {
 });
 
 // POST /me/delete-request - Create account deletion request
-router.post('/me/delete-request', authenticate, async (req, res) => {
+router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (req, res) => {
     const currentPassword = String(req.body?.current_password || '');
     const confirmText = String(req.body?.confirm_text || '').trim();
 

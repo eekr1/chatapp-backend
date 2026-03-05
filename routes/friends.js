@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { hashToken } = require('../utils/security');
+const { calculateLegalStatus } = require('../utils/legalAcceptance');
 
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -22,7 +23,17 @@ const authenticate = async (req, res, next) => {
         if (result.rows[0].status !== 'active') {
             return res.status(403).json({ error: 'Hesap aktif degil.' });
         }
-        req.user = result.rows[0];
+        const sessionUser = result.rows[0];
+        const legalStatus = await calculateLegalStatus(pool, sessionUser.user_id);
+        if (legalStatus.requiresReaccept) {
+            return res.status(428).json({
+                error: 'Guncel kullanim sartlari ve gizlilik politikasi kabul edilmelidir.',
+                code: 'LEGAL_REACCEPT_REQUIRED',
+                required_versions: legalStatus.required,
+                accepted_versions: legalStatus.accepted
+            });
+        }
+        req.user = sessionUser;
         next();
     } catch (e) {
         res.status(500).json({ error: 'Hata.' });

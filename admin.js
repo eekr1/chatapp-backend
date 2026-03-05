@@ -49,6 +49,28 @@ const normalizeDeletionStatus = (value) => {
     if (!normalized) return 'requested';
     return ALLOWED_DELETION_REQUEST_STATUS.has(normalized) ? normalized : null;
 };
+const logAdminAudit = async (dbOrPool, {
+    actorAdmin = 'admin',
+    actionType,
+    entityType,
+    entityId = null,
+    payload = {}
+}) => {
+    if (!actionType || !entityType) return;
+    const db = dbOrPool || pool;
+    await db.query(
+        `INSERT INTO admin_action_audit
+          (actor_admin, action_type, entity_type, entity_id, payload, created_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())`,
+        [
+            String(actorAdmin || 'admin').slice(0, 120),
+            String(actionType).slice(0, 80),
+            String(entityType).slice(0, 80),
+            entityId ? String(entityId).slice(0, 180) : null,
+            JSON.stringify(payload || {})
+        ]
+    );
+};
 
 // Admin Dashboard HTML (Serve Static File)
 router.get('/', (req, res) => {
@@ -112,6 +134,16 @@ router.put('/legal', async (req, res) => {
 
     try {
         const updatedAt = await saveLegalSettings(pool, validation.value);
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'LEGAL_UPDATE',
+            entityType: 'app_settings',
+            entityId: 'legal_content_v1',
+            payload: {
+                versions: validation.value?.versions || {},
+                updatedAt
+            }
+        });
         res.json({ success: true, item: validation.value, updatedAt });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -360,6 +392,17 @@ router.post('/ban', async (req, res) => {
             'INSERT INTO bans (user_id, ban_type, ban_until, reason, created_by) VALUES ($1, $2, $3, $4, $5)',
             [userId, banType, banUntil, reason, 'admin']
         );
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'BAN',
+            entityType: 'user',
+            entityId: userId,
+            payload: {
+                banType,
+                banUntil,
+                reason: reason || null
+            }
+        });
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -368,6 +411,13 @@ router.post('/unban', async (req, res) => {
     const { userId } = req.body;
     try {
         await pool.query('DELETE FROM bans WHERE user_id = $1', [userId]);
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'UNBAN',
+            entityType: 'user',
+            entityId: userId,
+            payload: {}
+        });
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -623,6 +673,95 @@ router.get('/deletion-requests', async (req, res) => {
     }
 });
 
+router.get('/deletion-requests/metrics', async (req, res) => {
+    try {
+        const pendingRes = await pool.query(
+            `SELECT
+                COUNT(*) FILTER (WHERE status = 'requested')::int AS pending_count,
+                COUNT(*) FILTER (
+                    WHERE status = 'requested'
+                      AND requested_at < NOW() - INTERVAL '72 hours'
+                )::int AS overdue_count
+             FROM account_deletion_requests`
+        );
+        const resolutionRes = await pool.query(
+            `SELECT
+                COALESCE(
+                    ROUND(
+                        AVG(EXTRACT(EPOCH FROM (reviewed_at - requested_at)) / 3600.0)::numeric,
+                        2
+                    ),
+                    0
+                )::float8 AS avg_resolution_hours_30d,
+                COALESCE(
+                    PERCENTILE_CONT(0.5) WITHIN GROUP (
+                        ORDER BY EXTRACT(EPOCH FROM (reviewed_at - requested_at)) / 3600.0
+                    ),
+                    0
+                )::float8 AS median_resolution_hours_30d
+             FROM account_deletion_requests
+             WHERE status IN ('completed', 'rejected')
+               AND reviewed_at IS NOT NULL
+               AND reviewed_at > NOW() - INTERVAL '30 days'`
+        );
+
+        const pending = pendingRes.rows[0] || {};
+        const resolution = resolutionRes.rows[0] || {};
+        return res.json({
+            pending_count: Number(pending.pending_count) || 0,
+            overdue_count: Number(pending.overdue_count) || 0,
+            avg_resolution_hours_30d: Number(resolution.avg_resolution_hours_30d) || 0,
+            median_resolution_hours_30d: Number(resolution.median_resolution_hours_30d) || 0
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/audit-logs', async (req, res) => {
+    const actor = String(req.query.actor || '').trim();
+    const action = String(req.query.action || '').trim();
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 120));
+
+    const where = [];
+    const params = [];
+    if (actor) {
+        params.push(`%${actor}%`);
+        where.push(`actor_admin ILIKE $${params.length}`);
+    }
+    if (action) {
+        params.push(action.toUpperCase());
+        where.push(`action_type = $${params.length}`);
+    }
+    if (from) {
+        params.push(from);
+        where.push(`created_at >= $${params.length}::timestamptz`);
+    }
+    if (to) {
+        params.push(to);
+        where.push(`created_at <= $${params.length}::timestamptz`);
+    }
+    params.push(limit);
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    try {
+        const result = await pool.query(
+            `SELECT id, actor_admin, action_type, entity_type, entity_id, payload, created_at
+             FROM admin_action_audit
+             ${whereSql}
+             ORDER BY created_at DESC
+             LIMIT $${params.length}`,
+            params
+        );
+        return res.json({ items: result.rows });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/deletion-requests/:id/approve-delete', async (req, res) => {
     const requestId = String(req.params.id || '').trim();
     const adminUser = String(req.adminUser || 'admin').slice(0, 120);
@@ -665,6 +804,17 @@ router.post('/deletion-requests/:id/approve-delete', async (req, res) => {
              WHERE id = $3`,
             [adminUser, note, requestId]
         );
+
+        await logAdminAudit(db, {
+            actorAdmin: adminUser,
+            actionType: 'DELETION_APPROVE',
+            entityType: 'account_deletion_request',
+            entityId: requestId,
+            payload: {
+                userId,
+                note
+            }
+        });
 
         await db.query('DELETE FROM users WHERE id = $1', [userId]);
 
@@ -714,6 +864,16 @@ router.post('/deletion-requests/:id/reject', async (req, res) => {
             [adminUser, note, requestId]
         );
         await db.query('UPDATE users SET status = \'active\' WHERE id = $1', [userId]);
+        await logAdminAudit(db, {
+            actorAdmin: adminUser,
+            actionType: 'DELETION_REJECT',
+            entityType: 'account_deletion_request',
+            entityId: requestId,
+            payload: {
+                userId,
+                note
+            }
+        });
 
         await db.query('COMMIT');
         return res.json({ success: true });
@@ -761,6 +921,16 @@ router.post('/deletion-requests/:id/reactivate', async (req, res) => {
              WHERE id = $3`,
             [adminUser, note, requestId]
         );
+        await logAdminAudit(db, {
+            actorAdmin: adminUser,
+            actionType: 'DELETION_REACTIVATE',
+            entityType: 'account_deletion_request',
+            entityId: requestId,
+            payload: {
+                userId,
+                note
+            }
+        });
 
         await db.query('COMMIT');
         return res.json({ success: true });

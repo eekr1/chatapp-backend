@@ -4,6 +4,7 @@ const multer = require('multer');
 const { pool } = require('../db');
 const { hashToken } = require('../utils/security');
 const { sendSupportReportEmail } = require('../utils/brevoSupport');
+const { calculateLegalStatus } = require('../utils/legalAcceptance');
 
 const router = express.Router();
 
@@ -140,11 +141,21 @@ const authenticateOptional = async (req, res, next) => {
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'Oturum gecersiz veya suresi dolmus.' });
         }
-        if (result.rows[0].status !== 'active') {
+        const sessionUser = result.rows[0];
+        if (sessionUser.status !== 'active') {
             return res.status(403).json({ error: 'Hesap aktif degil.' });
         }
+        const legalStatus = await calculateLegalStatus(pool, sessionUser.user_id);
+        if (legalStatus.requiresReaccept) {
+            return res.status(428).json({
+                error: 'Guncel kullanim sartlari ve gizlilik politikasi kabul edilmelidir.',
+                code: 'LEGAL_REACCEPT_REQUIRED',
+                required_versions: legalStatus.required,
+                accepted_versions: legalStatus.accepted
+            });
+        }
 
-        req.authUser = result.rows[0];
+        req.authUser = sessionUser;
         next();
     } catch (e) {
         console.error('Support optional auth error:', e);

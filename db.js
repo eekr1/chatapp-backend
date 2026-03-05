@@ -199,7 +199,7 @@ const createTablesQuery = `
 
   CREATE TABLE IF NOT EXISTS account_deletion_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
     username_snapshot TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'requested',
     requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -208,10 +208,36 @@ const createTablesQuery = `
     note TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS admin_action_audit (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_admin TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE OR REPLACE FUNCTION prevent_admin_action_audit_mutation()
+  RETURNS trigger
+  LANGUAGE plpgsql
+  AS $func$
+  BEGIN
+      RAISE EXCEPTION 'admin_action_audit is immutable';
+  END;
+  $func$;
+
+  DROP TRIGGER IF EXISTS trg_admin_action_audit_immutable ON admin_action_audit;
+  CREATE TRIGGER trg_admin_action_audit_immutable
+  BEFORE UPDATE OR DELETE ON admin_action_audit
+  FOR EACH ROW
+  EXECUTE FUNCTION prevent_admin_action_audit_mutation();
+
   -- Migration
   DO $$
   DECLARE
       _blocks_fk RECORD;
+      _deletion_fk RECORD;
   BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users_anon' AND column_name='nickname') THEN
           ALTER TABLE users_anon ADD COLUMN nickname TEXT;
@@ -229,6 +255,19 @@ const createTablesQuery = `
             AND n.nspname = current_schema()
       LOOP
           EXECUTE format('ALTER TABLE blocks DROP CONSTRAINT IF EXISTS %I', _blocks_fk.conname);
+      END LOOP;
+
+      -- Keep deletion request history after hard delete: drop any FK on account_deletion_requests.
+      FOR _deletion_fk IN
+          SELECT c.conname
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE c.contype = 'f'
+            AND t.relname = 'account_deletion_requests'
+            AND n.nspname = current_schema()
+      LOOP
+          EXECUTE format('ALTER TABLE account_deletion_requests DROP CONSTRAINT IF EXISTS %I', _deletion_fk.conname);
       END LOOP;
       
       CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
@@ -299,6 +338,9 @@ const createTablesQuery = `
       CREATE UNIQUE INDEX IF NOT EXISTS idx_account_deletion_requests_user_requested
         ON account_deletion_requests(user_id)
         WHERE status = 'requested';
+      CREATE INDEX IF NOT EXISTS idx_admin_action_audit_created_at ON admin_action_audit(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_admin_action_audit_action_created ON admin_action_audit(action_type, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_admin_action_audit_actor_created ON admin_action_audit(actor_admin, created_at DESC);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_msg
         ON messages(sender_id, client_msg_id)
         WHERE client_msg_id IS NOT NULL;

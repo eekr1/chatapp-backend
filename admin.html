@@ -54,6 +54,11 @@
     .legal-field textarea { border:1px solid #d8dbe2; border-radius:8px; padding:10px; resize:vertical; min-height:110px; font-family:Consolas,monospace; font-size:12px; }
     .legal-status { font-size:12px; color:#5f6d7a; }
     .deletion-row-note { font-size:12px; color:#5f6d7a; margin-bottom:8px; }
+    .warn { border:1px solid #f5c2c7; background:#fff1f1; color:#842029; border-radius:8px; padding:10px; font-size:12px; }
+    .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:8px 0 12px; }
+    .metric { border:1px solid #dfe6f5; background:#f8fbff; border-radius:10px; padding:10px; }
+    .metric .k { font-size:11px; color:#6e7b95; text-transform:uppercase; margin-bottom:6px; }
+    .metric .n { font-size:22px; font-weight:700; color:#20324f; }
   </style>
 </head>
 <body>
@@ -83,6 +88,7 @@
         <button class="tab" onclick="switchTab('app_reports',event)">Uygulama Raporlari</button>
         <button class="tab" onclick="switchTab('legal',event)">Yasal Metinler</button>
         <button class="tab" onclick="switchTab('deletion_requests',event)">Silme Talepleri</button>
+        <button class="tab" onclick="switchTab('audit_logs',event)">Audit Log</button>
         <button class="tab" onclick="switchTab('logs',event)">Canli Loglar</button>
       </div>
 
@@ -213,6 +219,7 @@
       c.innerHTML=`
         <div class="legal-editor">
           <div class="legal-status">Son guncelleme: ${updatedAt?d(updatedAt):'-'}</div>
+          <div id="legal-placeholder-warning" class="warn" style="display:none"></div>
           <div class="legal-grid">
             <div class="legal-field">
               <label>Footer slogan</label>
@@ -294,6 +301,42 @@
             <span id="legal-save-status" class="legal-status"></span>
           </div>
         </div>`;
+
+      const fields=c.querySelectorAll('input[id^="legal_"], textarea[id^="legal_"]');
+      fields.forEach((el)=>el.addEventListener('input',updateLegalPlaceholderWarning));
+      updateLegalPlaceholderWarning();
+    }
+
+    const LEGAL_PLACEHOLDER_PATTERNS=[
+      /panelden\s+guncellenebilir/i,
+      /can\s+be\s+updated\s+from\s+the\s+admin\s+panel/i,
+      /placeholder/i,
+      /lorem ipsum/i
+    ];
+
+    function updateLegalPlaceholderWarning(){
+      const host=document.getElementById('legal-placeholder-warning');
+      if(!host) return;
+      const payload=collectLegalPayload();
+      const texts=[
+        payload?.footer?.tagline,
+        payload?.documents?.privacy?.tr?.title,
+        payload?.documents?.privacy?.tr?.content,
+        payload?.documents?.privacy?.en?.title,
+        payload?.documents?.privacy?.en?.content,
+        payload?.documents?.terms?.tr?.title,
+        payload?.documents?.terms?.tr?.content,
+        payload?.documents?.terms?.en?.title,
+        payload?.documents?.terms?.en?.content
+      ].filter(Boolean);
+      const hasPlaceholder=texts.some((text)=>LEGAL_PLACEHOLDER_PATTERNS.some((re)=>re.test(String(text))));
+      if(!hasPlaceholder){
+        host.style.display='none';
+        host.innerHTML='';
+        return;
+      }
+      host.style.display='block';
+      host.innerHTML='Uyari: Legal metinlerde placeholder gorunumu var. Production icin final hukuki metni girin.';
     }
 
     function collectLegalPayload(){
@@ -349,9 +392,10 @@
       }
     }
 
-    function renderDeletionRequests(items){
+    function renderDeletionRequests(items,metrics){
       const c=document.getElementById('content');
       const status=currentDeletionStatus;
+      const m=metrics||{};
       let html=`
         <div class="row">
           <label for="deletion-status-filter"><strong>Durum</strong></label>
@@ -361,6 +405,12 @@
             <option value="completed" ${status==='completed'?'selected':''}>completed</option>
           </select>
           <button class="btn btn-refresh" onclick="loadDeletionRequests()">Yenile</button>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="k">Bekleyen Talep</div><div class="n">${Number(m.pending_count||0)}</div></div>
+          <div class="metric"><div class="k">SLA Asimi (72s)</div><div class="n">${Number(m.overdue_count||0)}</div></div>
+          <div class="metric"><div class="k">Ortalama Cozum (30g)</div><div class="n">${Number(m.avg_resolution_hours_30d||0).toFixed(1)}s</div></div>
+          <div class="metric"><div class="k">Medyan Cozum (30g)</div><div class="n">${Number(m.median_resolution_hours_30d||0).toFixed(1)}s</div></div>
         </div>
       `;
 
@@ -423,12 +473,97 @@
       const c=document.getElementById('content');
       c.innerHTML='<p style="padding:16px;color:#7f8c8d">Silme talepleri yukleniyor...</p>';
       try{
-        const r=await fetch(`/admin/deletion-requests?status=${encodeURIComponent(currentDeletionStatus)}`);
-        const x=await r.json();
-        if(!r.ok) throw new Error(x.error||'Silme talepleri okunamadi.');
-        renderDeletionRequests(Array.isArray(x.items)?x.items:[]);
+        const [listRes,metricsRes]=await Promise.all([
+          fetch(`/admin/deletion-requests?status=${encodeURIComponent(currentDeletionStatus)}`),
+          fetch('/admin/deletion-requests/metrics')
+        ]);
+        const listJson=await listRes.json();
+        const metricsJson=await metricsRes.json();
+        if(!listRes.ok) throw new Error(listJson.error||'Silme talepleri okunamadi.');
+        if(!metricsRes.ok) throw new Error(metricsJson.error||'Silme metrikleri okunamadi.');
+        renderDeletionRequests(Array.isArray(listJson.items)?listJson.items:[],metricsJson||{});
       }catch(e){
         c.innerHTML=`<p style="padding:16px;color:#c0392b">Silme talepleri yuklenemedi: ${esc(e.message||e)}</p>`;
+      }
+    }
+
+    function renderAuditLogs(items){
+      const c=document.getElementById('content');
+      const actor=val('audit-actor');
+      const action=val('audit-action');
+      const from=val('audit-from');
+      const to=val('audit-to');
+
+      let html=`
+        <div class="row">
+          <input id="audit-actor" type="text" placeholder="Admin kullanici" value="${esc(actor)}" style="min-width:160px" />
+          <input id="audit-action" type="text" placeholder="Aksiyon (BAN, LEGAL_UPDATE...)" value="${esc(action)}" style="min-width:220px" />
+          <input id="audit-from" type="datetime-local" value="${esc(from)}" />
+          <input id="audit-to" type="datetime-local" value="${esc(to)}" />
+          <button class="btn btn-refresh" onclick="loadAuditLogs()">Filtrele</button>
+        </div>
+      `;
+
+      if(!items.length){
+        html+='<p class="deletion-row-note">Audit kaydi bulunamadi.</p>';
+        c.innerHTML=html;
+        return;
+      }
+
+      html+=`
+        <table>
+          <thead>
+            <tr>
+              <th>Tarih</th>
+              <th>Admin</th>
+              <th>Aksiyon</th>
+              <th>Varlik</th>
+              <th>Payload</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      items.forEach((it)=>{
+        const payloadText=typeof it.payload==='string'?it.payload:JSON.stringify(it.payload||{});
+        html+=`
+          <tr>
+            <td>${d(it.created_at)}</td>
+            <td>${esc(it.actor_admin||'-')}</td>
+            <td>${esc(it.action_type||'-')}</td>
+            <td>${esc(it.entity_type||'-')}<br/><small>${esc(it.entity_id||'-')}</small></td>
+            <td><code style="font-size:11px">${esc(payloadText||'{}')}</code></td>
+          </tr>
+        `;
+      });
+      html+='</tbody></table>';
+      c.innerHTML=html;
+    }
+
+    async function loadAuditLogs(){
+      const c=document.getElementById('content');
+      const actor=val('audit-actor').trim();
+      const action=val('audit-action').trim();
+      const from=val('audit-from').trim();
+      const to=val('audit-to').trim();
+      c.innerHTML='<p style="padding:16px;color:#7f8c8d">Audit loglar yukleniyor...</p>';
+      try{
+        const qs=new URLSearchParams();
+        if(actor) qs.set('actor',actor);
+        if(action) qs.set('action',action);
+        if(from) qs.set('from',new Date(from).toISOString());
+        if(to) qs.set('to',new Date(to).toISOString());
+        qs.set('limit','200');
+        const r=await fetch(`/admin/audit-logs?${qs.toString()}`);
+        const x=await r.json();
+        if(!r.ok) throw new Error(x.error||'Audit loglar okunamadi.');
+        renderAuditLogs(Array.isArray(x.items)?x.items:[]);
+        const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v||'';};
+        set('audit-actor',actor);
+        set('audit-action',action);
+        set('audit-from',from);
+        set('audit-to',to);
+      }catch(e){
+        c.innerHTML=`<p style="padding:16px;color:#c0392b">Audit loglar yuklenemedi: ${esc(e.message||e)}</p>`;
       }
     }
 
@@ -437,6 +572,7 @@
       try{
         if(currentTab==='legal'){ await loadLegalEditor(); return; }
         if(currentTab==='deletion_requests'){ await loadDeletionRequests(); return; }
+        if(currentTab==='audit_logs'){ await loadAuditLogs(); return; }
         const q=document.getElementById('search-input')?.value||'';
         const r=await fetch(`/admin/data?type=${currentTab}&q=${encodeURIComponent(q)}`); const x=await r.json(); const items=x.items||[];
         if(!items.length){ c.innerHTML='<p style="padding:16px">Kayit bulunamadi.</p>'; return; }
