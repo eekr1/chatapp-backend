@@ -437,6 +437,16 @@ const createTablesQuery = `
                 'title', 'Terms of Use',
                 'content', E'This text can be updated from the admin panel.\n\nBy using the app, you agree to follow community rules and applicable laws.'
               )
+            ),
+            'childSafety', jsonb_build_object(
+              'tr', jsonb_build_object(
+                'title', 'Cocuk Guvenligi Standartlari',
+                'content', E'Bu metin admin panelinden guncellenebilir.\n\nTalkX, cocuklarin cinsel istismari ve suistimali (CSAE/CSAM) iceriklerini kesin olarak yasaklar. Bu tur icerikler veya davranislar raporlandiginda veya tespit edildiginde gerekli inceleme ve yaptirim adimlari uygulanir.'
+              ),
+              'en', jsonb_build_object(
+                'title', 'Child Safety Standards',
+                'content', E'This text can be updated from the admin panel.\n\nTalkX strictly prohibits child sexual abuse and exploitation (CSAE/CSAM) content. When such content or behavior is reported or detected, required review and enforcement actions are applied.'
+              )
             )
           )
         ),
@@ -497,6 +507,30 @@ const createTablesQuery = `
           OR (value->'footer' ? 'privacyUrl')
           OR (value->'footer' ? 'termsUrl')
           OR (value->'footer' ? 'tagline')
+        );
+
+      UPDATE app_settings
+      SET
+        value = jsonb_set(
+          value,
+          '{documents,childSafety}',
+          jsonb_build_object(
+            'tr', jsonb_build_object(
+              'title', COALESCE(value->'documents'->'childSafety'->'tr'->>'title', 'Cocuk Guvenligi Standartlari'),
+              'content', COALESCE(value->'documents'->'childSafety'->'tr'->>'content', E'Bu metin admin panelinden guncellenebilir.\n\nTalkX, cocuklarin cinsel istismari ve suistimali (CSAE/CSAM) iceriklerini kesin olarak yasaklar. Bu tur icerikler veya davranislar raporlandiginda veya tespit edildiginde gerekli inceleme ve yaptirim adimlari uygulanir.')
+            ),
+            'en', jsonb_build_object(
+              'title', COALESCE(value->'documents'->'childSafety'->'en'->>'title', 'Child Safety Standards'),
+              'content', COALESCE(value->'documents'->'childSafety'->'en'->>'content', E'This text can be updated from the admin panel.\n\nTalkX strictly prohibits child sexual abuse and exploitation (CSAE/CSAM) content. When such content or behavior is reported or detected, required review and enforcement actions are applied.')
+            )
+          ),
+          true
+        ),
+        updated_at = NOW()
+      WHERE key = 'legal_content_v1'
+        AND (
+          value->'documents' IS NULL
+          OR value->'documents'->'childSafety' IS NULL
         );
 
       -- V13 Fix: Drop legacy FK constraints on conversations to allow Auth Users

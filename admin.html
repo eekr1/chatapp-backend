@@ -242,6 +242,7 @@
       const docs=item?.documents||{};
       const privacy=docs.privacy||{};
       const terms=docs.terms||{};
+      const childSafety=docs.childSafety||{};
       const c=document.getElementById('content');
       c.innerHTML=`
         <div class="legal-editor">
@@ -335,6 +336,27 @@
             </div>
           </div>
 
+          <div class="legal-grid">
+            <div class="legal-field">
+              <label>Child Safety TR baslik</label>
+              <input id="legal_child_safety_tr_title" type="text" value="${esc(childSafety?.tr?.title||'')}" />
+            </div>
+            <div class="legal-field">
+              <label>Child Safety EN baslik</label>
+              <input id="legal_child_safety_en_title" type="text" value="${esc(childSafety?.en?.title||'')}" />
+            </div>
+          </div>
+          <div class="legal-grid">
+            <div class="legal-field">
+              <label>Child Safety TR icerik</label>
+              <textarea id="legal_child_safety_tr_content">${esc(childSafety?.tr?.content||'')}</textarea>
+            </div>
+            <div class="legal-field">
+              <label>Child Safety EN icerik</label>
+              <textarea id="legal_child_safety_en_content">${esc(childSafety?.en?.content||'')}</textarea>
+            </div>
+          </div>
+
           <div class="row" style="margin-top:4px">
             <button class="btn btn-refresh" onclick="saveLegalContent()">Kaydet</button>
             <span id="legal-save-status" class="legal-status"></span>
@@ -371,7 +393,11 @@
         payload?.documents?.terms?.tr?.title,
         payload?.documents?.terms?.tr?.content,
         payload?.documents?.terms?.en?.title,
-        payload?.documents?.terms?.en?.content
+        payload?.documents?.terms?.en?.content,
+        payload?.documents?.childSafety?.tr?.title,
+        payload?.documents?.childSafety?.tr?.content,
+        payload?.documents?.childSafety?.en?.title,
+        payload?.documents?.childSafety?.en?.content
       ].filter(Boolean);
       const hasPlaceholder=texts.some((text)=>LEGAL_PLACEHOLDER_PATTERNS.some((re)=>re.test(String(text))));
       if(!hasPlaceholder){
@@ -413,6 +439,10 @@
           terms:{
             tr:{title:val('legal_terms_tr_title'),content:val('legal_terms_tr_content')},
             en:{title:val('legal_terms_en_title'),content:val('legal_terms_en_content')}
+          },
+          childSafety:{
+            tr:{title:val('legal_child_safety_tr_title'),content:val('legal_child_safety_tr_content')},
+            en:{title:val('legal_child_safety_en_title'),content:val('legal_child_safety_en_content')}
           }
         }
       };

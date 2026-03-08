@@ -41,6 +41,16 @@ const DEFAULT_LEGAL_CONTENT = Object.freeze({
                 title: 'Terms of Use',
                 content: 'This text can be updated from the admin panel.\n\nBy using the app, you agree to follow community rules and applicable laws.'
             })
+        }),
+        childSafety: Object.freeze({
+            tr: Object.freeze({
+                title: 'Cocuk Guvenligi Standartlari',
+                content: 'Bu metin admin panelinden guncellenebilir.\n\nTalkX, cocuklarin cinsel istismari ve suistimali (CSAE/CSAM) iceriklerini kesin olarak yasaklar. Bu tur icerikler veya davranislar raporlandiginda veya tespit edildiginde gerekli inceleme ve yaptirim adimlari uygulanir.'
+            }),
+            en: Object.freeze({
+                title: 'Child Safety Standards',
+                content: 'This text can be updated from the admin panel.\n\nTalkX strictly prohibits child sexual abuse and exploitation (CSAE/CSAM) content. When such content or behavior is reported or detected, required review and enforcement actions are applied.'
+            })
         })
     })
 });
@@ -152,7 +162,8 @@ const normalizeLegalContent = (value) => {
         },
         documents: {
             privacy: normalizeDocument(docsSource.privacy, defaults.documents.privacy),
-            terms: normalizeDocument(docsSource.terms, defaults.documents.terms)
+            terms: normalizeDocument(docsSource.terms, defaults.documents.terms),
+            childSafety: normalizeDocument(docsSource.childSafety, defaults.documents.childSafety)
         }
     };
 };
@@ -187,7 +198,11 @@ const validateLegalContentPayload = (value) => {
         [source?.documents?.terms?.tr?.title, 'Terms TR baslik'],
         [source?.documents?.terms?.tr?.content, 'Terms TR icerik'],
         [source?.documents?.terms?.en?.title, 'Terms EN baslik'],
-        [source?.documents?.terms?.en?.content, 'Terms EN icerik']
+        [source?.documents?.terms?.en?.content, 'Terms EN icerik'],
+        [source?.documents?.childSafety?.tr?.title, 'Child Safety TR baslik'],
+        [source?.documents?.childSafety?.tr?.content, 'Child Safety TR icerik'],
+        [source?.documents?.childSafety?.en?.title, 'Child Safety EN baslik'],
+        [source?.documents?.childSafety?.en?.content, 'Child Safety EN icerik']
     ];
 
     for (const [rawValue, label] of rawChecks) {
@@ -223,7 +238,11 @@ const validateLegalContentPayload = (value) => {
         [normalized.documents.terms.tr.title, LIMITS.title, 'Terms TR baslik'],
         [normalized.documents.terms.tr.content, LIMITS.content, 'Terms TR icerik'],
         [normalized.documents.terms.en.title, LIMITS.title, 'Terms EN baslik'],
-        [normalized.documents.terms.en.content, LIMITS.content, 'Terms EN icerik']
+        [normalized.documents.terms.en.content, LIMITS.content, 'Terms EN icerik'],
+        [normalized.documents.childSafety.tr.title, LIMITS.title, 'Child Safety TR baslik'],
+        [normalized.documents.childSafety.tr.content, LIMITS.content, 'Child Safety TR icerik'],
+        [normalized.documents.childSafety.en.title, LIMITS.title, 'Child Safety EN baslik'],
+        [normalized.documents.childSafety.en.content, LIMITS.content, 'Child Safety EN icerik']
     ];
 
     for (const [fieldValue, max, label] of lengthChecks) {
