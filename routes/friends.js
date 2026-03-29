@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { hashToken } = require('../utils/security');
@@ -102,13 +102,29 @@ router.post('/request', async (req, res) => {
             }
         }
 
-        await pool.query(
-            'INSERT INTO friendships (user_id, friend_user_id, status) VALUES ($1, $2, $3)',
+        const insertResult = await pool.query(
+            'INSERT INTO friendships (user_id, friend_user_id, status) VALUES ($1, $2, $3) RETURNING created_at',
             [myId, target.id, 'pending']
         );
 
+        const senderProfileRes = await pool.query(
+            'SELECT display_name FROM profiles WHERE user_id = $1 LIMIT 1',
+            [myId]
+        );
+        const fromDisplayName = String(senderProfileRes.rows[0]?.display_name || req.user.username || '').trim() || String(req.user.username || '').trim();
+        const sentAt = insertResult.rows[0]?.created_at
+            ? new Date(insertResult.rows[0].created_at).toISOString()
+            : new Date().toISOString();
+
         if (req.notifyUser) {
             req.notifyUser(target.id, { type: 'friend_refresh' });
+            req.notifyUser(target.id, {
+                type: 'friend_request_incoming',
+                request_user_id: myId,
+                from_username: req.user.username,
+                from_display_name: fromDisplayName,
+                sent_at: sentAt
+            });
         }
 
         res.json({ success: true, code: 'FRIEND_REQUEST_SENT' });
@@ -430,3 +446,4 @@ router.delete('/:friendId', async (req, res) => {
 });
 
 module.exports = router;
+
