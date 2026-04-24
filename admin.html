@@ -926,6 +926,8 @@
           <div class="item"><strong>Kayit Tarihi</strong>${d(it.created_at)}</div>
           <div class="item"><strong>Son Gorulme</strong>${d(it.last_seen_at)}</div>
           <div class="item"><strong>Kayit Onayi Zamani</strong>${d(reg?.accepted_at)}</div>
+          <div class="item"><strong>Kayit Sehir</strong>${esc(reg?.location_city||'-')}</div>
+          <div class="item"><strong>Kayit Ulke</strong>${esc(reg?.location_country||'-')}</div>
           <div class="item"><strong>Kayit Konumu</strong>${esc(reg?.location_label||'-')}</div>
           <div class="item"><strong>Kayit IP</strong>${esc(reg?.ip||'-')}</div>
           <div class="item"><strong>Ilk Device</strong>${esc(firstSession?.device_id||'-')}</div>

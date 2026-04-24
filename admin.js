@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const https = require('https');
 const path = require('path');
 const { pool } = require('./db');
 const { getPushDiagnostics } = require('./utils/push');
@@ -53,6 +54,9 @@ const clampHours = (value, fallback = 24) => Math.max(1, Math.min(24 * 14, Numbe
 const clampLimit = (value, fallback = 100, max = 200) => Math.max(1, Math.min(max, Number(value) || fallback));
 const clampPage = (value, fallback = 1) => Math.max(1, Math.min(100000, Number(value) || fallback));
 const clampProfilePageSize = (value, fallback = 50) => Math.max(1, Math.min(100, Number(value) || fallback));
+const GEO_LOOKUP_TIMEOUT_MS = Math.max(500, Math.min(5000, Number(process.env.ADMIN_GEO_LOOKUP_TIMEOUT_MS) || 1800));
+const GEO_CACHE_TTL_MS = Math.max(60000, Math.min(7 * 24 * 60 * 60 * 1000, Number(process.env.ADMIN_GEO_CACHE_TTL_MS) || 24 * 60 * 60 * 1000));
+const geoLookupCache = new Map();
 const PROFILE_SORT_COLUMN_MAP = Object.freeze({
     created_at: 'u.created_at',
     last_seen_at: 'u.last_seen_at',
@@ -84,13 +88,157 @@ const isPrivateIpv4 = (ip) => {
     if (a === 169 && b === 254) return true;
     return false;
 };
-const buildRegistrationLocationLabel = (ipValue) => {
+const isPrivateIpv6 = (ip) => {
+    const normalized = String(ip || '').trim().toLowerCase();
+    if (!normalized) return false;
+    if (normalized === '::1') return true;
+    if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+    if (normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) return true;
+    return false;
+};
+const getCachedGeoLocation = (ip) => {
+    const cached = geoLookupCache.get(ip);
+    if (!cached) return null;
+    if (cached.expiresAt <= Date.now()) {
+        geoLookupCache.delete(ip);
+        return null;
+    }
+    return cached.value;
+};
+const setCachedGeoLocation = (ip, value) => {
+    geoLookupCache.set(ip, {
+        value,
+        expiresAt: Date.now() + GEO_CACHE_TTL_MS
+    });
+};
+const requestGeoJson = (url) => new Promise((resolve, reject) => {
+    const req = https.get(url, {
+        headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'TalkX-Admin/1.0'
+        }
+    }, (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+            const status = Number(res.statusCode) || 0;
+            if (status < 200 || status >= 300) {
+                return reject(new Error(`Geo HTTP ${status}`));
+            }
+            const raw = Buffer.concat(chunks).toString('utf8');
+            try {
+                resolve(raw ? JSON.parse(raw) : {});
+            } catch (e) {
+                reject(new Error(`Geo JSON parse failed: ${e.message}`));
+            }
+        });
+    });
+    req.on('error', reject);
+    req.setTimeout(GEO_LOOKUP_TIMEOUT_MS, () => {
+        req.destroy(new Error('Geo lookup timeout'));
+    });
+});
+const normalizeLocationText = (value) => {
+    const clean = String(value || '').trim();
+    return clean || null;
+};
+const lookupGeoFromIpApiCo = async (ip) => {
+    const json = await requestGeoJson(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
+    if (json?.error) return null;
+    const city = normalizeLocationText(json?.city);
+    const country = normalizeLocationText(json?.country_name || json?.country);
+    if (!city && !country) return null;
+    return {
+        city,
+        country,
+        source: 'ipapi.co'
+    };
+};
+const lookupGeoFromIpWhoIs = async (ip) => {
+    const json = await requestGeoJson(`https://ipwho.is/${encodeURIComponent(ip)}`);
+    if (json?.success === false) return null;
+    const city = normalizeLocationText(json?.city);
+    const country = normalizeLocationText(json?.country);
+    if (!city && !country) return null;
+    return {
+        city,
+        country,
+        source: 'ipwho.is'
+    };
+};
+const buildFallbackLocation = (ip) => {
+    if (!ip) {
+        return {
+            city: null,
+            country: null,
+            label: null,
+            source: 'none'
+        };
+    }
+    if (ip === '::1') {
+        return {
+            city: null,
+            country: null,
+            label: `Lokal cihaz (${ip})`,
+            source: 'local'
+        };
+    }
+    if (isPrivateIpv4(ip) || isPrivateIpv6(ip)) {
+        return {
+            city: null,
+            country: null,
+            label: `Ozel ag (${ip})`,
+            source: 'private'
+        };
+    }
+    return {
+        city: null,
+        country: null,
+        label: `Sehir/ulke bulunamadi (${ip})`,
+        source: 'unresolved'
+    };
+};
+const resolveRegistrationLocation = async (ipValue) => {
     const ip = normalizeIpForDisplay(ipValue);
-    if (!ip) return null;
-    if (ip === '::1') return `Lokal cihaz (${ip})`;
-    if (isPrivateIpv4(ip)) return `Ozel ag (${ip})`;
-    if (ip.includes(':')) return `IPv6 adresi (${ip})`;
-    return `IP tabanli konum (${ip})`;
+    const fallback = buildFallbackLocation(ip);
+    if (!ip) return fallback;
+
+    const cached = getCachedGeoLocation(ip);
+    if (cached) return cached;
+
+    if (fallback.source === 'local' || fallback.source === 'private') {
+        setCachedGeoLocation(ip, fallback);
+        return fallback;
+    }
+
+    let resolved = null;
+    try {
+        resolved = await lookupGeoFromIpApiCo(ip);
+    } catch {
+        resolved = null;
+    }
+    if (!resolved) {
+        try {
+            resolved = await lookupGeoFromIpWhoIs(ip);
+        } catch {
+            resolved = null;
+        }
+    }
+
+    if (!resolved) {
+        setCachedGeoLocation(ip, fallback);
+        return fallback;
+    }
+
+    const label = [resolved.city, resolved.country].filter(Boolean).join(', ');
+    const value = {
+        city: resolved.city || null,
+        country: resolved.country || null,
+        label: label || fallback.label,
+        source: resolved.source
+    };
+    setCachedGeoLocation(ip, value);
+    return value;
 };
 const logAdminAudit = async (dbOrPool, {
     actorAdmin = 'admin',
@@ -391,12 +539,19 @@ router.get('/profile-details/:userId', async (req, res) => {
             )
         ]);
 
-        const registration = registrationRes.rows[0]
-            ? {
+        let registration = null;
+        if (registrationRes.rows[0]) {
+            const normalizedIp = normalizeIpForDisplay(registrationRes.rows[0].ip) || null;
+            const location = await resolveRegistrationLocation(normalizedIp);
+            registration = {
                 ...registrationRes.rows[0],
-                location_label: buildRegistrationLocationLabel(registrationRes.rows[0].ip)
-            }
-            : null;
+                ip: normalizedIp,
+                location_label: location?.label || null,
+                location_city: location?.city || null,
+                location_country: location?.country || null,
+                location_source: location?.source || null
+            };
+        }
 
         res.json({
             item: profileRes.rows[0],
