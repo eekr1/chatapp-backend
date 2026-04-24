@@ -66,6 +66,32 @@ const normalizeProfileSortDir = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'asc' ? 'asc' : 'desc';
 };
+const normalizeIpForDisplay = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const first = raw.split(',')[0].trim();
+    if (first.startsWith('::ffff:')) return first.slice(7);
+    return first;
+};
+const isPrivateIpv4 = (ip) => {
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return false;
+    const [a, b] = ip.split('.').map((v) => Number(v));
+    if ([a, b].some((n) => Number.isNaN(n) || n < 0 || n > 255)) return false;
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 169 && b === 254) return true;
+    return false;
+};
+const buildRegistrationLocationLabel = (ipValue) => {
+    const ip = normalizeIpForDisplay(ipValue);
+    if (!ip) return null;
+    if (ip === '::1') return `Lokal cihaz (${ip})`;
+    if (isPrivateIpv4(ip)) return `Ozel ag (${ip})`;
+    if (ip.includes(':')) return `IPv6 adresi (${ip})`;
+    return `IP tabanli konum (${ip})`;
+};
 const logAdminAudit = async (dbOrPool, {
     actorAdmin = 'admin',
     actionType,
@@ -325,7 +351,7 @@ router.get('/profile-details/:userId', async (req, res) => {
         const [registrationRes, firstSessionRes, recentSessionsRes, pushDevicesRes] = await Promise.all([
             pool.query(
                 `
-                SELECT accepted_at, ip, user_agent
+                SELECT accepted_at, ip
                 FROM legal_acceptances
                 WHERE user_id = $1
                 ORDER BY accepted_at ASC
@@ -365,9 +391,16 @@ router.get('/profile-details/:userId', async (req, res) => {
             )
         ]);
 
+        const registration = registrationRes.rows[0]
+            ? {
+                ...registrationRes.rows[0],
+                location_label: buildRegistrationLocationLabel(registrationRes.rows[0].ip)
+            }
+            : null;
+
         res.json({
             item: profileRes.rows[0],
-            registration: registrationRes.rows[0] || null,
+            registration,
             first_session: firstSessionRes.rows[0] || null,
             recent_sessions: recentSessionsRes.rows || [],
             recent_push_devices: pushDevicesRes.rows || []
