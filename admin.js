@@ -51,6 +51,21 @@ const normalizeDeletionStatus = (value) => {
 };
 const clampHours = (value, fallback = 24) => Math.max(1, Math.min(24 * 14, Number(value) || fallback));
 const clampLimit = (value, fallback = 100, max = 200) => Math.max(1, Math.min(max, Number(value) || fallback));
+const clampPage = (value, fallback = 1) => Math.max(1, Math.min(100000, Number(value) || fallback));
+const clampProfilePageSize = (value, fallback = 50) => Math.max(1, Math.min(100, Number(value) || fallback));
+const PROFILE_SORT_COLUMN_MAP = Object.freeze({
+    created_at: 'u.created_at',
+    last_seen_at: 'u.last_seen_at',
+    username: 'u.username'
+});
+const normalizeProfileSortBy = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return PROFILE_SORT_COLUMN_MAP[normalized] ? normalized : 'created_at';
+};
+const normalizeProfileSortDir = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'asc' ? 'asc' : 'desc';
+};
 const logAdminAudit = async (dbOrPool, {
     actorAdmin = 'admin',
     actionType,
@@ -154,7 +169,7 @@ router.put('/legal', async (req, res) => {
 
 router.get('/data', async (req, res) => {
     const type = req.query.type;
-    const search = req.query.q || ''; // Search query
+    const search = String(req.query.q || '').trim(); // Search query
 
     try {
         if (type === 'reports') {
@@ -178,24 +193,64 @@ router.get('/data', async (req, res) => {
             `);
             res.json({ items: result.rows });
         } else if (type === 'profiles') {
-            // V6: List profiles with Search
-            let query = `
+            const sortBy = normalizeProfileSortBy(req.query.sortBy);
+            const sortDir = normalizeProfileSortDir(req.query.sortDir);
+            const page = clampPage(req.query.page, 1);
+            const pageSize = clampProfilePageSize(req.query.pageSize, 50);
+            const offset = (page - 1) * pageSize;
+            const where = [];
+            const params = [];
+
+            if (search) {
+                params.push(`%${search}%`);
+                where.push(`(u.username ILIKE $${params.length} OR COALESCE(p.display_name, '') ILIKE $${params.length})`);
+            }
+            const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+            const totalRes = await pool.query(
+                `
+                SELECT COUNT(*)::int AS total
+                FROM users u
+                LEFT JOIN profiles p ON u.id = p.user_id
+                ${whereSql}
+                `,
+                params
+            );
+
+            params.push(pageSize);
+            const limitParam = params.length;
+            params.push(offset);
+            const offsetParam = params.length;
+            const orderColumn = PROFILE_SORT_COLUMN_MAP[sortBy];
+
+            const result = await pool.query(
+                `
                 SELECT u.id, u.username, u.created_at, u.last_seen_at,
                        p.display_name, p.avatar_url, p.bio
                 FROM users u
                 LEFT JOIN profiles p ON u.id = p.user_id
-            `;
-            const params = [];
+                ${whereSql}
+                ORDER BY ${orderColumn} ${sortDir.toUpperCase()} NULLS LAST, u.id ASC
+                LIMIT $${limitParam}
+                OFFSET $${offsetParam}
+                `,
+                params
+            );
 
-            if (search) {
-                query += ` WHERE u.username ILIKE $1 OR p.display_name ILIKE $1`;
-                params.push(`%${search}%`);
-            }
+            const total = Number(totalRes.rows[0]?.total) || 0;
+            const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0;
 
-            query += ` ORDER BY u.last_seen_at DESC LIMIT 100`;
-
-            const result = await pool.query(query, params);
-            res.json({ items: result.rows });
+            res.json({
+                items: result.rows,
+                pagination: {
+                    page,
+                    pageSize,
+                    total,
+                    totalPages,
+                    sortBy,
+                    sortDir
+                }
+            });
         } else if (type === 'app_reports') {
             const params = [];
             let whereSql = '';
@@ -242,6 +297,84 @@ router.get('/data', async (req, res) => {
             res.json({ items: result.rows });
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/profile-details/:userId', async (req, res) => {
+    const userId = String(req.params.userId || '').trim();
+    if (!userId) return res.status(400).json({ error: 'Kullanici kimligi gerekli.' });
+
+    try {
+        const profileRes = await pool.query(
+            `
+            SELECT
+                u.id,
+                u.username,
+                u.status,
+                u.created_at,
+                u.last_seen_at,
+                p.display_name
+            FROM users u
+            LEFT JOIN profiles p ON p.user_id = u.id
+            WHERE u.id = $1
+            LIMIT 1
+            `,
+            [userId]
+        );
+        if (!profileRes.rows.length) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+
+        const [registrationRes, firstSessionRes, recentSessionsRes, pushDevicesRes] = await Promise.all([
+            pool.query(
+                `
+                SELECT accepted_at, ip, user_agent
+                FROM legal_acceptances
+                WHERE user_id = $1
+                ORDER BY accepted_at ASC
+                LIMIT 1
+                `,
+                [userId]
+            ),
+            pool.query(
+                `
+                SELECT device_id, created_at, expires_at
+                FROM sessions
+                WHERE user_id = $1
+                ORDER BY created_at ASC
+                LIMIT 1
+                `,
+                [userId]
+            ),
+            pool.query(
+                `
+                SELECT device_id, created_at, expires_at
+                FROM sessions
+                WHERE user_id = $1
+                ORDER BY created_at DESC
+                LIMIT 5
+                `,
+                [userId]
+            ),
+            pool.query(
+                `
+                SELECT device_id, platform, is_active, created_at, updated_at, last_seen_at
+                FROM push_devices
+                WHERE user_id = $1
+                ORDER BY COALESCE(updated_at, last_seen_at, created_at) DESC
+                LIMIT 5
+                `,
+                [userId]
+            )
+        ]);
+
+        res.json({
+            item: profileRes.rows[0],
+            registration: registrationRes.rows[0] || null,
+            first_session: firstSessionRes.rows[0] || null,
+            recent_sessions: recentSessionsRes.rows || [],
+            recent_push_devices: pushDevicesRes.rows || []
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.get('/support-report/:id', async (req, res) => {

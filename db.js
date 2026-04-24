@@ -361,6 +361,9 @@ const createTablesQuery = `
 
       CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices(user_id);
       CREATE INDEX IF NOT EXISTS idx_push_devices_active ON push_devices(is_active);
+      CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_users_last_seen_at ON users(last_seen_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_sessions_user_created_at ON sessions(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_push_logs_created_at ON push_delivery_logs(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_push_logs_delivery_id ON push_delivery_logs(delivery_id);
       CREATE INDEX IF NOT EXISTS idx_push_logs_event_type ON push_delivery_logs(event_type);

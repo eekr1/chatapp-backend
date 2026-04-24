@@ -24,6 +24,9 @@
     table { width:100%; border-collapse:collapse; table-layout:fixed; }
     th, td { padding:10px; border-bottom:1px solid #eee; text-align:left; vertical-align:middle; word-break:break-word; }
     th { background:#f8f9fa; color:#7f8c8d; }
+    .th-sort { border:none; background:transparent; padding:0; color:#7f8c8d; font:inherit; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+    .th-sort:hover { color:#2c3e50; }
+    .th-sort.is-active { color:#1f6fb2; }
     .btn { border:none; border-radius:6px; padding:6px 10px; color:#fff; cursor:pointer; font-size:12px; margin-right:5px; }
     .btn-refresh, .btn-details { background:#3498db; }
     .btn-notify { background:#8e44ad; }
@@ -59,6 +62,11 @@
     .metric { border:1px solid #dfe6f5; background:#f8fbff; border-radius:10px; padding:10px; }
     .metric .k { font-size:11px; color:#6e7b95; text-transform:uppercase; margin-bottom:6px; }
     .metric .n { font-size:22px; font-weight:700; color:#20324f; }
+    .profiles-pagination { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; color:#5f6d7a; font-size:12px; flex-wrap:wrap; }
+    .profiles-pagination .controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .profiles-pagination .btn { margin-right:0; }
+    .list-compact { margin:0; padding-left:18px; }
+    .list-compact li { margin-bottom:6px; }
   </style>
 </head>
 <body>
@@ -109,8 +117,8 @@
       </div>
 
       <div class="row" id="search-wrap" style="display:none">
-        <input id="search-input" type="text" style="min-width:320px" onkeyup="if(event.key==='Enter') loadContent()">
-        <button class="btn btn-refresh" onclick="loadContent()">Ara</button>
+        <input id="search-input" type="text" style="min-width:320px" onkeyup="handleSearchKeyup(event)">
+        <button class="btn btn-refresh" onclick="triggerSearch()">Ara</button>
       </div>
 
       <div id="content">Yukleniyor...</div>
@@ -130,6 +138,12 @@
     let currentTab='reports';
     let currentDeletionStatus='requested';
     let currentPerformanceHours=24;
+    let profileSortBy='created_at';
+    let profileSortDir='desc';
+    let profilePage=1;
+    let profilePageSize=50;
+    let profileTotal=0;
+    let profileTotalPages=0;
     let logEventSource=null;
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
@@ -140,6 +154,58 @@
     const brevo=v=>BREVO_LABELS[v]||v||'-';
 
     function refreshAll(){loadStats();loadPushHealth();loadPushDiagnostics();loadPerformanceSummaryCard();loadContent();}
+    function triggerSearch(){ if(currentTab==='profiles') profilePage=1; loadContent(); }
+    function handleSearchKeyup(event){ if(event?.key==='Enter') triggerSearch(); }
+    function profileSortIcon(sortKey){ if(profileSortBy!==sortKey) return '-'; return profileSortDir==='asc'?'^':'v'; }
+    function renderProfileSortHeader(label,sortKey){
+      const active=profileSortBy===sortKey?' is-active':'';
+      return `<th><button type="button" class="th-sort${active}" onclick="changeProfileSort('${sortKey}')">${label} <span>${profileSortIcon(sortKey)}</span></button></th>`;
+    }
+    function changeProfileSort(sortKey){
+      if(currentTab!=='profiles') return;
+      if(profileSortBy===sortKey) profileSortDir=profileSortDir==='asc'?'desc':'asc';
+      else { profileSortBy=sortKey; profileSortDir='desc'; }
+      profilePage=1; loadContent();
+    }
+    function changeProfilePage(delta){
+      if(currentTab!=='profiles') return;
+      const next=profilePage+Number(delta||0);
+      if(next<1) return;
+      if(profileTotalPages>0&&next>profileTotalPages) return;
+      profilePage=next; loadContent();
+    }
+    function changeProfilePageSize(){
+      if(currentTab!=='profiles') return;
+      const next=Math.max(1,Math.min(100,Number(document.getElementById('profiles-page-size')?.value||profilePageSize)||profilePageSize));
+      profilePageSize=next; profilePage=1; loadContent();
+    }
+    function renderProfilesPagination(itemsCount){
+      const total=Math.max(0,Number(profileTotal)||0);
+      const pages=Math.max(0,Number(profileTotalPages)||0);
+      const page=Math.max(1,Number(profilePage)||1);
+      const start=itemsCount?((page-1)*profilePageSize)+1:0;
+      const end=itemsCount?(start+itemsCount-1):0;
+      const prevDisabled=page<=1?'disabled':'';
+      const nextDisabled=(pages===0||page>=pages)?'disabled':'';
+      const p25=profilePageSize===25?'selected':'';
+      const p50=profilePageSize===50?'selected':'';
+      const p100=profilePageSize===100?'selected':'';
+      return `
+        <div class="profiles-pagination">
+          <div>Kayit: ${start}-${end} / ${total} | Sayfa ${page}${pages?` / ${pages}`:''}</div>
+          <div class="controls">
+            <label for="profiles-page-size">Sayfa boyutu</label>
+            <select id="profiles-page-size" onchange="changeProfilePageSize()">
+              <option value="25" ${p25}>25</option>
+              <option value="50" ${p50}>50</option>
+              <option value="100" ${p100}>100</option>
+            </select>
+            <button class="btn btn-refresh" ${prevDisabled} onclick="changeProfilePage(-1)">Onceki</button>
+            <button class="btn btn-refresh" ${nextDisabled} onclick="changeProfilePage(1)">Sonraki</button>
+          </div>
+        </div>
+      `;
+    }
 
     async function loadStats(){
       try{
@@ -779,33 +845,56 @@
         if(currentTab==='audit_logs'){ await loadAuditLogs(); return; }
         if(currentTab==='performance'){ await loadPerformanceTab(); return; }
         const q=document.getElementById('search-input')?.value||'';
-        const r=await fetch(`/admin/data?type=${currentTab}&q=${encodeURIComponent(q)}`); const x=await r.json(); const items=x.items||[];
-        if(!items.length){ c.innerHTML='<p style="padding:16px">Kayit bulunamadi.</p>'; return; }
+        const qs=new URLSearchParams({type:currentTab,q});
+        if(currentTab==='profiles'){
+          qs.set('sortBy',profileSortBy);
+          qs.set('sortDir',profileSortDir);
+          qs.set('page',String(profilePage));
+          qs.set('pageSize',String(profilePageSize));
+        }
+        const r=await fetch(`/admin/data?${qs.toString()}`); const x=await r.json(); if(!r.ok) throw new Error(x.error||'Veri alinamadi.'); const items=Array.isArray(x.items)?x.items:[];
+        if(!items.length&&currentTab!=='profiles'){ c.innerHTML='<p style="padding:16px">Kayit bulunamadi.</p>'; return; }
+        if(currentTab==='profiles'){
+          const p=x.pagination||{};
+          profileSortBy=['created_at','last_seen_at','username'].includes(String(p.sortBy||''))?String(p.sortBy):profileSortBy;
+          profileSortDir=String(p.sortDir||'').toLowerCase()==='asc'?'asc':'desc';
+          profilePage=Math.max(1,Number(p.page)||profilePage);
+          profilePageSize=Math.max(1,Math.min(100,Number(p.pageSize)||profilePageSize));
+          profileTotal=Math.max(0,Number(p.total)||0);
+          profileTotalPages=Math.max(0,Number(p.totalPages)||0);
+        }
         let h='<table><thead><tr>';
         if(currentTab==='reports') h+='<th>Tarih</th><th>Raporlayan</th><th>Raporlanan</th><th>Sebep</th><th>Islem</th>';
         else if(currentTab==='bans') h+='<th>Kullanici</th><th>Tur</th><th>Bitis</th><th>Sebep</th><th>Islem</th>';
-        else if(currentTab==='profiles') h+='<th>Kullanici</th><th>Gorunen Isim</th><th>Kayit</th><th>Islem</th>';
+        else if(currentTab==='profiles') h+=`${renderProfileSortHeader('Kullanici','username')}<th>Gorunen Isim</th>${renderProfileSortHeader('Son Gorulme','last_seen_at')}${renderProfileSortHeader('Kayit','created_at')}<th>Islem</th>`;
         else h+='<th>Tarih</th><th>Konu</th><th>Kullanici</th><th>E-posta</th><th>Durum</th><th>Medya</th><th>Islem</th>';
         h+='</tr></thead><tbody>';
-        items.forEach(it=>{
-          h+='<tr>';
-          if(currentTab==='reports'){
-            const rid=it.reported_user_id||'';
-            h+=`<td>${d(it.created_at)}</td><td>${esc(it.reporter||'Anon')}</td><td>${esc(it.reported||'Anon')}</td><td>${esc(it.reason||'')}</td><td>
-              <button class="btn btn-ban" onclick="actionBan('${rid}',1,'Rapor: ${esc(it.reason||'')}')">24s</button>
-              <button class="btn btn-perm" onclick="actionBan('${rid}',0,'Rapor: ${esc(it.reason||'')}')">Kalici</button>
-              <button class="btn btn-shadow" onclick="actionShadow('${rid}','Rapor: ${esc(it.reason||'')}')">Golge</button></td>`;
-          }else if(currentTab==='bans'){
-            h+=`<td>${esc(it.nickname||'Bilinmiyor')}</td><td><span class="badge ${esc(it.ban_type)}">${esc((it.ban_type||'').toUpperCase())}</span></td><td>${it.ban_until?new Date(it.ban_until).toLocaleString():'SURESIZ'}</td><td>${esc(it.reason||'')}</td><td><button class="btn btn-unban" onclick="actionUnban('${it.user_id}')">Yasagi Kaldir</button></td>`;
-          }else if(currentTab==='profiles'){
-            h+=`<td><strong>${esc(it.username||'-')}</strong></td><td>${esc(it.display_name||'-')}</td><td>${d(it.created_at)}</td><td><button class="btn btn-details" onclick="openProfileDetails('${it.id}','${esc(it.username||'-')}')">Detay</button><button class="btn btn-ban" onclick="actionBan('${it.id}',1,'Panel islemi')">Yasakla</button></td>`;
-          }else{
-            h+=`<td>${d(it.created_at)}</td><td>${esc(subject(it.subject))}</td><td>${esc(it.username_snapshot||'-')}</td><td>${esc(it.contact_email||'-')}</td><td><span class="badge ${esc(it.brevo_status||'pending')}">${esc(brevo(it.brevo_status))}</span></td><td>${Number(it.media_count||0)}</td><td><button class="btn btn-details" onclick="openSupportDetails('${it.id}')">Detay</button><button class="btn btn-delete" onclick="deleteSupportReport('${it.id}')">Sil</button></td>`;
-          }
-          h+='</tr>';
-        });
-        h+='</tbody></table>'; c.innerHTML=h;
-      }catch(e){ c.innerHTML='<p style="padding:16px;color:#c0392b">Veri yuklenemedi.</p>'; }
+        if(!items.length){
+          const colSpan=currentTab==='profiles'?5:7;
+          h+=`<tr><td colspan="${colSpan}">Kayit bulunamadi.</td></tr>`;
+        }else{
+          items.forEach(it=>{
+            h+='<tr>';
+            if(currentTab==='reports'){
+              const rid=it.reported_user_id||'';
+              h+=`<td>${d(it.created_at)}</td><td>${esc(it.reporter||'Anon')}</td><td>${esc(it.reported||'Anon')}</td><td>${esc(it.reason||'')}</td><td>
+                <button class="btn btn-ban" onclick="actionBan('${rid}',1,'Rapor: ${esc(it.reason||'')}')">24s</button>
+                <button class="btn btn-perm" onclick="actionBan('${rid}',0,'Rapor: ${esc(it.reason||'')}')">Kalici</button>
+                <button class="btn btn-shadow" onclick="actionShadow('${rid}','Rapor: ${esc(it.reason||'')}')">Golge</button></td>`;
+            }else if(currentTab==='bans'){
+              h+=`<td>${esc(it.nickname||'Bilinmiyor')}</td><td><span class="badge ${esc(it.ban_type)}">${esc((it.ban_type||'').toUpperCase())}</span></td><td>${it.ban_until?new Date(it.ban_until).toLocaleString():'SURESIZ'}</td><td>${esc(it.reason||'')}</td><td><button class="btn btn-unban" onclick="actionUnban('${it.user_id}')">Yasagi Kaldir</button></td>`;
+            }else if(currentTab==='profiles'){
+              h+=`<td><strong>${esc(it.username||'-')}</strong></td><td>${esc(it.display_name||'-')}</td><td>${d(it.last_seen_at)}</td><td>${d(it.created_at)}</td><td><button class="btn btn-details" onclick="openProfileDetails('${it.id}','${esc(it.username||'-')}')">Detay</button><button class="btn btn-ban" onclick="actionBan('${it.id}',1,'Panel islemi')">Yasakla</button></td>`;
+            }else{
+              h+=`<td>${d(it.created_at)}</td><td>${esc(subject(it.subject))}</td><td>${esc(it.username_snapshot||'-')}</td><td>${esc(it.contact_email||'-')}</td><td><span class="badge ${esc(it.brevo_status||'pending')}">${esc(brevo(it.brevo_status))}</span></td><td>${Number(it.media_count||0)}</td><td><button class="btn btn-details" onclick="openSupportDetails('${it.id}')">Detay</button><button class="btn btn-delete" onclick="deleteSupportReport('${it.id}')">Sil</button></td>`;
+            }
+            h+='</tr>';
+          });
+        }
+        h+='</tbody></table>';
+        if(currentTab==='profiles') h+=renderProfilesPagination(items.length);
+        c.innerHTML=h;
+      }catch(e){ c.innerHTML=`<p style="padding:16px;color:#c0392b">Veri yuklenemedi: ${esc(e.message||e)}</p>`; }
     }
 
     function openModal(title,body){document.getElementById('m_title').innerText=title;document.getElementById('m_body').innerHTML=body;document.getElementById('modal').style.display='flex';}
@@ -814,18 +903,62 @@
     async function openProfileDetails(userId,username){
       openModal(`Profil Detayi: ${username}`,'<p>Yukleniyor...</p>');
       try{
-        const [rb,rf]=await Promise.all([fetch(`/admin/user-blocks/${userId}`),fetch(`/admin/user-friends/${userId}`)]);
-        const b=await rb.json(); const f=await rf.json();
-        let fh='<h3>Arkadaslar</h3><ul>';
+        const [rd,rb,rf]=await Promise.all([
+          fetch(`/admin/profile-details/${userId}`),
+          fetch(`/admin/user-blocks/${userId}`),
+          fetch(`/admin/user-friends/${userId}`)
+        ]);
+        const details=await rd.json(); const b=await rb.json(); const f=await rf.json();
+        if(!rd.ok) throw new Error(details.error||'Profil detayi okunamadi.');
+        if(!rb.ok) throw new Error(b.error||'Engel listesi okunamadi.');
+        if(!rf.ok) throw new Error(f.error||'Arkadas listesi okunamadi.');
+
+        const it=details.item||{};
+        const reg=details.registration||null;
+        const firstSession=details.first_session||null;
+        const recentSessions=Array.isArray(details.recent_sessions)?details.recent_sessions:[];
+        const recentPushDevices=Array.isArray(details.recent_push_devices)?details.recent_push_devices:[];
+
+        let accountHtml=`<h3>Hesap Bilgisi</h3><div class="grid">
+          <div class="item"><strong>Kullanici</strong>${esc(it.username||'-')}</div>
+          <div class="item"><strong>Gorunen Isim</strong>${esc(it.display_name||'-')}</div>
+          <div class="item"><strong>Durum</strong>${esc(it.status||'-')}</div>
+          <div class="item"><strong>Kayit Tarihi</strong>${d(it.created_at)}</div>
+          <div class="item"><strong>Son Gorulme</strong>${d(it.last_seen_at)}</div>
+          <div class="item"><strong>Kayit Onayi Zamani</strong>${d(reg?.accepted_at)}</div>
+          <div class="item"><strong>Kayit IP</strong>${esc(reg?.ip||'-')}</div>
+          <div class="item"><strong>Kayit User-Agent</strong>${esc(reg?.user_agent||'-')}</div>
+          <div class="item"><strong>Ilk Device</strong>${esc(firstSession?.device_id||'-')}</div>
+          <div class="item"><strong>Ilk Session</strong>${d(firstSession?.created_at)}</div>
+        </div>`;
+
+        let sessionHtml='<h3>Son Sessionlar</h3><ul class="list-compact">';
+        if(!recentSessions.length) sessionHtml+='<li>Session kaydi yok.</li>';
+        else recentSessions.forEach(s=>{
+          sessionHtml+=`<li><code>${esc(s.device_id||'unknown')}</code> | Baslangic: ${d(s.created_at)} | Bitis: ${d(s.expires_at)}</li>`;
+        });
+        sessionHtml+='</ul>';
+
+        let pushHtml='<h3>Son Push Cihazlari</h3><ul class="list-compact">';
+        if(!recentPushDevices.length) pushHtml+='<li>Push cihaz kaydi yok.</li>';
+        else recentPushDevices.forEach(p=>{
+          const active=p.is_active===true?'Evet':'Hayir';
+          pushHtml+=`<li><code>${esc(p.device_id||'unknown')}</code> | Platform: ${esc(p.platform||'-')} | Son gorulme: ${d(p.last_seen_at||p.updated_at||p.created_at)} | Aktif: ${active}</li>`;
+        });
+        pushHtml+='</ul>';
+
+        let fh='<h3>Arkadaslar</h3><ul class="list-compact">';
         if(!f.items?.length) fh+='<li>Arkadas kaydi yok.</li>';
         else f.items.forEach(i=>{fh+=`<li style="margin-bottom:8px;display:flex;justify-content:space-between;gap:8px"><span>${esc(i.username)} <small>(${new Date(i.created_at).toLocaleDateString()})</small></span><button class="btn btn-perm" onclick="actionRemoveFriend('${userId}','${i.id}')">Sil</button></li>`;});
         fh+='</ul>';
-        let bh='<h3>Engellenen Kullanici</h3><ul>';
+
+        let bh='<h3>Engellenen Kullanici</h3><ul class="list-compact">';
         if(!b.items?.length) bh+='<li>Engel kaydi yok.</li>';
         else b.items.forEach(i=>{bh+=`<li style="margin-bottom:8px;display:flex;justify-content:space-between;gap:8px"><span>${esc(i.nickname||'Anonim')}</span><button class="btn btn-unban" onclick="actionUnblock('${userId}','${i.blocked_id}')">Engeli Kaldir</button></li>`;});
         bh+='</ul>';
-        document.getElementById('m_body').innerHTML=`${fh}<hr/>${bh}`;
-      }catch(e){document.getElementById('m_body').innerHTML='<p>Detay yuklenemedi.</p>';}
+
+        document.getElementById('m_body').innerHTML=`${accountHtml}${sessionHtml}${pushHtml}<hr/>${fh}<hr/>${bh}`;
+      }catch(e){document.getElementById('m_body').innerHTML=`<p>Detay yuklenemedi: ${esc(e.message||e)}</p>`;}
     }
 
     async function openSupportDetails(id){
