@@ -1144,6 +1144,13 @@ const applyMatchDecision = async (ws, providedMatchId, decision) => {
     if (decision === 'accept') {
         participant.decision = 'accepted';
         sendJson(ws, { type: 'match_offer_waiting' });
+        const peer = pending.users.find((u) => u.clientId !== ws.clientId);
+        if (peer && peer.decision === 'pending') {
+            const peerWs = activeClients.get(peer.clientId)?.ws || peer.ws;
+            if (peerWs && peerWs.readyState === WebSocket.OPEN) {
+                sendJson(peerWs, { type: 'match_offer_peer_accepted' });
+            }
+        }
         await finalizePendingMatchIfReady(matchId);
         return;
     }
