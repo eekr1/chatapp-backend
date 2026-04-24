@@ -1805,8 +1805,29 @@ const handleReport = async ({
 
     // Fallback path: room/recent context missing olsa bile raporu kaydet.
     if (!conversationId) {
-        const fallback = await logReport(reporterId, reportedId, conversationIdHint || null, cleanReason);
+        let fallbackConversationId = conversationIdHint || null;
+        if (!fallbackConversationId) {
+            try {
+                // Legacy/edge fallback: derive a stable conversation context when room state is gone.
+                fallbackConversationId = await findOrCreatePersistentConversation(reporterId, reportedId);
+            } catch (e) {
+                console.warn('Report fallback conversation lookup failed:', {
+                    reporterId,
+                    reportedId,
+                    message: e?.message || e
+                });
+            }
+        }
+
+        const fallback = await logReport(reporterId, reportedId, fallbackConversationId, cleanReason);
         if (fallback?.error) {
+            console.error('Report fallback insert failed:', {
+                reporterId,
+                reportedId,
+                conversationId: fallbackConversationId,
+                roomId: roomId || null,
+                error: fallback.error
+            });
             return { ok: false, message: 'Rapor kaydi olusturulamadi.' };
         }
         return {

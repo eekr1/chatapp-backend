@@ -264,6 +264,7 @@ const createTablesQuery = `
   DECLARE
       _blocks_fk RECORD;
       _deletion_fk RECORD;
+      _reports_fk RECORD;
   BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users_anon' AND column_name='nickname') THEN
           ALTER TABLE users_anon ADD COLUMN nickname TEXT;
@@ -295,6 +296,23 @@ const createTablesQuery = `
       LOOP
           EXECUTE format('ALTER TABLE account_deletion_requests DROP CONSTRAINT IF EXISTS %I', _deletion_fk.conname);
       END LOOP;
+
+      -- Report model must support both auth users and anon users.
+      -- Remove legacy foreign keys/strict nullability if they exist from old deployments.
+      FOR _reports_fk IN
+          SELECT c.conname
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE c.contype = 'f'
+            AND t.relname = 'reports'
+            AND n.nspname = current_schema()
+      LOOP
+          EXECUTE format('ALTER TABLE reports DROP CONSTRAINT IF EXISTS %I', _reports_fk.conname);
+      END LOOP;
+      ALTER TABLE reports ALTER COLUMN reporter_user_id DROP NOT NULL;
+      ALTER TABLE reports ALTER COLUMN reported_user_id DROP NOT NULL;
+      ALTER TABLE reports ALTER COLUMN conversation_id DROP NOT NULL;
       
       CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
       CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_user_id);
