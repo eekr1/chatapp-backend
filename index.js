@@ -316,6 +316,7 @@ const rooms = new Map(); // roomId -> { users: [...], sockets: {...}, conversati
 const userRoomMap = new Map(); // clientId (socket uuid) -> roomId
 const pendingMatches = new Map(); // matchId -> { id, users, autoAcceptAt, timeoutMs, timer, finalized }
 const userPendingMatchMap = new Map(); // clientId -> matchId
+const pairRematchCooldowns = new Map(); // pairKey -> expiresAt
 
 
 // Config
@@ -329,6 +330,13 @@ const MATCH_CONFIRM_TIMEOUT_MS = (() => {
     const parsed = Number(process.env.MATCH_CONFIRM_TIMEOUT_MS);
     if (!Number.isFinite(parsed)) return 8000;
     return Math.max(5000, Math.min(10000, Math.round(parsed)));
+})();
+const MATCH_REMATCH_COOLDOWN_MS = (() => {
+    const parsed = Number(process.env.MATCH_REMATCH_COOLDOWN_MS);
+    const min = 5 * 60 * 1000;
+    const max = 10 * 60 * 1000;
+    if (!Number.isFinite(parsed)) return 10 * 60 * 1000;
+    return Math.max(min, Math.min(max, Math.round(parsed)));
 })();
 const PUSH_CHANNEL_IDS = {
     messages: 'talkx_messages_v3',
@@ -776,6 +784,31 @@ async function checkBlock(userAId, userBId) {
     }
 }
 
+const makePairKey = (userAId, userBId) => {
+    const a = String(userAId || '').trim();
+    const b = String(userBId || '').trim();
+    if (!a || !b) return null;
+    return a < b ? `${a}:${b}` : `${b}:${a}`;
+};
+
+const setPairRematchCooldown = (userAId, userBId, durationMs = MATCH_REMATCH_COOLDOWN_MS) => {
+    const key = makePairKey(userAId, userBId);
+    if (!key) return;
+    pairRematchCooldowns.set(key, Date.now() + durationMs);
+};
+
+const isPairOnRematchCooldown = (userAId, userBId) => {
+    const key = makePairKey(userAId, userBId);
+    if (!key) return false;
+    const expiresAt = Number(pairRematchCooldowns.get(key) || 0);
+    if (!expiresAt) return false;
+    if (expiresAt <= Date.now()) {
+        pairRematchCooldowns.delete(key);
+        return false;
+    }
+    return true;
+};
+
 async function blockUser(blockerId, blockedId) {
     if (blockerId === blockedId) return;
     try {
@@ -1116,6 +1149,11 @@ const applyMatchDecision = async (ws, providedMatchId, decision) => {
     }
 
     participant.decision = 'rejected';
+    const first = pending.users[0] || null;
+    const second = pending.users[1] || null;
+    if (first?.dbUserId && second?.dbUserId) {
+        setPairRematchCooldown(first.dbUserId, second.dbUserId);
+    }
     cancelPendingMatchById(matchId, {
         actorClientId: ws.clientId,
         actorReason: null,
@@ -1183,7 +1221,7 @@ const joinQueue = async (ws) => {
             if (!p || p.clientId === me.clientId) continue;
 
             const blocked = await checkBlock(me.dbUserId, p.dbUserId);
-            if (!blocked) {
+            if (!blocked && !isPairOnRematchCooldown(me.dbUserId, p.dbUserId)) {
                 peerIndex = i;
                 peer = p;
                 break;
@@ -1209,6 +1247,13 @@ const leaveRoom = (clientId, reason = 'leave') => {
 
     const room = rooms.get(roomId);
     if (room) {
+        if (Array.isArray(room.users) && room.users.length === 2) {
+            const userA = room.users[0];
+            const userB = room.users[1];
+            if (userA?.dbUserId && userB?.dbUserId) {
+                setPairRematchCooldown(userA.dbUserId, userB.dbUserId);
+            }
+        }
         endConversation(room.conversationId, reason);
 
         recentRooms.set(roomId, {
@@ -2244,6 +2289,9 @@ setInterval(() => {
     const now = Date.now();
     for (const [roomId, data] of recentRooms) {
         if (now - data.timestamp > REPORT_TTL) recentRooms.delete(roomId);
+    }
+    for (const [pairKey, expiresAt] of pairRematchCooldowns) {
+        if (Number(expiresAt) <= now) pairRematchCooldowns.delete(pairKey);
     }
 }, 60000);
 
