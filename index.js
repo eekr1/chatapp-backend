@@ -832,17 +832,34 @@ async function endConversation(conversationId, reason) {
 }
 
 async function logReport(reporterId, reportedId, conversationId, reason) {
+    const cleanReason = String(reason || '').trim().slice(0, 800);
+    const cleanConversationId = conversationId || null;
+    if (!reporterId || !reportedId || !cleanReason) {
+        return { error: 'invalid_input' };
+    }
+    if (reporterId === reportedId) {
+        return { error: 'self_report_not_allowed' };
+    }
     try {
         // Prevent duplicate report
-        const check = await pool.query(
-            'SELECT id FROM reports WHERE reporter_user_id=$1 AND conversation_id=$2',
-            [reporterId, conversationId]
-        );
+        const check = cleanConversationId
+            ? await pool.query(
+                'SELECT id FROM reports WHERE reporter_user_id=$1 AND conversation_id=$2',
+                [reporterId, cleanConversationId]
+            )
+            : await pool.query(
+                `SELECT id
+                 FROM reports
+                 WHERE reporter_user_id=$1
+                   AND reported_user_id=$2
+                   AND created_at > NOW() - INTERVAL '24 hours'`,
+                [reporterId, reportedId]
+            );
         if (check.rows.length > 0) return { duplicate: true };
 
         await pool.query(
             'INSERT INTO reports (reporter_user_id, reported_user_id, conversation_id, reason) VALUES ($1, $2, $3, $4)',
-            [reporterId, reportedId, conversationId, reason]
+            [reporterId, reportedId, cleanConversationId, cleanReason]
         );
 
         // Auto Ban Logic
@@ -864,7 +881,7 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
 
     } catch (e) {
         console.error('DB Error logReport:', e);
-        return {};
+        return { error: e?.message || 'db_error' };
     }
 }
 
@@ -1638,18 +1655,40 @@ wss.on('connection', (ws, req) => {
 
 
             case 'report':
-                if (data.reason) {
-                    if (data.roomId) {
-                        handleReport(ws.clientId, data.roomId, data.reason);
-                    } else if (data.targetUserId) {
-                        // Friend report (V13 Extension)
-                        logReport(clientData.dbUserId, data.targetUserId, data.conversationId || null, data.reason);
-                        sendJson(ws, {
-                            type: 'success',
-                            code: 'REPORT_OK',
-                            message: t(resolveWsLang(ws), 'ws.REPORT_OK', {}, 'Your report has been sent.')
-                        });
+                {
+                    const reason = String(data.reason || '').trim();
+                    if (!reason) {
+                        sendError(ws, 'INVALID_INPUT');
+                        break;
                     }
+
+                    const targetUserId = String(data.targetUserId || '').trim() || null;
+                    const conversationIdHint = String(data.conversationId || '').trim() || null;
+                    const reportResult = await handleReport({
+                        reporterClientId: ws.clientId,
+                        reporterDbUserId: clientData.dbUserId,
+                        roomId: data.roomId || null,
+                        targetUserId,
+                        conversationIdHint,
+                        reason
+                    });
+
+                    if (!reportResult?.ok) {
+                        const lang = resolveWsLang(ws);
+                        sendError(
+                            ws,
+                            'SERVER_ERROR',
+                            reportResult?.message || t(lang, 'ws.REPORT_FAILED', {}, 'Report could not be recorded right now. Please try again.')
+                        );
+                        break;
+                    }
+
+                    sendJson(ws, {
+                        type: 'success',
+                        code: 'REPORT_OK',
+                        duplicate: !!reportResult.duplicate,
+                        message: t(resolveWsLang(ws), 'ws.REPORT_OK', {}, 'Your report has been sent.')
+                    });
                 }
                 break;
 
@@ -1716,32 +1755,67 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-const handleReport = async (reporterClientId, roomId, reason) => {
+const handleReport = async ({
+    reporterClientId,
+    reporterDbUserId,
+    roomId,
+    targetUserId,
+    conversationIdHint,
+    reason
+}) => {
+    const cleanReason = String(reason || '').trim().slice(0, 800);
+    if (!cleanReason) {
+        return { ok: false, message: 'Rapor nedeni gerekli.' };
+    }
+
     let users = null;
     let conversationId = null;
-    const room = rooms.get(roomId);
-    if (room) {
-        users = room.users;
-        conversationId = room.conversationId;
-    } else {
-        const recent = recentRooms.get(roomId);
-        if (recent) {
-            users = recent.users;
-            conversationId = recent.conversationId;
+    if (roomId) {
+        const room = rooms.get(roomId);
+        if (room) {
+            users = room.users;
+            conversationId = room.conversationId;
+        } else {
+            const recent = recentRooms.get(roomId);
+            if (recent) {
+                users = recent.users;
+                conversationId = recent.conversationId;
+            }
         }
     }
 
-    if (!users || !conversationId) return;
+    let reporterId = reporterDbUserId || null;
+    let reportedId = targetUserId || null;
+    let reportedClientId = null;
 
-    const reporterObj = users.find(u => u.clientId === reporterClientId);
-    const reportedObj = users.find(u => u.clientId !== reporterClientId);
+    if (users && users.length) {
+        const reporterObj = users.find((u) => u.clientId === reporterClientId);
+        const reportedObj = users.find((u) => u.clientId !== reporterClientId);
 
-    if (!reporterObj || !reportedObj) return;
+        if (reporterObj?.dbUserId) reporterId = reporterObj.dbUserId;
+        if (reportedObj?.dbUserId) {
+            reportedId = reportedObj.dbUserId;
+            reportedClientId = reportedObj.clientId;
+        }
+    }
 
-    const reporterId = reporterObj.dbUserId;
-    const reportedId = reportedObj.dbUserId;
+    if (!reporterId || !reportedId || reporterId === reportedId) {
+        return { ok: false, message: 'Rapor baglami cozumlenemedi.' };
+    }
 
-    if (!reporterId || !reportedId) return;
+    // Fallback path: room/recent context missing olsa bile raporu kaydet.
+    if (!conversationId) {
+        const fallback = await logReport(reporterId, reportedId, conversationIdHint || null, cleanReason);
+        if (fallback?.error) {
+            return { ok: false, message: 'Rapor kaydi olusturulamadi.' };
+        }
+        return {
+            ok: true,
+            duplicate: !!fallback?.duplicate,
+            persisted: !fallback?.duplicate,
+            banned: !!fallback?.banned
+        };
+    }
 
     // 1. Unique Reporter Check (24h)
     try {
@@ -1749,10 +1823,10 @@ const handleReport = async (reporterClientId, roomId, reason) => {
             "SELECT 1 FROM reports WHERE reporter_user_id=$1 AND reported_user_id=$2 AND created_at > NOW() - INTERVAL '24 hours'",
             [reporterId, reportedId]
         );
-        if (existing.rows.length > 0) return; // Already reported
+        if (existing.rows.length > 0) return { ok: true, duplicate: true, persisted: false };
     } catch (e) {
-        console.error("Report check error", e);
-        return;
+        console.error('Report check error', e);
+        return { ok: false, message: 'Rapor kontrolu basarisiz.' };
     }
 
     // 2. Calculate Weight
@@ -1765,8 +1839,8 @@ const handleReport = async (reporterClientId, roomId, reason) => {
         }
     } catch (e) { }
 
-    const reasonLower = (reason || '').toLowerCase();
-    if (['threat', 'hate', 'sexual', 'harassment'].some(r => reasonLower.includes(r))) weight = 1.5;
+    const reasonLower = cleanReason.toLowerCase();
+    if (['threat', 'hate', 'sexual', 'harassment'].some((r) => reasonLower.includes(r))) weight = 1.5;
     else if (reasonLower.includes('spam') || reasonLower.includes('scam')) weight = 1.0;
     else weight = 0.75;
 
@@ -1774,9 +1848,12 @@ const handleReport = async (reporterClientId, roomId, reason) => {
     try {
         await pool.query(
             'INSERT INTO reports (reporter_user_id, reported_user_id, conversation_id, reason, meta) VALUES ($1, $2, $3, $4, $5)',
-            [reporterId, reportedId, conversationId, reason, JSON.stringify({ weight })]
+            [reporterId, reportedId, conversationId, cleanReason, JSON.stringify({ weight })]
         );
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error('Report insert error', e);
+        return { ok: false, message: 'Rapor kaydedilemedi.' };
+    }
 
     // 4. Threshold & Ban Logic
     try {
@@ -1787,9 +1864,9 @@ const handleReport = async (reporterClientId, roomId, reason) => {
         `, [reportedId]);
 
         const score24h = parseFloat(res24h.rows[0].score || 0);
-        const reporters24h = parseInt(res24h.rows[0].reporters || 0);
+        const reporters24h = parseInt(res24h.rows[0].reporters || 0, 10);
 
-        if (reporters24h < 2) return; // Minimum 2 unique reporters
+        if (reporters24h < 2) return { ok: true, persisted: true, banned: false };
 
         let banHours = 0;
 
@@ -1812,7 +1889,7 @@ const handleReport = async (reporterClientId, roomId, reason) => {
         if (banHours > 0) {
             // 5. Repeat Offender Multiplier
             const history = await pool.query("SELECT COUNT(*) as c FROM bans WHERE user_id=$1 AND created_at > NOW() - INTERVAL '30 days'", [reportedId]);
-            const pastBans = parseInt(history.rows[0].c || 0);
+            const pastBans = parseInt(history.rows[0].c || 0, 10);
 
             if (pastBans > 0) {
                 if (pastBans === 1) banHours = Math.max(banHours, 6);
@@ -1829,15 +1906,18 @@ const handleReport = async (reporterClientId, roomId, reason) => {
             );
 
             // Kick User
-            const clientData = activeClients.get(reportedObj.clientId);
-            if (clientData && clientData.ws) {
-                sendJson(clientData.ws, { type: 'ended', reason: 'banned', message: `Hesabınız geçici olarak askıya alındı. Süre: ${banHours} saat.` });
-                clientData.ws.close();
+            const reportTargetClientData = reportedClientId ? activeClients.get(reportedClientId) : null;
+            if (reportTargetClientData && reportTargetClientData.ws) {
+                sendJson(reportTargetClientData.ws, { type: 'ended', reason: 'banned', message: `Hesabınız geçici olarak askıya alındı. Süre: ${banHours} saat.` });
+                reportTargetClientData.ws.close();
             }
+            return { ok: true, persisted: true, banned: true };
         }
     } catch (e) {
-        console.error("Auto-ban error", e);
+        console.error('Auto-ban error', e);
     }
+
+    return { ok: true, persisted: true, banned: false };
 };
 
 const handleBlock = async (blockerClientId, roomId) => {

@@ -51,6 +51,7 @@ module.exports = {
         INVALID_MEDIA_ID: 'Invalid media id.',
         MEDIA_EXPIRED: 'This photo has been deleted or expired.',
         REPORT_OK: 'Your report has been sent.',
+        REPORT_FAILED: 'Report could not be recorded right now. Please try again.',
         NEW_MESSAGE: 'New message',
         PHOTO_SENT: 'Sent a photo',
         PHOTO_SEND_FAILED: 'Photo could not be sent.',

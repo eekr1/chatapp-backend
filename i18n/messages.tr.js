@@ -51,6 +51,7 @@ module.exports = {
         INVALID_MEDIA_ID: 'Gecersiz medya kimligi.',
         MEDIA_EXPIRED: 'Bu fotograf silinmis veya suresi dolmus.',
         REPORT_OK: 'Raporunuz iletildi.',
+        REPORT_FAILED: 'Rapor su anda kaydedilemedi. Lutfen tekrar deneyin.',
         NEW_MESSAGE: 'Yeni mesaj',
         PHOTO_SENT: 'Fotograf gonderdi',
         PHOTO_SEND_FAILED: 'Fotograf gonderilemedi.',
