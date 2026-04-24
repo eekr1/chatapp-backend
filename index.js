@@ -314,6 +314,8 @@ const wss = new WebSocketServer({ server });
 let waitingQueue = []; // [{ clientId, ws, nickname, dbUserId }]
 const rooms = new Map(); // roomId -> { users: [...], sockets: {...}, conversationId: uuid }
 const userRoomMap = new Map(); // clientId (socket uuid) -> roomId
+const pendingMatches = new Map(); // matchId -> { id, users, autoAcceptAt, timeoutMs, timer, finalized }
+const userPendingMatchMap = new Map(); // clientId -> matchId
 
 
 // Config
@@ -323,6 +325,11 @@ const REPORT_TTL = 5 * 60 * 1000;
 const HEARTBEAT_INTERVAL = 30000;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB
 const EPHEMERAL_MEDIA_TTL_DAYS = 7;
+const MATCH_CONFIRM_TIMEOUT_MS = (() => {
+    const parsed = Number(process.env.MATCH_CONFIRM_TIMEOUT_MS);
+    if (!Number.isFinite(parsed)) return 8000;
+    return Math.max(5000, Math.min(10000, Math.round(parsed)));
+})();
 const PUSH_CHANNEL_IDS = {
     messages: 'talkx_messages_v3',
     admin: 'talkx_admin_v3',
@@ -888,6 +895,236 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
 
 // --- Main Logic ---
 
+const removeFromQueue = (clientId) => {
+    waitingQueue = waitingQueue.filter(item => item.clientId !== clientId);
+};
+
+const createRoom = (roomId, conversationId, userA, userB) => {
+    rooms.set(roomId, {
+        users: [
+            { clientId: userA.clientId, nickname: userA.nickname, username: userA.username, dbUserId: userA.dbUserId },
+            { clientId: userB.clientId, nickname: userB.nickname, username: userB.username, dbUserId: userB.dbUserId }
+        ],
+        sockets: {
+            [userA.clientId]: userA.ws,
+            [userB.clientId]: userB.ws
+        },
+        conversationId: conversationId
+    });
+
+    userRoomMap.set(userA.clientId, roomId);
+    userRoomMap.set(userB.clientId, roomId);
+
+    sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
+    sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
+};
+
+const getPendingMatchForClient = (clientId) => {
+    const matchId = userPendingMatchMap.get(clientId);
+    if (!matchId) return null;
+    const pending = pendingMatches.get(matchId);
+    if (!pending) {
+        userPendingMatchMap.delete(clientId);
+        return null;
+    }
+    const participantIndex = pending.users.findIndex((u) => u.clientId === clientId);
+    if (participantIndex === -1) {
+        userPendingMatchMap.delete(clientId);
+        return null;
+    }
+    return { matchId, pending, participantIndex };
+};
+
+const clearPendingMatchById = (matchId) => {
+    const pending = pendingMatches.get(matchId);
+    if (!pending) return null;
+    if (pending.timer) clearTimeout(pending.timer);
+    pendingMatches.delete(matchId);
+    pending.users.forEach((u) => userPendingMatchMap.delete(u.clientId));
+    return pending;
+};
+
+const queueClientForRematch = (clientId) => {
+    setTimeout(() => {
+        const clientData = activeClients.get(clientId);
+        if (!clientData?.ws || clientData.ws.readyState !== WebSocket.OPEN) return;
+        joinQueue(clientData.ws).catch((e) => {
+            console.error('queueClientForRematch error:', e?.message || e);
+        });
+    }, 0);
+};
+
+const cancelPendingMatchById = (
+    matchId,
+    {
+        actorClientId = null,
+        actorReason = null,
+        peerReason = null,
+        requeueActor = false,
+        requeuePeers = true
+    } = {}
+) => {
+    const pending = clearPendingMatchById(matchId);
+    if (!pending) return false;
+
+    pending.users.forEach((participant) => {
+        const ws = activeClients.get(participant.clientId)?.ws || participant.ws;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        const isActor = actorClientId && participant.clientId === actorClientId;
+        const reason = isActor ? actorReason : peerReason;
+        if (!reason) return;
+
+        sendJson(ws, { type: 'match_offer_closed', reason });
+    });
+
+    pending.users.forEach((participant) => {
+        const isActor = actorClientId && participant.clientId === actorClientId;
+        const shouldRequeue = isActor ? requeueActor : requeuePeers;
+        if (shouldRequeue) queueClientForRematch(participant.clientId);
+    });
+
+    return true;
+};
+
+const cancelPendingMatchForClient = (clientId, options = {}) => {
+    const context = getPendingMatchForClient(clientId);
+    if (!context) return false;
+    return cancelPendingMatchById(context.matchId, { actorClientId: clientId, ...options });
+};
+
+const finalizePendingMatchIfReady = async (matchId) => {
+    const pending = pendingMatches.get(matchId);
+    if (!pending || pending.finalized) return false;
+    if (!pending.users.every((u) => u.decision === 'accepted')) return false;
+
+    pending.finalized = true;
+    const participants = pending.users.map((participant) => {
+        const live = activeClients.get(participant.clientId);
+        if (!live?.ws || live.ws.readyState !== WebSocket.OPEN) return null;
+        return {
+            clientId: participant.clientId,
+            ws: live.ws,
+            nickname: live.nickname || participant.nickname,
+            username: live.username || participant.username,
+            dbUserId: live.dbUserId || participant.dbUserId
+        };
+    }).filter(Boolean);
+
+    clearPendingMatchById(matchId);
+
+    if (participants.length !== 2) {
+        participants.forEach((participant) => queueClientForRematch(participant.clientId));
+        return false;
+    }
+
+    let conversationId = null;
+    try {
+        conversationId = await createConversation(participants[0].dbUserId, participants[1].dbUserId);
+    } catch (e) {
+        participants.forEach((participant) => {
+            sendError(participant.ws, 'DB_ERROR');
+            queueClientForRematch(participant.clientId);
+        });
+        return false;
+    }
+
+    const roomId = uuidv4();
+    createRoom(roomId, conversationId, participants[0], participants[1]);
+    return true;
+};
+
+const createPendingMatch = (userA, userB) => {
+    const matchId = uuidv4();
+    const autoAcceptAt = Date.now() + MATCH_CONFIRM_TIMEOUT_MS;
+    const pending = {
+        id: matchId,
+        users: [
+            {
+                clientId: userA.clientId,
+                ws: userA.ws,
+                nickname: userA.nickname,
+                username: userA.username,
+                dbUserId: userA.dbUserId,
+                decision: 'pending'
+            },
+            {
+                clientId: userB.clientId,
+                ws: userB.ws,
+                nickname: userB.nickname,
+                username: userB.username,
+                dbUserId: userB.dbUserId,
+                decision: 'pending'
+            }
+        ],
+        autoAcceptAt,
+        timeoutMs: MATCH_CONFIRM_TIMEOUT_MS,
+        timer: null,
+        finalized: false
+    };
+
+    pendingMatches.set(matchId, pending);
+    pending.users.forEach((participant) => userPendingMatchMap.set(participant.clientId, matchId));
+
+    pending.users.forEach((participant) => {
+        const peer = pending.users.find((u) => u.clientId !== participant.clientId);
+        if (!peer || participant.ws.readyState !== WebSocket.OPEN) return;
+        sendJson(participant.ws, {
+            type: 'match_offer',
+            matchId,
+            peerNickname: peer.nickname,
+            peerUsername: peer.username,
+            peerId: peer.dbUserId,
+            autoAcceptAt,
+            timeoutMs: MATCH_CONFIRM_TIMEOUT_MS
+        });
+    });
+
+    pending.timer = setTimeout(() => {
+        const current = pendingMatches.get(matchId);
+        if (!current) return;
+        current.users.forEach((participant) => {
+            if (participant.decision === 'pending') participant.decision = 'accepted';
+        });
+        finalizePendingMatchIfReady(matchId).catch((e) => {
+            console.error('pending match auto-accept finalize error:', e?.message || e);
+            cancelPendingMatchById(matchId, {
+                actorReason: 'server_error',
+                peerReason: 'server_error',
+                requeueActor: true,
+                requeuePeers: true
+            });
+        });
+    }, MATCH_CONFIRM_TIMEOUT_MS + 25);
+};
+
+const applyMatchDecision = async (ws, providedMatchId, decision) => {
+    const context = getPendingMatchForClient(ws.clientId);
+    if (!context) return;
+
+    const { matchId, pending, participantIndex } = context;
+    if (providedMatchId && providedMatchId !== matchId) return;
+
+    const participant = pending.users[participantIndex];
+    if (!participant) return;
+
+    if (decision === 'accept') {
+        participant.decision = 'accepted';
+        sendJson(ws, { type: 'match_offer_waiting' });
+        await finalizePendingMatchIfReady(matchId);
+        return;
+    }
+
+    participant.decision = 'rejected';
+    cancelPendingMatchById(matchId, {
+        actorClientId: ws.clientId,
+        actorReason: null,
+        peerReason: 'peer_rejected',
+        requeueActor: true,
+        requeuePeers: true
+    });
+};
+
 const joinQueue = async (ws) => {
     const clientData = activeClients.get(ws.clientId);
     if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR');
@@ -912,8 +1149,22 @@ const joinQueue = async (ws) => {
         );
     }
 
+    cancelPendingMatchForClient(ws.clientId, {
+        actorReason: null,
+        peerReason: 'peer_cancelled',
+        requeueActor: false,
+        requeuePeers: true
+    });
     leaveRoom(ws.clientId);
     removeFromQueue(ws.clientId);
+
+    waitingQueue = waitingQueue.filter((item) => (
+        item
+        && item.clientId
+        && item.ws
+        && item.ws.readyState === WebSocket.OPEN
+        && activeClients.has(item.clientId)
+    ));
 
     const me = {
         clientId: ws.clientId,
@@ -929,7 +1180,7 @@ const joinQueue = async (ws) => {
 
         for (let i = 0; i < waitingQueue.length; i++) {
             const p = waitingQueue[i];
-            if (p.clientId === me.clientId) continue;
+            if (!p || p.clientId === me.clientId) continue;
 
             const blocked = await checkBlock(me.dbUserId, p.dbUserId);
             if (!blocked) {
@@ -941,11 +1192,7 @@ const joinQueue = async (ws) => {
 
         if (peer && peerIndex !== -1) {
             waitingQueue.splice(peerIndex, 1);
-
-            const roomId = uuidv4();
-            const conversationId = await createConversation(me.dbUserId, peer.dbUserId);
-
-            createRoom(roomId, conversationId, me, peer);
+            createPendingMatch(me, peer);
         } else {
             waitingQueue.push(me);
             sendJson(ws, { type: 'queued' });
@@ -954,30 +1201,6 @@ const joinQueue = async (ws) => {
         waitingQueue.push(me);
         sendJson(ws, { type: 'queued' });
     }
-};
-
-const removeFromQueue = (clientId) => {
-    waitingQueue = waitingQueue.filter(item => item.clientId !== clientId);
-};
-
-const createRoom = (roomId, conversationId, userA, userB) => {
-    rooms.set(roomId, {
-        users: [
-            { clientId: userA.clientId, nickname: userA.nickname, username: userA.username, dbUserId: userA.dbUserId },
-            { clientId: userB.clientId, nickname: userB.nickname, username: userB.username, dbUserId: userB.dbUserId }
-        ],
-        sockets: {
-            [userA.clientId]: userA.ws,
-            [userB.clientId]: userB.ws
-        },
-        conversationId: conversationId
-    });
-
-    userRoomMap.set(userA.clientId, roomId);
-    userRoomMap.set(userB.clientId, roomId);
-
-    sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
-    sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
 };
 
 const leaveRoom = (clientId, reason = 'leave') => {
@@ -1137,6 +1360,19 @@ wss.on('connection', (ws, req) => {
 
             case 'joinQueue':
                 await joinQueue(ws);
+                break;
+
+            case 'matchDecision':
+                {
+                    const decision = toText(data.decision, '').trim().toLowerCase();
+                    const matchId = toText(data.matchId, '').trim();
+                    if (decision !== 'accept' && decision !== 'reject') {
+                        const lang = resolveWsLang(ws);
+                        sendError(ws, 'INVALID_INPUT', t(lang, 'errors.INVALID_INPUT', {}, 'Invalid request.'));
+                        break;
+                    }
+                    await applyMatchDecision(ws, matchId, decision);
+                }
                 break;
 
             case 'message':
@@ -1370,17 +1606,35 @@ wss.on('connection', (ws, req) => {
                 }
                 break;
 
-            case 'leaveQueue': // New: Handle Cancel Match
+            case 'leaveQueue': // Handle cancel waiting/match offer
                 removeFromQueue(ws.clientId);
-                sendJson(ws, { type: 'debug', msg: 'Queue removed' });
+                cancelPendingMatchForClient(ws.clientId, {
+                    actorReason: null,
+                    peerReason: 'peer_cancelled',
+                    requeueActor: false,
+                    requeuePeers: true
+                });
                 break;
 
             case 'next':
+                cancelPendingMatchForClient(ws.clientId, {
+                    actorReason: null,
+                    peerReason: 'peer_rejected',
+                    requeueActor: false,
+                    requeuePeers: true
+                });
                 leaveRoom(ws.clientId, 'next');
                 await joinQueue(ws); // Join with existing nickname
                 break;
 
             case 'leave':
+                removeFromQueue(ws.clientId);
+                cancelPendingMatchForClient(ws.clientId, {
+                    actorReason: null,
+                    peerReason: 'peer_cancelled',
+                    requeueActor: false,
+                    requeuePeers: true
+                });
                 leaveRoom(ws.clientId, 'leave');
                 break;
 
@@ -1748,6 +2002,12 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('close', () => {
+        cancelPendingMatchForClient(ws.clientId, {
+            actorReason: null,
+            peerReason: 'peer_disconnected',
+            requeueActor: false,
+            requeuePeers: true
+        });
         if (activeClients.has(ws.clientId)) activeClients.delete(ws.clientId);
         removeFromQueue(ws.clientId);
         leaveRoom(ws.clientId, 'disconnect');
