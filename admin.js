@@ -62,6 +62,8 @@ const PROFILE_SORT_COLUMN_MAP = Object.freeze({
     last_seen_at: 'u.last_seen_at',
     username: 'u.username'
 });
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
 const normalizeProfileSortBy = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     return PROFILE_SORT_COLUMN_MAP[normalized] ? normalized : 'created_at';
@@ -752,6 +754,140 @@ router.post('/unblock', async (req, res) => {
         await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [blockerId, blockedId]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Add Friend Action
+router.post('/add-friend', async (req, res) => {
+    const userId = String(req.body?.userId || '').trim();
+    const friendRef = String(req.body?.friendRef || req.body?.friendUserId || req.body?.friendId || '').trim();
+
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'Gecerli hedef kullanici kimligi gerekli.' });
+    }
+    if (!friendRef) {
+        return res.status(400).json({ error: 'Eklenecek kullanici gerekli (kullanici adi veya UUID).' });
+    }
+
+    const db = await pool.connect();
+    try {
+        await db.query('BEGIN');
+
+        const ownerRes = await db.query('SELECT id FROM users WHERE id = $1 LIMIT 1', [userId]);
+        if (!ownerRes.rows.length) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Hedef profil bulunamadi.' });
+        }
+
+        let friendUserId = null;
+        let friendUsername = null;
+
+        if (isUuid(friendRef)) {
+            const friendRes = await db.query('SELECT id, username FROM users WHERE id = $1 LIMIT 1', [friendRef]);
+            if (!friendRes.rows.length) {
+                await db.query('ROLLBACK');
+                return res.status(404).json({ error: 'Eklenecek kullanici bulunamadi.' });
+            }
+            friendUserId = friendRes.rows[0].id;
+            friendUsername = friendRes.rows[0].username || null;
+        } else {
+            const normalizedUsername = friendRef.toLowerCase();
+            const friendRes = await db.query('SELECT id, username FROM users WHERE username = $1 LIMIT 1', [normalizedUsername]);
+            if (!friendRes.rows.length) {
+                await db.query('ROLLBACK');
+                return res.status(404).json({ error: 'Bu kullanici adina sahip profil bulunamadi.' });
+            }
+            friendUserId = friendRes.rows[0].id;
+            friendUsername = friendRes.rows[0].username || null;
+        }
+
+        if (!friendUserId || friendUserId === userId) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Kullanici kendisini arkadas olarak ekleyemez.' });
+        }
+
+        const blockRes = await db.query(
+            `SELECT 1 FROM blocks
+             WHERE (blocker_id = $1 AND blocked_id = $2)
+                OR (blocker_id = $2 AND blocked_id = $1)
+             LIMIT 1`,
+            [userId, friendUserId]
+        );
+        if (blockRes.rows.length > 0) {
+            await db.query('ROLLBACK');
+            return res.status(409).json({ error: 'Bu iki profil arasinda engel kaydi var. Once engeli kaldirin.' });
+        }
+
+        const existingRes = await db.query(
+            `SELECT user_id, friend_user_id, status
+             FROM friendships
+             WHERE (user_id = $1 AND friend_user_id = $2)
+                OR (user_id = $2 AND friend_user_id = $1)
+             LIMIT 1`,
+            [userId, friendUserId]
+        );
+
+        const existing = existingRes.rows[0] || null;
+        let result = 'inserted';
+
+        if (existing) {
+            if (existing.status === 'accepted') {
+                result = 'already_accepted';
+            } else {
+                await db.query(
+                    `UPDATE friendships
+                     SET status = 'accepted', updated_at = NOW()
+                     WHERE (user_id = $1 AND friend_user_id = $2)
+                        OR (user_id = $2 AND friend_user_id = $1)`,
+                    [userId, friendUserId]
+                );
+                result = 'upgraded_pending';
+            }
+        } else {
+            await db.query(
+                `INSERT INTO friendships (user_id, friend_user_id, status, created_at, updated_at)
+                 VALUES ($1, $2, 'accepted', NOW(), NOW())`,
+                [userId, friendUserId]
+            );
+        }
+
+        await logAdminAudit(db, {
+            actorAdmin: req.adminUser,
+            actionType: 'FRIEND_ADD',
+            entityType: 'friendship',
+            entityId: `${userId}:${friendUserId}`,
+            payload: {
+                userId,
+                friendUserId,
+                friendUsername,
+                input: friendRef,
+                result
+            }
+        });
+
+        await db.query('COMMIT');
+
+        if (req.notifyUser) {
+            req.notifyUser(userId, { type: 'friend_refresh' });
+            req.notifyUser(friendUserId, { type: 'friend_refresh' });
+        }
+
+        return res.json({
+            success: true,
+            code: result === 'already_accepted' ? 'ALREADY_FRIENDS' : 'FRIEND_ADDED',
+            result,
+            friendUserId,
+            friendUsername
+        });
+    } catch (e) {
+        try {
+            await db.query('ROLLBACK');
+        } catch {
+            // Ignore rollback errors.
+        }
+        return res.status(500).json({ error: e.message });
+    } finally {
+        db.release();
+    }
 });
 
 // Remove Friend Action
