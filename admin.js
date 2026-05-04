@@ -274,6 +274,84 @@ router.get('/', (req, res) => {
 // SSE Clients for Live Logs
 let logClients = [];
 
+const getOnlineSnapshot = () => {
+    const provider = router.getOnlineUsersSnapshot;
+    if (typeof provider !== 'function') return [];
+    try {
+        const snapshot = provider();
+        return Array.isArray(snapshot) ? snapshot : [];
+    } catch (e) {
+        console.error('online snapshot provider error:', e?.message || e);
+        return [];
+    }
+};
+
+const fetchOnlineUsersPayload = async () => {
+    const snapshot = getOnlineSnapshot().map((entry) => ({
+        clientId: String(entry?.clientId || '').trim(),
+        dbUserId: String(entry?.dbUserId || '').trim(),
+        username: String(entry?.username || '').trim(),
+        nickname: String(entry?.nickname || '').trim(),
+        deviceId: String(entry?.deviceId || '').trim(),
+        platform: String(entry?.platform || '').trim(),
+        lang: String(entry?.lang || '').trim(),
+        connectedAt: entry?.connectedAt ? String(entry.connectedAt) : null
+    })).filter((entry) => entry.clientId);
+
+    const onlineConnections = snapshot.length;
+    const userIds = [...new Set(snapshot.map((entry) => entry.dbUserId).filter(Boolean))];
+
+    const metaMap = new Map();
+    if (userIds.length) {
+        const metaRes = await pool.query(
+            `
+            SELECT u.id::text AS id, u.username, u.status, u.last_seen_at, p.display_name
+            FROM users u
+            LEFT JOIN profiles p ON p.user_id = u.id
+            WHERE u.id::text = ANY($1::text[])
+            `,
+            [userIds]
+        );
+        for (const row of metaRes.rows || []) {
+            metaMap.set(String(row.id), row);
+        }
+    }
+
+    const now = Date.now();
+    const items = snapshot.map((entry) => {
+        const meta = metaMap.get(entry.dbUserId) || {};
+        const connectedAtMs = entry.connectedAt ? Date.parse(entry.connectedAt) : NaN;
+        const connectedSeconds = Number.isFinite(connectedAtMs)
+            ? Math.max(0, Math.floor((now - connectedAtMs) / 1000))
+            : null;
+        return {
+            client_id: entry.clientId,
+            user_id: entry.dbUserId || null,
+            username: meta.username || entry.username || null,
+            display_name: meta.display_name || entry.nickname || null,
+            status: meta.status || null,
+            last_seen_at: meta.last_seen_at || null,
+            platform: entry.platform || null,
+            lang: entry.lang || null,
+            device_id: entry.deviceId || null,
+            connected_at: entry.connectedAt || null,
+            connected_seconds: connectedSeconds
+        };
+    });
+
+    items.sort((a, b) => {
+        const aTime = a.connected_at ? Date.parse(a.connected_at) : 0;
+        const bTime = b.connected_at ? Date.parse(b.connected_at) : 0;
+        return bTime - aTime;
+    });
+
+    return {
+        onlineUsers: userIds.length,
+        onlineConnections,
+        items
+    };
+};
+
 router.logToAdmin = (data) => {
     const msg = `data: ${JSON.stringify(data)}\n\n`;
     logClients.forEach(res => res.write(msg));
@@ -294,20 +372,34 @@ router.get('/stream', (req, res) => {
 
 router.get('/stats', async (req, res) => {
     try {
-        const users = await pool.query('SELECT COUNT(*) FROM users');
-        const bans = await pool.query('SELECT COUNT(*) FROM bans');
-        const reports = await pool.query('SELECT COUNT(*) FROM reports WHERE created_at > NOW() - INTERVAL \'24 hours\'');
-        const supportReports = await pool.query('SELECT COUNT(*) FROM support_reports WHERE created_at > NOW() - INTERVAL \'24 hours\'');
-        const active = await pool.query('SELECT COUNT(*) FROM conversations WHERE ended_at IS NULL');
+        const [users, bans, reports, supportReports, active, online] = await Promise.all([
+            pool.query('SELECT COUNT(*) FROM users'),
+            pool.query('SELECT COUNT(*) FROM bans'),
+            pool.query('SELECT COUNT(*) FROM reports WHERE created_at > NOW() - INTERVAL \'24 hours\''),
+            pool.query('SELECT COUNT(*) FROM support_reports WHERE created_at > NOW() - INTERVAL \'24 hours\''),
+            pool.query('SELECT COUNT(*) FROM conversations WHERE ended_at IS NULL'),
+            fetchOnlineUsersPayload()
+        ]);
 
         res.json({
             totalUsers: users.rows[0].count,
             totalBans: bans.rows[0].count,
             reports24h: reports.rows[0].count,
             supportReports24h: supportReports.rows[0].count,
-            activeConversations: active.rows[0].count
+            activeConversations: active.rows[0].count,
+            onlineUsers: online.onlineUsers || 0,
+            onlineConnections: online.onlineConnections || 0
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/online-users', async (req, res) => {
+    try {
+        const payload = await fetchOnlineUsersPayload();
+        res.json(payload);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.get('/legal', async (req, res) => {

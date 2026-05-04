@@ -60,7 +60,6 @@
     .badge { display:inline-block; color:#fff; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:700; }
     .badge.sent { background:#2cad6b; } .badge.failed { background:#d94f4f; } .badge.pending { background:#c88b2f; }
     .badge.temp, .badge.system { background:#c88b2f; } .badge.perm { background:#b63c3c; } .badge.shadow { background:#4a5a75; }
-    #logs { display:none; height:380px; overflow-y:auto; background:#0a0f18; color:#a8ff9a; border-radius:8px; padding:10px; font-family:monospace; border:1px solid var(--border); }
     .diag { border:1px solid var(--border); border-radius:10px; background:var(--surface-2); padding:10px; margin-bottom:12px; font-size:13px; color:var(--text); }
     .diag-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px 12px; }
     .modal { position:fixed; inset:0; background:rgba(0,0,0,.68); display:none; align-items:center; justify-content:center; padding:12px; z-index:9999; }
@@ -105,6 +104,7 @@
     <div class="cards">
       <div class="card"><div class="t">Toplam Kullanici</div><div class="v" id="s_users">-</div></div>
       <div class="card"><div class="t">Aktif Sohbet</div><div class="v" id="s_active">-</div></div>
+      <div class="card"><div class="t">Anlik Online Kullanici</div><div class="v" id="s_online">-</div><div class="s" id="s_online_conn">- baglanti</div></div>
       <div class="card"><div class="t">Kullanici Raporlari (24s)</div><div class="v" id="s_reports">-</div><div class="s" id="s_bans">- aktif yasak</div></div>
       <div class="card"><div class="t">Uygulama Raporlari (24s)</div><div class="v" id="s_support_reports">-</div><div class="s">support bildirimi</div></div>
       <div class="card"><div class="t">Push (60 dk)</div><div class="v" id="s_push_rate">-%</div><div class="s" id="s_push_total">0 gonderim / 0 hata</div></div>
@@ -123,7 +123,7 @@
         <button class="tab" onclick="switchTab('deletion_requests',event)">Silme Talepleri</button>
         <button class="tab" onclick="switchTab('audit_logs',event)">Audit Log</button>
         <button class="tab" onclick="switchTab('performance',event)">Performans</button>
-        <button class="tab" onclick="switchTab('logs',event)">Canli Loglar</button>
+        <button class="tab" onclick="switchTab('online_users',event)">Anlik Online Profiller</button>
       </div>
 
       <div class="row">
@@ -145,7 +145,6 @@
       </div>
 
       <div id="content">Yukleniyor...</div>
-      <div id="logs"><div>Log akisi bekleniyor...</div></div>
     </div>
   </div>
 
@@ -167,12 +166,13 @@
     let profilePageSize=50;
     let profileTotal=0;
     let profileTotalPages=0;
-    let logEventSource=null;
+    let onlineUsersRefreshTimer=null;
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
     const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
     const val=id=>document.getElementById(id)?.value||'';
     const d=v=>v?new Date(v).toLocaleString():'-';
+    const secText=v=>{const s=Math.max(0,Number(v)||0);const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const r=s%60;return h>0?`${h}sa ${m}dk ${r}sn`:m>0?`${m}dk ${r}sn`:`${r}sn`;};
     const subject=v=>SUBJECT_LABELS[v]||v||'-';
     const brevo=v=>BREVO_LABELS[v]||v||'-';
 
@@ -235,6 +235,8 @@
         const r=await fetch('/admin/stats');const x=await r.json();
         document.getElementById('s_users').innerText=x.totalUsers||0;
         document.getElementById('s_active').innerText=x.activeConversations||0;
+        document.getElementById('s_online').innerText=x.onlineUsers||0;
+        document.getElementById('s_online_conn').innerText=`${x.onlineConnections||0} baglanti`;
         document.getElementById('s_reports').innerText=x.reports24h||0;
         document.getElementById('s_support_reports').innerText=x.supportReports24h||0;
         document.getElementById('s_bans').innerText=`${x.totalBans||0} aktif yasak`;
@@ -307,20 +309,19 @@
       currentTab=tab;
       document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
       if(ev&&ev.target) ev.target.classList.add('active');
-      const logs=tab==='logs';
-      document.getElementById('content').style.display=logs?'none':'block';
-      document.getElementById('logs').style.display=logs?'block':'none';
       applySearchUI();
-      if(logs) startLogs(); else { stopLogs(); loadContent(); }
+      if(tab==='online_users') startOnlineUsersAutoRefresh();
+      else stopOnlineUsersAutoRefresh();
+      loadContent();
     }
 
-    function startLogs(){
-      if(logEventSource) return;
-      const box=document.getElementById('logs');
-      logEventSource=new EventSource('/admin/stream');
-      logEventSource.onmessage=(e)=>{const m=JSON.parse(e.data);const line=document.createElement('div');line.innerHTML=`[${new Date().toLocaleTimeString()}] <strong>${esc(m.from||'-')}</strong> -> <strong>${esc(m.to||'-')}</strong>: ${esc(m.content||'')}`;box.appendChild(line);box.scrollTop=box.scrollHeight;};
+    function startOnlineUsersAutoRefresh(){
+      stopOnlineUsersAutoRefresh();
+      onlineUsersRefreshTimer=setInterval(()=>{
+        if(currentTab==='online_users') loadContent();
+      },5000);
     }
-    function stopLogs(){ if(!logEventSource) return; logEventSource.close(); logEventSource=null; }
+    function stopOnlineUsersAutoRefresh(){ if(!onlineUsersRefreshTimer) return; clearInterval(onlineUsersRefreshTimer); onlineUsersRefreshTimer=null; }
 
     function renderLegalEditor(item,updatedAt){
       const footer=item?.footer||{};
@@ -860,9 +861,71 @@
       }
     }
 
+    async function loadOnlineUsersTab(){
+      const c=document.getElementById('content');
+      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Online profiller yukleniyor...</p>';
+      try{
+        const r=await fetch('/admin/online-users');
+        const x=await r.json();
+        if(!r.ok) throw new Error(x.error||'Online liste okunamadi.');
+        const items=Array.isArray(x.items)?x.items:[];
+        const onlineUsers=Number(x.onlineUsers||0);
+        const onlineConnections=Number(x.onlineConnections||0);
+        document.getElementById('s_online').innerText=onlineUsers;
+        document.getElementById('s_online_conn').innerText=`${onlineConnections} baglanti`;
+
+        let html=`
+          <div class="metrics">
+            <div class="metric"><div class="k">Anlik Online Profil</div><div class="n">${onlineUsers}</div></div>
+            <div class="metric"><div class="k">Aktif Baglanti</div><div class="n">${onlineConnections}</div></div>
+          </div>
+        `;
+
+        if(!items.length){
+          html+='<p style="padding:8px 0;color:#9aa8c0">Su anda online profil yok.</p>';
+          c.innerHTML=html;
+          return;
+        }
+
+        html+=`
+          <table>
+            <thead>
+              <tr>
+                <th>Kullanici</th>
+                <th>Gorunen Isim</th>
+                <th>Durum</th>
+                <th>Platform</th>
+                <th>Dil</th>
+                <th>Cihaz</th>
+                <th>Baglanti Baslangici</th>
+                <th>Bagli Kalma</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        items.forEach((it)=>{
+          html+=`<tr>
+            <td><strong>${esc(it.username||'-')}</strong></td>
+            <td>${esc(it.display_name||'-')}</td>
+            <td>${esc(it.status||'-')}</td>
+            <td>${esc(it.platform||'-')}</td>
+            <td>${esc(it.lang||'-')}</td>
+            <td><code>${esc(it.device_id||'-')}</code></td>
+            <td>${d(it.connected_at)}</td>
+            <td>${secText(it.connected_seconds)}</td>
+          </tr>`;
+        });
+        html+='</tbody></table>';
+        c.innerHTML=html;
+      }catch(e){
+        c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Online profil listesi yuklenemedi: ${esc(e.message||e)}</p>`;
+      }
+    }
+
     async function loadContent(){
       const c=document.getElementById('content'); c.innerHTML='<p style="padding:16px;color:#9aa8c0">Veri getiriliyor...</p>';
       try{
+        if(currentTab==='online_users'){ await loadOnlineUsersTab(); return; }
         if(currentTab==='legal'){ await loadLegalEditor(); return; }
         if(currentTab==='deletion_requests'){ await loadDeletionRequests(); return; }
         if(currentTab==='audit_logs'){ await loadAuditLogs(); return; }

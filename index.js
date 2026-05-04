@@ -682,6 +682,24 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
     };
 };
 
+adminRoutes.getOnlineUsersSnapshot = () => {
+    const items = [];
+    for (const [clientId, client] of activeClients) {
+        if (!client || !client.ws || client.ws.readyState !== WebSocket.OPEN) continue;
+        items.push({
+            clientId,
+            dbUserId: client.dbUserId || null,
+            username: client.username || null,
+            nickname: client.nickname || null,
+            deviceId: client.deviceId || null,
+            platform: client.platform || null,
+            lang: client.lang || null,
+            connectedAt: client.connectedAt || null
+        });
+    }
+    return items;
+};
+
 const validateImageDataUrl = (dataUrl) => {
     if (typeof dataUrl !== 'string') return { ok: false, reason: 'Invalid image payload.' };
     if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
@@ -1386,7 +1404,8 @@ wss.on('connection', (ws, req) => {
                 nickname: dbUser.nickname, // Display Name
                 username: dbUser.username,  // V13: Store unique username
                 platform: data.platform === 'android' ? 'android' : 'web',
-                lang: requestedLang
+                lang: requestedLang,
+                connectedAt: new Date().toISOString()
             });
 
             sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang });
