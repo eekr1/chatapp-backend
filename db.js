@@ -244,6 +244,19 @@ const createTablesQuery = `
     PRIMARY KEY (bucket_minute, method, route, status_class)
   );
 
+  CREATE TABLE IF NOT EXISTS behavior_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_name TEXT NOT NULL,
+    user_id UUID,
+    client_id TEXT,
+    device_id TEXT,
+    platform TEXT,
+    match_id UUID,
+    conversation_id UUID,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
   CREATE OR REPLACE FUNCTION prevent_admin_action_audit_mutation()
   RETURNS trigger
   LANGUAGE plpgsql
@@ -405,6 +418,12 @@ const createTablesQuery = `
       CREATE INDEX IF NOT EXISTS idx_http_request_events_status_created_at ON http_request_events(status, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_http_request_metrics_minute_bucket ON http_request_metrics_minute(bucket_minute DESC);
       CREATE INDEX IF NOT EXISTS idx_http_request_metrics_minute_route_bucket ON http_request_metrics_minute(route, bucket_minute DESC);
+      CREATE INDEX IF NOT EXISTS idx_behavior_events_created_at ON behavior_events(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_behavior_events_event_created_at ON behavior_events(event_name, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_behavior_events_user_created_at ON behavior_events(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_behavior_events_platform_created_at ON behavior_events(platform, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_behavior_events_match_created_at ON behavior_events(match_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_behavior_events_conversation_created_at ON behavior_events(conversation_id, created_at DESC);
 
       -- One-time cleanup: remove admin panel traffic from telemetry history.
       DELETE FROM http_request_events WHERE route LIKE '/admin%';

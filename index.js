@@ -30,10 +30,14 @@ const REQUEST_TELEMETRY_EVENTS_RETENTION_DAYS = 7;
 const REQUEST_TELEMETRY_METRICS_RETENTION_DAYS = 30;
 const REQUEST_TELEMETRY_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const REQUEST_TELEMETRY_CLEANUP_CHANCE = 0.02;
+const BEHAVIOR_EVENTS_RETENTION_DAYS = Math.max(7, Math.min(365, Number(process.env.BEHAVIOR_EVENTS_RETENTION_DAYS) || 90));
+const BEHAVIOR_EVENTS_CLEANUP_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const BEHAVIOR_EVENTS_CLEANUP_CHANCE = 0.01;
 const REQUEST_TELEMETRY_STATIC_FILE_RE = /\.(css|js|mjs|map|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|otf|mp4|webm|ogg)$/i;
 const UUID_SEGMENT_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/ig;
 const NUMERIC_SEGMENT_RE = /\/\d+(?=\/|$)/g;
 const requestTelemetryCleanupState = { running: false, lastRunAt: 0 };
+const behaviorEventsCleanupState = { running: false, lastRunAt: 0 };
 
 const toTelemetryPath = (rawUrl = '/') => {
     const raw = String(rawUrl || '/').split('?')[0].trim() || '/';
@@ -101,6 +105,28 @@ const maybeCleanupRequestTelemetry = () => {
         })
         .finally(() => {
             requestTelemetryCleanupState.running = false;
+        });
+};
+
+const maybeCleanupBehaviorEvents = () => {
+    const now = Date.now();
+    if (behaviorEventsCleanupState.running) return;
+    if (now - behaviorEventsCleanupState.lastRunAt < BEHAVIOR_EVENTS_CLEANUP_INTERVAL_MS) return;
+    if (Math.random() > BEHAVIOR_EVENTS_CLEANUP_CHANCE) return;
+
+    behaviorEventsCleanupState.running = true;
+    behaviorEventsCleanupState.lastRunAt = now;
+
+    pool.query(
+        `DELETE FROM behavior_events
+         WHERE created_at < NOW() - ($1::text || ' days')::interval`,
+        [BEHAVIOR_EVENTS_RETENTION_DAYS]
+    )
+        .catch((e) => {
+            console.warn('behavior events cleanup failed:', e?.message || e);
+        })
+        .finally(() => {
+            behaviorEventsCleanupState.running = false;
         });
 };
 
@@ -388,6 +414,79 @@ const sendError = (ws, code, message = null, extra = {}) => {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
 const toText = (value, fallback = '') => (typeof value === 'string' ? value : fallback);
+const normalizeAnalyticsPlatform = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'android' || normalized === 'ios' || normalized === 'web') return normalized;
+    return 'unknown';
+};
+const sanitizeBehaviorMetadata = (input) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+    const out = {};
+    for (const [key, rawValue] of Object.entries(input)) {
+        const name = String(key || '').trim();
+        if (!name) continue;
+        const trimmedName = name.slice(0, 64);
+        if (rawValue === null || rawValue === undefined) {
+            out[trimmedName] = null;
+            continue;
+        }
+        if (typeof rawValue === 'number' || typeof rawValue === 'boolean') {
+            out[trimmedName] = rawValue;
+            continue;
+        }
+        if (typeof rawValue === 'string') {
+            out[trimmedName] = rawValue.slice(0, 240);
+            continue;
+        }
+        if (Array.isArray(rawValue)) {
+            out[trimmedName] = rawValue.slice(0, 20).map((item) => String(item).slice(0, 120));
+            continue;
+        }
+        out[trimmedName] = String(rawValue).slice(0, 240);
+    }
+    return out;
+};
+const trackBehaviorEvent = ({
+    eventName,
+    userId = null,
+    clientId = null,
+    deviceId = null,
+    platform = null,
+    matchId = null,
+    conversationId = null,
+    metadata = {}
+} = {}) => {
+    const cleanEventName = String(eventName || '').trim().toLowerCase().slice(0, 80);
+    if (!cleanEventName) return;
+
+    const cleanUserId = isUuid(userId) ? userId : null;
+    const cleanMatchId = isUuid(matchId) ? matchId : null;
+    const cleanConversationId = isUuid(conversationId) ? conversationId : null;
+    const cleanClientId = String(clientId || '').trim().slice(0, 120) || null;
+    const cleanDeviceId = String(deviceId || '').trim().slice(0, 200) || null;
+    const cleanPlatform = normalizeAnalyticsPlatform(platform);
+    const cleanMetadata = sanitizeBehaviorMetadata(metadata);
+
+    pool.query(
+        `INSERT INTO behavior_events
+          (event_name, user_id, client_id, device_id, platform, match_id, conversation_id, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW())`,
+        [
+            cleanEventName,
+            cleanUserId,
+            cleanClientId,
+            cleanDeviceId,
+            cleanPlatform,
+            cleanMatchId,
+            cleanConversationId,
+            JSON.stringify(cleanMetadata)
+        ]
+    ).catch((e) => {
+        console.warn('behavior event insert failed:', cleanEventName, e?.message || e);
+    });
+
+    maybeCleanupBehaviorEvents();
+};
 const toClientMsgId = (value) => {
     if (typeof value !== 'string') return null;
     const trimmed = value.trim();
@@ -950,7 +1049,7 @@ const removeFromQueue = (clientId) => {
     waitingQueue = waitingQueue.filter(item => item.clientId !== clientId);
 };
 
-const createRoom = (roomId, conversationId, userA, userB) => {
+const createRoom = (roomId, conversationId, userA, userB, matchId = null, trigger = 'manual') => {
     rooms.set(roomId, {
         users: [
             { clientId: userA.clientId, nickname: userA.nickname, username: userA.username, dbUserId: userA.dbUserId },
@@ -968,6 +1067,33 @@ const createRoom = (roomId, conversationId, userA, userB) => {
 
     sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
     sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
+
+    trackBehaviorEvent({
+        eventName: 'chat_started',
+        userId: userA.dbUserId,
+        clientId: userA.clientId,
+        deviceId: userA.deviceId || null,
+        platform: userA.platform || null,
+        matchId,
+        conversationId,
+        metadata: {
+            peer_user_id: userB.dbUserId || null,
+            trigger
+        }
+    });
+    trackBehaviorEvent({
+        eventName: 'chat_started',
+        userId: userB.dbUserId,
+        clientId: userB.clientId,
+        deviceId: userB.deviceId || null,
+        platform: userB.platform || null,
+        matchId,
+        conversationId,
+        metadata: {
+            peer_user_id: userA.dbUserId || null,
+            trigger
+        }
+    });
 };
 
 const getPendingMatchForClient = (clientId) => {
@@ -995,11 +1121,11 @@ const clearPendingMatchById = (matchId) => {
     return pending;
 };
 
-const queueClientForRematch = (clientId) => {
+const queueClientForRematch = (clientId, trigger = 'auto_requeue') => {
     setTimeout(() => {
         const clientData = activeClients.get(clientId);
         if (!clientData?.ws || clientData.ws.readyState !== WebSocket.OPEN) return;
-        joinQueue(clientData.ws).catch((e) => {
+        joinQueue(clientData.ws, { trigger }).catch((e) => {
             console.error('queueClientForRematch error:', e?.message || e);
         });
     }, 0);
@@ -1032,7 +1158,7 @@ const cancelPendingMatchById = (
     pending.users.forEach((participant) => {
         const isActor = actorClientId && participant.clientId === actorClientId;
         const shouldRequeue = isActor ? requeueActor : requeuePeers;
-        if (shouldRequeue) queueClientForRematch(participant.clientId);
+        if (shouldRequeue) queueClientForRematch(participant.clientId, 'peer_requeue');
     });
 
     return true;
@@ -1044,7 +1170,8 @@ const cancelPendingMatchForClient = (clientId, options = {}) => {
     return cancelPendingMatchById(context.matchId, { actorClientId: clientId, ...options });
 };
 
-const finalizePendingMatchIfReady = async (matchId) => {
+const finalizePendingMatchIfReady = async (matchId, options = {}) => {
+    const trigger = String(options?.trigger || 'manual').trim() || 'manual';
     const pending = pendingMatches.get(matchId);
     if (!pending || pending.finalized) return false;
     if (!pending.users.every((u) => u.decision === 'accepted')) return false;
@@ -1058,14 +1185,16 @@ const finalizePendingMatchIfReady = async (matchId) => {
             ws: live.ws,
             nickname: live.nickname || participant.nickname,
             username: live.username || participant.username,
-            dbUserId: live.dbUserId || participant.dbUserId
+            dbUserId: live.dbUserId || participant.dbUserId,
+            deviceId: live.deviceId || null,
+            platform: live.platform || null
         };
     }).filter(Boolean);
 
     clearPendingMatchById(matchId);
 
     if (participants.length !== 2) {
-        participants.forEach((participant) => queueClientForRematch(participant.clientId));
+        participants.forEach((participant) => queueClientForRematch(participant.clientId, 'match_finalize_retry'));
         return false;
     }
 
@@ -1075,13 +1204,13 @@ const finalizePendingMatchIfReady = async (matchId) => {
     } catch (e) {
         participants.forEach((participant) => {
             sendError(participant.ws, 'DB_ERROR');
-            queueClientForRematch(participant.clientId);
+            queueClientForRematch(participant.clientId, 'conversation_error_requeue');
         });
         return false;
     }
 
     const roomId = uuidv4();
-    createRoom(roomId, conversationId, participants[0], participants[1]);
+    createRoom(roomId, conversationId, participants[0], participants[1], matchId, trigger);
     return true;
 };
 
@@ -1129,15 +1258,41 @@ const createPendingMatch = (userA, userB) => {
             autoAcceptAt,
             timeoutMs: MATCH_CONFIRM_TIMEOUT_MS
         });
+        trackBehaviorEvent({
+            eventName: 'match_offer_received',
+            userId: participant.dbUserId,
+            clientId: participant.clientId,
+            deviceId: activeClients.get(participant.clientId)?.deviceId || null,
+            platform: activeClients.get(participant.clientId)?.platform || null,
+            matchId,
+            metadata: {
+                peer_user_id: peer.dbUserId || null,
+                timeout_ms: MATCH_CONFIRM_TIMEOUT_MS
+            }
+        });
     });
 
     pending.timer = setTimeout(() => {
         const current = pendingMatches.get(matchId);
         if (!current) return;
         current.users.forEach((participant) => {
-            if (participant.decision === 'pending') participant.decision = 'accepted';
+            if (participant.decision === 'pending') {
+                participant.decision = 'accepted';
+                const live = activeClients.get(participant.clientId);
+                trackBehaviorEvent({
+                    eventName: 'match_auto_accept',
+                    userId: participant.dbUserId,
+                    clientId: participant.clientId,
+                    deviceId: live?.deviceId || null,
+                    platform: live?.platform || null,
+                    matchId,
+                    metadata: {
+                        timeout_ms: MATCH_CONFIRM_TIMEOUT_MS
+                    }
+                });
+            }
         });
-        finalizePendingMatchIfReady(matchId).catch((e) => {
+        finalizePendingMatchIfReady(matchId, { trigger: 'auto_accept' }).catch((e) => {
             console.error('pending match auto-accept finalize error:', e?.message || e);
             cancelPendingMatchById(matchId, {
                 actorReason: 'server_error',
@@ -1161,6 +1316,18 @@ const applyMatchDecision = async (ws, providedMatchId, decision) => {
 
     if (decision === 'accept') {
         participant.decision = 'accepted';
+        const actor = activeClients.get(ws.clientId);
+        trackBehaviorEvent({
+            eventName: 'match_decision_accept',
+            userId: participant.dbUserId,
+            clientId: ws.clientId,
+            deviceId: actor?.deviceId || null,
+            platform: actor?.platform || null,
+            matchId,
+            metadata: {
+                decision: 'accept'
+            }
+        });
         sendJson(ws, { type: 'match_offer_waiting' });
         const peer = pending.users.find((u) => u.clientId !== ws.clientId);
         if (peer && peer.decision === 'pending') {
@@ -1169,11 +1336,23 @@ const applyMatchDecision = async (ws, providedMatchId, decision) => {
                 sendJson(peerWs, { type: 'match_offer_peer_accepted' });
             }
         }
-        await finalizePendingMatchIfReady(matchId);
+        await finalizePendingMatchIfReady(matchId, { trigger: 'manual_accept' });
         return;
     }
 
     participant.decision = 'rejected';
+    const actor = activeClients.get(ws.clientId);
+    trackBehaviorEvent({
+        eventName: 'match_decision_reject',
+        userId: participant.dbUserId,
+        clientId: ws.clientId,
+        deviceId: actor?.deviceId || null,
+        platform: actor?.platform || null,
+        matchId,
+        metadata: {
+            decision: 'reject'
+        }
+    });
     const first = pending.users[0] || null;
     const second = pending.users[1] || null;
     if (first?.dbUserId && second?.dbUserId) {
@@ -1188,7 +1367,8 @@ const applyMatchDecision = async (ws, providedMatchId, decision) => {
     });
 };
 
-const joinQueue = async (ws) => {
+const joinQueue = async (ws, options = {}) => {
+    const trigger = String(options?.trigger || 'manual').trim() || 'manual';
     const clientData = activeClients.get(ws.clientId);
     if (!clientData || !clientData.dbUserId) return sendError(ws, 'AUTH_ERROR');
 
@@ -1196,6 +1376,17 @@ const joinQueue = async (ws) => {
     if (!clientData.nickname) {
         return sendError(ws, 'NO_NICKNAME');
     }
+
+    trackBehaviorEvent({
+        eventName: 'match_search_attempt',
+        userId: clientData.dbUserId,
+        clientId: ws.clientId,
+        deviceId: clientData.deviceId || null,
+        platform: clientData.platform || null,
+        metadata: {
+            trigger
+        }
+    });
 
     // Ban Check
     const ban = await checkBan(clientData.dbUserId);
@@ -1259,10 +1450,30 @@ const joinQueue = async (ws) => {
         } else {
             waitingQueue.push(me);
             sendJson(ws, { type: 'queued' });
+            trackBehaviorEvent({
+                eventName: 'match_search_queued',
+                userId: clientData.dbUserId,
+                clientId: ws.clientId,
+                deviceId: clientData.deviceId || null,
+                platform: clientData.platform || null,
+                metadata: {
+                    trigger
+                }
+            });
         }
     } else {
         waitingQueue.push(me);
         sendJson(ws, { type: 'queued' });
+        trackBehaviorEvent({
+            eventName: 'match_search_queued',
+            userId: clientData.dbUserId,
+            clientId: ws.clientId,
+            deviceId: clientData.deviceId || null,
+            platform: clientData.platform || null,
+            metadata: {
+                trigger
+            }
+        });
     }
 };
 
@@ -1291,6 +1502,19 @@ const leaveRoom = (clientId, reason = 'leave') => {
             const id = u.clientId;
             const ws = room.sockets[id];
             if (ws) sendJson(ws, { type: 'ended', roomId, reason: id === clientId ? reason : 'peer_left' });
+            const live = activeClients.get(id);
+            trackBehaviorEvent({
+                eventName: 'chat_ended',
+                userId: u.dbUserId || live?.dbUserId || null,
+                clientId: id,
+                deviceId: live?.deviceId || null,
+                platform: live?.platform || null,
+                conversationId: room.conversationId || null,
+                metadata: {
+                    reason: id === clientId ? reason : 'peer_left',
+                    room_id: roomId
+                }
+            });
             userRoomMap.delete(id);
         });
         rooms.delete(roomId);
@@ -1408,6 +1632,19 @@ wss.on('connection', (ws, req) => {
                 connectedAt: new Date().toISOString()
             });
 
+            trackBehaviorEvent({
+                eventName: 'user_connected',
+                userId: dbUser.id,
+                clientId: ws.clientId,
+                deviceId: deviceId || 'unknown',
+                platform: data.platform === 'android' ? 'android' : 'web',
+                metadata: {
+                    lang: requestedLang,
+                    is_anon: Boolean(isAnon),
+                    app_version: toText(data.appVersion || data.version || '', '').trim().slice(0, 60) || null
+                }
+            });
+
             sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang });
             return;
         }
@@ -1430,7 +1667,7 @@ wss.on('connection', (ws, req) => {
                 break;
 
             case 'joinQueue':
-                await joinQueue(ws);
+                await joinQueue(ws, { trigger: 'manual' });
                 break;
 
             case 'matchDecision':
@@ -1685,6 +1922,13 @@ wss.on('connection', (ws, req) => {
                     requeueActor: false,
                     requeuePeers: true
                 });
+                trackBehaviorEvent({
+                    eventName: 'match_search_cancelled',
+                    userId: clientData.dbUserId,
+                    clientId: ws.clientId,
+                    deviceId: clientData.deviceId || null,
+                    platform: clientData.platform || null
+                });
                 break;
 
             case 'next':
@@ -1695,7 +1939,7 @@ wss.on('connection', (ws, req) => {
                     requeuePeers: true
                 });
                 leaveRoom(ws.clientId, 'next');
-                await joinQueue(ws); // Join with existing nickname
+                await joinQueue(ws, { trigger: 'next' }); // Join with existing nickname
                 break;
 
             case 'leave':
@@ -1707,6 +1951,13 @@ wss.on('connection', (ws, req) => {
                     requeuePeers: true
                 });
                 leaveRoom(ws.clientId, 'leave');
+                trackBehaviorEvent({
+                    eventName: 'chat_leave_action',
+                    userId: clientData.dbUserId,
+                    clientId: ws.clientId,
+                    deviceId: clientData.deviceId || null,
+                    platform: clientData.platform || null
+                });
                 break;
 
             case 'image_send':
@@ -2073,6 +2324,14 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('close', () => {
+        const clientData = activeClients.get(ws.clientId) || null;
+        trackBehaviorEvent({
+            eventName: 'user_disconnected',
+            userId: clientData?.dbUserId || null,
+            clientId: ws.clientId,
+            deviceId: clientData?.deviceId || null,
+            platform: clientData?.platform || null
+        });
         cancelPendingMatchForClient(ws.clientId, {
             actorReason: null,
             peerReason: 'peer_disconnected',

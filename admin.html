@@ -44,6 +44,8 @@
     table { width:100%; border-collapse:collapse; table-layout:fixed; }
     th, td { padding:10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle; word-break:break-word; }
     th { background:var(--surface-2); color:var(--muted); }
+    tbody tr:nth-child(even) { background:rgba(255,255,255,0.015); }
+    tbody tr:hover { background:rgba(78,161,255,0.08); }
     .th-sort { border:none; background:transparent; padding:0; color:var(--muted); font:inherit; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
     .th-sort:hover { color:var(--text); }
     .th-sort.is-active { color:var(--accent); }
@@ -83,9 +85,23 @@
     .metric { border:1px solid var(--border); background:var(--surface-2); border-radius:10px; padding:10px; }
     .metric .k { font-size:11px; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
     .metric .n { font-size:22px; font-weight:700; color:var(--text); }
+    .analytics-toolbar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; margin-bottom:10px; padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
+    .analytics-toolbar .f { display:flex; flex-direction:column; gap:4px; }
+    .analytics-toolbar .f label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; }
+    .funnel-grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin:8px 0 12px; }
+    .funnel-step { border:1px solid var(--border); border-radius:10px; background:var(--surface-2); padding:10px; }
+    .funnel-step .s { font-size:11px; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+    .funnel-step .v { font-size:22px; font-weight:700; }
+    .funnel-step .r { font-size:12px; color:var(--success); margin-top:4px; }
     .profiles-pagination { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; color:var(--muted); font-size:12px; flex-wrap:wrap; }
     .profiles-pagination .controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .profiles-pagination .btn { margin-right:0; }
+    .bulk-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:10px 0 12px; padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); flex-wrap:wrap; }
+    .bulk-toolbar .bulk-left { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+    .bulk-toolbar .bulk-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .bulk-counter { display:inline-flex; align-items:center; border:1px solid var(--border); background:var(--surface-3); color:var(--text); border-radius:999px; padding:4px 8px; font-weight:700; }
+    .bulk-select-cell { width:42px; text-align:center; }
+    .bulk-select-cell input { cursor:pointer; }
     .list-compact { margin:0; padding-left:18px; }
     .list-compact li { margin-bottom:6px; }
     hr { border:none; border-top:1px solid var(--border); margin:14px 0; }
@@ -123,6 +139,7 @@
         <button class="tab" onclick="switchTab('deletion_requests',event)">Silme Talepleri</button>
         <button class="tab" onclick="switchTab('audit_logs',event)">Audit Log</button>
         <button class="tab" onclick="switchTab('performance',event)">Performans</button>
+        <button class="tab" onclick="switchTab('analytics',event)">Davranis Analitigi</button>
         <button class="tab" onclick="switchTab('online_users',event)">Anlik Online Profiller</button>
       </div>
 
@@ -160,6 +177,14 @@
     let currentTab='reports';
     let currentDeletionStatus='requested';
     let currentPerformanceHours=24;
+    let currentAnalyticsHours=24;
+    let currentAnalyticsGranularity='hour';
+    let currentAnalyticsPlatform='all';
+    let currentAnalyticsUserSortBy='match_attempts';
+    let currentAnalyticsUserSortDir='desc';
+    let currentAnalyticsFrom='';
+    let currentAnalyticsTo='';
+    let currentAnalyticsQuery='';
     let profileSortBy='created_at';
     let profileSortDir='desc';
     let profilePage=1;
@@ -167,6 +192,9 @@
     let profileTotal=0;
     let profileTotalPages=0;
     let onlineUsersRefreshTimer=null;
+    let bulkSelectedUserIds=new Set();
+    let bulkVisibleUserIds=[];
+    let bulkBusy=false;
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
     const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
@@ -225,6 +253,89 @@
             </select>
             <button class="btn btn-refresh" ${prevDisabled} onclick="changeProfilePage(-1)">Onceki</button>
             <button class="btn btn-refresh" ${nextDisabled} onclick="changeProfilePage(1)">Sonraki</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function isBulkTab(){
+      return currentTab==='reports'||currentTab==='bans'||currentTab==='profiles';
+    }
+    function normalizeBulkUserId(v){
+      const id=String(v||'').trim().toLowerCase();
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)?id:'';
+    }
+    function getBulkUserIdFromRow(it){
+      if(currentTab==='reports') return normalizeBulkUserId(it?.reported_user_id);
+      if(currentTab==='bans') return normalizeBulkUserId(it?.user_id);
+      if(currentTab==='profiles') return normalizeBulkUserId(it?.id);
+      return '';
+    }
+    function getBulkSelectedUserIds(){
+      return Array.from(bulkSelectedUserIds);
+    }
+    function clearBulkSelectionState(){
+      bulkSelectedUserIds.clear();
+      bulkVisibleUserIds=[];
+      bulkBusy=false;
+    }
+    function setBulkBusy(next){
+      bulkBusy=!!next;
+      document.querySelectorAll('[data-bulk-action]').forEach((btn)=>{
+        btn.disabled=bulkBusy||bulkSelectedUserIds.size===0;
+      });
+      const allCb=document.getElementById('bulk-select-all');
+      if(allCb) allCb.disabled=bulkBusy;
+    }
+    function updateBulkSelectionUI(){
+      const countEl=document.getElementById('bulk-selected-count');
+      if(countEl) countEl.textContent=`${bulkSelectedUserIds.size} secili`;
+      document.querySelectorAll('input[data-bulk-id]').forEach((cb)=>{
+        const id=String(cb.getAttribute('data-bulk-id')||'');
+        cb.checked=bulkSelectedUserIds.has(id);
+      });
+      const visibleSelected=bulkVisibleUserIds.filter((id)=>bulkSelectedUserIds.has(id)).length;
+      const allCb=document.getElementById('bulk-select-all');
+      if(allCb){
+        allCb.checked=bulkVisibleUserIds.length>0&&visibleSelected===bulkVisibleUserIds.length;
+        allCb.indeterminate=visibleSelected>0&&visibleSelected<bulkVisibleUserIds.length;
+      }
+      document.querySelectorAll('[data-bulk-action]').forEach((btn)=>{
+        btn.disabled=bulkBusy||bulkSelectedUserIds.size===0;
+      });
+    }
+    function toggleBulkAll(checked){
+      if(!isBulkTab()) return;
+      bulkVisibleUserIds.forEach((id)=>{
+        if(checked) bulkSelectedUserIds.add(id);
+        else bulkSelectedUserIds.delete(id);
+      });
+      updateBulkSelectionUI();
+    }
+    function toggleBulkItem(userId,checked){
+      const id=normalizeBulkUserId(userId);
+      if(!id) return;
+      if(checked) bulkSelectedUserIds.add(id);
+      else bulkSelectedUserIds.delete(id);
+      updateBulkSelectionUI();
+    }
+    function clearBulkSelection(){
+      bulkSelectedUserIds.clear();
+      updateBulkSelectionUI();
+    }
+    function renderBulkToolbar(){
+      if(!isBulkTab()) return '';
+      return `
+        <div class="bulk-toolbar">
+          <div class="bulk-left">
+            <span id="bulk-selected-count" class="bulk-counter">${bulkSelectedUserIds.size} secili</span>
+            <button class="btn btn-refresh" type="button" onclick="clearBulkSelection()">Temizle</button>
+          </div>
+          <div class="bulk-actions">
+            <button class="btn btn-ban" data-bulk-action type="button" onclick="actionBulkBan(1,'temp')">Toplu 24s Ban</button>
+            <button class="btn btn-perm" data-bulk-action type="button" onclick="actionBulkBan(0,'perm')">Toplu Kalici Ban</button>
+            <button class="btn btn-shadow" data-bulk-action type="button" onclick="actionBulkBan(0,'shadow')">Toplu Golge Ban</button>
+            <button class="btn btn-unban" data-bulk-action type="button" onclick="actionBulkUnban()">Toplu Unban</button>
           </div>
         </div>
       `;
@@ -306,6 +417,8 @@
     }
 
     async function switchTab(tab,ev){
+      const tabChanged=currentTab!==tab;
+      if(tabChanged) clearBulkSelectionState();
       currentTab=tab;
       document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
       if(ev&&ev.target) ev.target.classList.add('active');
@@ -861,6 +974,285 @@
       }
     }
 
+    const toLocalDateTimeInput=(isoValue)=>{
+      if(!isoValue) return '';
+      const dt=new Date(isoValue);
+      if(Number.isNaN(dt.getTime())) return '';
+      const tzOffsetMs=dt.getTimezoneOffset()*60000;
+      return new Date(dt.getTime()-tzOffsetMs).toISOString().slice(0,16);
+    };
+    const toIsoFromLocalInput=(value)=>{
+      const raw=String(value||'').trim();
+      if(!raw) return '';
+      const dt=new Date(raw);
+      if(Number.isNaN(dt.getTime())) return '';
+      return dt.toISOString();
+    };
+    const analyticsSortIcon=(sortKey)=>{
+      if(currentAnalyticsUserSortBy!==sortKey) return '-';
+      return currentAnalyticsUserSortDir==='asc'?'^':'v';
+    };
+    const renderAnalyticsSortHeader=(label,sortKey)=>{
+      const active=currentAnalyticsUserSortBy===sortKey?' is-active':'';
+      return `<th><button type="button" class="th-sort${active}" onclick="changeAnalyticsUserSort('${sortKey}')">${label} <span>${analyticsSortIcon(sortKey)}</span></button></th>`;
+    };
+    function readAnalyticsFiltersFromUI(){
+      const hours=Math.max(1,Math.min(24*120,Number(val('analytics-hours'))||currentAnalyticsHours||24));
+      const gran=String(val('analytics-granularity')||currentAnalyticsGranularity||'hour').trim().toLowerCase();
+      const platform=String(val('analytics-platform')||currentAnalyticsPlatform||'all').trim().toLowerCase();
+      currentAnalyticsHours=hours;
+      currentAnalyticsGranularity=gran==='day'?'day':'hour';
+      currentAnalyticsPlatform=['all','android','web','ios','unknown'].includes(platform)?platform:'all';
+      currentAnalyticsFrom=String(val('analytics-from')||'').trim();
+      currentAnalyticsTo=String(val('analytics-to')||'').trim();
+      currentAnalyticsQuery=String(val('analytics-q')||'').trim();
+    }
+    function buildAnalyticsQuery(){
+      const qs=new URLSearchParams();
+      qs.set('hours',String(currentAnalyticsHours||24));
+      qs.set('granularity',currentAnalyticsGranularity||'hour');
+      qs.set('platform',currentAnalyticsPlatform||'all');
+      qs.set('sortBy',currentAnalyticsUserSortBy||'match_attempts');
+      qs.set('sortDir',currentAnalyticsUserSortDir||'desc');
+      qs.set('limit','150');
+      if(currentAnalyticsQuery) qs.set('q',currentAnalyticsQuery);
+      const fromIso=toIsoFromLocalInput(currentAnalyticsFrom);
+      const toIso=toIsoFromLocalInput(currentAnalyticsTo);
+      if(fromIso) qs.set('from',fromIso);
+      if(toIso) qs.set('to',toIso);
+      return qs;
+    }
+    function changeAnalyticsUserSort(sortKey){
+      readAnalyticsFiltersFromUI();
+      if(currentAnalyticsUserSortBy===sortKey) currentAnalyticsUserSortDir=currentAnalyticsUserSortDir==='asc'?'desc':'asc';
+      else {
+        currentAnalyticsUserSortBy=sortKey;
+        currentAnalyticsUserSortDir='desc';
+      }
+      loadAnalyticsTab();
+    }
+    function renderAnalyticsView(overview,funnel,timeseries,users,recent){
+      const c=document.getElementById('content');
+      const windowInfo=overview?.window||funnel?.window||timeseries?.window||{};
+      const m=overview?.metrics||{};
+      const breakdown=Array.isArray(overview?.event_breakdown)?overview.event_breakdown:[];
+      const platforms=Array.isArray(overview?.platform_breakdown)?overview.platform_breakdown:[];
+      const steps=Array.isArray(funnel?.steps)?funnel.steps:[];
+      const series=Array.isArray(timeseries?.series)?timeseries.series:[];
+      const topUsers=Array.isArray(users?.items)?users.items:[];
+      const recentItems=Array.isArray(recent?.items)?recent.items:[];
+      const fromInput=currentAnalyticsFrom||toLocalDateTimeInput(windowInfo?.from||'');
+      const toInput=currentAnalyticsTo||toLocalDateTimeInput(windowInfo?.to||'');
+
+      const hoursOptions=[6,12,24,48,72,168,336,720,1440,2160];
+      const hoursHtml=hoursOptions.map((h)=>`<option value="${h}" ${Number(currentAnalyticsHours||24)===h?'selected':''}>${h} saat</option>`).join('');
+
+      let html=`
+        <div class="analytics-toolbar">
+          <div class="f">
+            <label>Pencere</label>
+            <select id="analytics-hours">${hoursHtml}</select>
+          </div>
+          <div class="f">
+            <label>Kirilim</label>
+            <select id="analytics-granularity">
+              <option value="hour" ${currentAnalyticsGranularity==='hour'?'selected':''}>Saatlik</option>
+              <option value="day" ${currentAnalyticsGranularity==='day'?'selected':''}>Gunluk</option>
+            </select>
+          </div>
+          <div class="f">
+            <label>Platform</label>
+            <select id="analytics-platform">
+              <option value="all" ${currentAnalyticsPlatform==='all'?'selected':''}>Tumu</option>
+              <option value="android" ${currentAnalyticsPlatform==='android'?'selected':''}>Android</option>
+              <option value="web" ${currentAnalyticsPlatform==='web'?'selected':''}>Web</option>
+              <option value="ios" ${currentAnalyticsPlatform==='ios'?'selected':''}>iOS</option>
+              <option value="unknown" ${currentAnalyticsPlatform==='unknown'?'selected':''}>Unknown</option>
+            </select>
+          </div>
+          <div class="f">
+            <label>Baslangic</label>
+            <input id="analytics-from" type="datetime-local" value="${esc(fromInput)}" />
+          </div>
+          <div class="f">
+            <label>Bitis</label>
+            <input id="analytics-to" type="datetime-local" value="${esc(toInput)}" />
+          </div>
+          <div class="f">
+            <label>Kullanici Ara</label>
+            <input id="analytics-q" type="text" placeholder="username veya gorunen isim" value="${esc(currentAnalyticsQuery||'')}" style="min-width:220px" onkeyup="if(event&&event.key==='Enter'){reloadAnalyticsTab()}" />
+          </div>
+          <div class="f">
+            <button class="btn btn-refresh" onclick="reloadAnalyticsTab()">Yenile</button>
+          </div>
+        </div>
+        <div class="deletion-row-note">Aralik: ${esc(windowInfo?.from||'-')} - ${esc(windowInfo?.to||'-')} | Platform: ${esc(windowInfo?.platform||currentAnalyticsPlatform||'all')}</div>
+        <div class="metrics">
+          <div class="metric"><div class="k">Tekil Gelen</div><div class="n">${Number(m.unique_arrivals||0)}</div></div>
+          <div class="metric"><div class="k">Match Denemesi</div><div class="n">${Number(m.match_attempts||0)}</div></div>
+          <div class="metric"><div class="k">Match Bulunan</div><div class="n">${Number(m.offers||0)}</div></div>
+          <div class="metric"><div class="k">Sohbet Baslangici</div><div class="n">${Number(m.chats_started||0)}</div></div>
+          <div class="metric"><div class="k">Kabul Orani</div><div class="n">${Number(m.accept_rate_pct||0).toFixed(2)}%</div></div>
+          <div class="metric"><div class="k">Red Orani</div><div class="n">${Number(m.reject_rate_pct||0).toFixed(2)}%</div></div>
+          <div class="metric"><div class="k">Oto Kabul Orani</div><div class="n">${Number(m.auto_accept_rate_pct||0).toFixed(2)}%</div></div>
+          <div class="metric"><div class="k">Match->Sohbet Donusum</div><div class="n">${Number(m.chat_conversion_pct||0).toFixed(2)}%</div></div>
+        </div>
+      `;
+
+      html+='<h3>Funnel</h3>';
+      if(!steps.length){
+        html+='<p class="deletion-row-note">Funnel verisi bulunamadi.</p>';
+      }else{
+        html+='<div class="funnel-grid">';
+        steps.forEach((step)=>{
+          html+=`<div class="funnel-step"><div class="s">${esc(step.label||step.key||'-')}</div><div class="v">${Number(step.users||0)}</div><div class="r">${Number(step.pct_from_arrivals||0).toFixed(2)}%</div></div>`;
+        });
+        html+='</div>';
+      }
+
+      html+='<h3>Trend</h3>';
+      if(!series.length){
+        html+='<p class="deletion-row-note">Trend verisi bulunamadi.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead>
+              <tr>
+                <th>Zaman</th>
+                <th>Tekil Gelen</th>
+                <th>Match Deneme</th>
+                <th>Match Bulma</th>
+                <th>Kabul</th>
+                <th>Red</th>
+                <th>Oto Kabul</th>
+                <th>Sohbet Baslangic</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        series.forEach((row)=>{
+          const accepted=Number(row.accepts||0)+Number(row.auto_accepts||0);
+          html+=`<tr><td>${d(row.bucket)}</td><td>${Number(row.unique_arrivals||0)}</td><td>${Number(row.match_attempts||0)}</td><td>${Number(row.offers||0)}</td><td>${accepted}</td><td>${Number(row.rejects||0)}</td><td>${Number(row.auto_accepts||0)}</td><td>${Number(row.chats_started||0)}</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      html+='<h3>Event Dagilimi</h3>';
+      if(!breakdown.length){
+        html+='<p class="deletion-row-note">Event dagilimi yok.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead><tr><th>Event</th><th>Toplam</th><th>Tekil Kullanici</th></tr></thead>
+            <tbody>
+        `;
+        breakdown.forEach((row)=>{
+          html+=`<tr><td><code>${esc(row.event_name||'-')}</code></td><td>${Number(row.event_count||0)}</td><td>${Number(row.unique_users||0)}</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      html+='<h3>Platform Dagilimi</h3>';
+      if(!platforms.length){
+        html+='<p class="deletion-row-note">Platform dagilimi yok.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead><tr><th>Platform</th><th>Event</th><th>Tekil Kullanici</th></tr></thead>
+            <tbody>
+        `;
+        platforms.forEach((row)=>{
+          html+=`<tr><td>${esc(row.platform||'-')}</td><td>${Number(row.event_count||0)}</td><td>${Number(row.unique_users||0)}</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      html+='<h3>Kullanici Bazli Davranis</h3>';
+      if(!topUsers.length){
+        html+='<p class="deletion-row-note">Kullanici davranis verisi yok.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead>
+              <tr>
+                <th>Kullanici</th>
+                ${renderAnalyticsSortHeader('Toplam Event','total_events')}
+                ${renderAnalyticsSortHeader('Match Deneme','match_attempts')}
+                ${renderAnalyticsSortHeader('Match Bulma','offers')}
+                ${renderAnalyticsSortHeader('Kabul','accepts')}
+                ${renderAnalyticsSortHeader('Red','rejects')}
+                ${renderAnalyticsSortHeader('Oto Kabul','auto_accepts')}
+                ${renderAnalyticsSortHeader('Sohbet','chats_started')}
+                ${renderAnalyticsSortHeader('Son Event','last_event_at')}
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        topUsers.forEach((row)=>{
+          const name=row.display_name?`${row.username||'-'} (${row.display_name})`:(row.username||'-');
+          html+=`<tr><td>${esc(name)}</td><td>${Number(row.total_events||0)}</td><td>${Number(row.match_attempts||0)}</td><td>${Number(row.offers||0)}</td><td>${Number(row.accepts||0)}</td><td>${Number(row.rejects||0)}</td><td>${Number(row.auto_accepts||0)}</td><td>${Number(row.chats_started||0)}</td><td>${d(row.last_event_at)}</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      html+='<h3>Son Olay Akisi</h3>';
+      if(!recentItems.length){
+        html+='<p class="deletion-row-note">Son olay kaydi yok.</p>';
+      }else{
+        html+=`
+          <table>
+            <thead><tr><th>Tarih</th><th>Event</th><th>Kullanici</th><th>Platform</th><th>Detay</th></tr></thead>
+            <tbody>
+        `;
+        recentItems.forEach((row)=>{
+          const name=row.display_name?`${row.username||'-'} (${row.display_name})`:(row.username||'-');
+          const metaText=typeof row.metadata==='string'?row.metadata:JSON.stringify(row.metadata||{});
+          html+=`<tr><td>${d(row.created_at)}</td><td><code>${esc(row.event_name||'-')}</code></td><td>${esc(name)}</td><td>${esc(row.platform||'-')}</td><td><code style="font-size:11px">${esc(metaText||'{}')}</code></td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+
+      c.innerHTML=html;
+    }
+    function reloadAnalyticsTab(){
+      readAnalyticsFiltersFromUI();
+      loadAnalyticsTab();
+    }
+    async function loadAnalyticsTab(){
+      const c=document.getElementById('content');
+      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Davranis analitigi yukleniyor...</p>';
+      try{
+        const qs=buildAnalyticsQuery();
+        const overviewUrl=`/admin/analytics/overview?${qs.toString()}`;
+        const funnelUrl=`/admin/analytics/funnel?${qs.toString()}`;
+        const seriesUrl=`/admin/analytics/timeseries?${qs.toString()}`;
+        const usersUrl=`/admin/analytics/users?${qs.toString()}`;
+        const recentUrl=`/admin/analytics/recent?${qs.toString()}`;
+        const [overviewRes,funnelRes,seriesRes,usersRes,recentRes]=await Promise.all([
+          fetch(overviewUrl),
+          fetch(funnelUrl),
+          fetch(seriesUrl),
+          fetch(usersUrl),
+          fetch(recentUrl)
+        ]);
+        const [overviewJson,funnelJson,seriesJson,usersJson,recentJson]=await Promise.all([
+          overviewRes.json(),
+          funnelRes.json(),
+          seriesRes.json(),
+          usersRes.json(),
+          recentRes.json()
+        ]);
+        if(!overviewRes.ok) throw new Error(overviewJson.error||'Overview verisi okunamadi.');
+        if(!funnelRes.ok) throw new Error(funnelJson.error||'Funnel verisi okunamadi.');
+        if(!seriesRes.ok) throw new Error(seriesJson.error||'Trend verisi okunamadi.');
+        if(!usersRes.ok) throw new Error(usersJson.error||'Kullanici davranis verisi okunamadi.');
+        if(!recentRes.ok) throw new Error(recentJson.error||'Son olay verisi okunamadi.');
+        renderAnalyticsView(overviewJson,funnelJson,seriesJson,usersJson,recentJson);
+      }catch(e){
+        c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Davranis analitigi yuklenemedi: ${esc(e.message||e)}</p>`;
+      }
+    }
+
     async function loadOnlineUsersTab(){
       const c=document.getElementById('content');
       c.innerHTML='<p style="padding:16px;color:#9aa8c0">Online profiller yukleniyor...</p>';
@@ -930,6 +1322,7 @@
         if(currentTab==='deletion_requests'){ await loadDeletionRequests(); return; }
         if(currentTab==='audit_logs'){ await loadAuditLogs(); return; }
         if(currentTab==='performance'){ await loadPerformanceTab(); return; }
+        if(currentTab==='analytics'){ await loadAnalyticsTab(); return; }
         const q=document.getElementById('search-input')?.value||'';
         const qs=new URLSearchParams({type:currentTab,q});
         if(currentTab==='profiles'){
@@ -939,7 +1332,13 @@
           qs.set('pageSize',String(profilePageSize));
         }
         const r=await fetch(`/admin/data?${qs.toString()}`); const x=await r.json(); if(!r.ok) throw new Error(x.error||'Veri alinamadi.'); const items=Array.isArray(x.items)?x.items:[];
-        if(!items.length&&currentTab!=='profiles'){ c.innerHTML='<p style="padding:16px">Kayit bulunamadi.</p>'; return; }
+        const allowBulk=isBulkTab();
+        bulkVisibleUserIds=allowBulk?items.map((it)=>getBulkUserIdFromRow(it)).filter(Boolean):[];
+        if(!items.length&&currentTab!=='profiles'){
+          c.innerHTML=allowBulk?`${renderBulkToolbar()}<p style="padding:16px">Kayit bulunamadi.</p>`:'<p style="padding:16px">Kayit bulunamadi.</p>';
+          if(allowBulk) requestAnimationFrame(updateBulkSelectionUI);
+          return;
+        }
         if(currentTab==='profiles'){
           const p=x.pagination||{};
           profileSortBy=['created_at','last_seen_at','username'].includes(String(p.sortBy||''))?String(p.sortBy):profileSortBy;
@@ -949,18 +1348,27 @@
           profileTotal=Math.max(0,Number(p.total)||0);
           profileTotalPages=Math.max(0,Number(p.totalPages)||0);
         }
-        let h='<table><thead><tr>';
+        let h=allowBulk?renderBulkToolbar():'';
+        h+='<table><thead><tr>';
+        if(allowBulk) h+='<th class="bulk-select-cell"><input id="bulk-select-all" type="checkbox" onclick="toggleBulkAll(this.checked)" aria-label="Tumunu sec"></th>';
         if(currentTab==='reports') h+='<th>Tarih</th><th>Raporlayan</th><th>Raporlanan</th><th>Sebep</th><th>Islem</th>';
         else if(currentTab==='bans') h+='<th>Kullanici</th><th>Tur</th><th>Bitis</th><th>Sebep</th><th>Islem</th>';
         else if(currentTab==='profiles') h+=`${renderProfileSortHeader('Kullanici','username')}<th>Gorunen Isim</th>${renderProfileSortHeader('Son Gorulme','last_seen_at')}${renderProfileSortHeader('Kayit','created_at')}<th>Islem</th>`;
         else h+='<th>Tarih</th><th>Konu</th><th>Kullanici</th><th>E-posta</th><th>Durum</th><th>Medya</th><th>Islem</th>';
         h+='</tr></thead><tbody>';
         if(!items.length){
-          const colSpan=currentTab==='profiles'?5:7;
+          const baseColSpan=currentTab==='reports'?5:currentTab==='bans'?5:currentTab==='profiles'?5:7;
+          const colSpan=allowBulk?baseColSpan+1:baseColSpan;
           h+=`<tr><td colspan="${colSpan}">Kayit bulunamadi.</td></tr>`;
         }else{
           items.forEach(it=>{
             h+='<tr>';
+            const bulkUserId=allowBulk?getBulkUserIdFromRow(it):'';
+            if(allowBulk){
+              const checked=bulkUserId&&bulkSelectedUserIds.has(bulkUserId)?'checked':'';
+              const disabled=bulkUserId?'':'disabled';
+              h+=`<td class="bulk-select-cell"><input type="checkbox" data-bulk-id="${esc(bulkUserId)}" ${checked} ${disabled} onclick="toggleBulkItem('${bulkUserId}',this.checked)" aria-label="Sec"></td>`;
+            }
             if(currentTab==='reports'){
               const rid=it.reported_user_id||'';
               h+=`<td>${d(it.created_at)}</td><td>${esc(it.reporter||'Anon')}</td><td>${esc(it.reported||'Anon')}</td><td>${esc(it.reason||'')}</td><td>
@@ -980,6 +1388,7 @@
         h+='</tbody></table>';
         if(currentTab==='profiles') h+=renderProfilesPagination(items.length);
         c.innerHTML=h;
+        if(allowBulk) requestAnimationFrame(updateBulkSelectionUI);
       }catch(e){ c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Veri yuklenemedi: ${esc(e.message||e)}</p>`; }
     }
 
@@ -1132,6 +1541,54 @@
     async function actionBan(userId,days,reason){ if(!confirm('Kullaniciyi yasaklamak istiyor musunuz?')) return; await apiPost('/admin/ban',{userId,days,reason}); }
     async function actionShadow(userId,reason){ if(!confirm('Kullaniciyi golge yasaga almak istiyor musunuz?')) return; await apiPost('/admin/ban',{userId,days:0,type:'shadow',reason}); }
     async function actionUnban(userId){ if(!confirm('Yasagi kaldirmak istiyor musunuz?')) return; await apiPost('/admin/unban',{userId}); }
+    async function postBulkAction(body){
+      const r=await fetch('/admin/bulk-user-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const raw=await r.text();
+      const x=(()=>{try{return raw?JSON.parse(raw):{};}catch{return{};}})();
+      if(!r.ok) throw new Error(x.error||'Toplu islem basarisiz');
+      return x;
+    }
+    async function actionBulkBan(days,type){
+      const ids=getBulkSelectedUserIds();
+      if(!ids.length){ alert('Toplu islem icin en az bir profil secin.'); return; }
+      const mode=type==='shadow'?'golge ban':days===0?'kalici ban':'24 saat ban';
+      if(!confirm(`Secili ${ids.length} kullaniciya ${mode} uygulansin mi?`)) return;
+      try{
+        setBulkBusy(true);
+        await postBulkAction({
+          action:'ban',
+          userIds:ids,
+          days:Number(days)||0,
+          type:type==='shadow'?'shadow':'temp',
+          reason:`Panel toplu islem (${currentTab})`
+        });
+        clearBulkSelectionState();
+        await loadContent();
+        await loadStats();
+        await loadPerformanceSummaryCard();
+      }catch(e){
+        alert(`Toplu ban hatasi: ${e.message||e}`);
+      }finally{
+        setBulkBusy(false);
+      }
+    }
+    async function actionBulkUnban(){
+      const ids=getBulkSelectedUserIds();
+      if(!ids.length){ alert('Toplu islem icin en az bir profil secin.'); return; }
+      if(!confirm(`Secili ${ids.length} kullanicinin yasagi kaldirilsin mi?`)) return;
+      try{
+        setBulkBusy(true);
+        await postBulkAction({action:'unban',userIds:ids});
+        clearBulkSelectionState();
+        await loadContent();
+        await loadStats();
+        await loadPerformanceSummaryCard();
+      }catch(e){
+        alert(`Toplu unban hatasi: ${e.message||e}`);
+      }finally{
+        setBulkBusy(false);
+      }
+    }
     async function actionUnblock(blockerId,blockedId){ if(!confirm('Bu engeli kaldirmak istiyor musunuz?')) return; await apiPost('/admin/unblock',{blockerId,blockedId}); closeModal(); }
     async function actionAddFriend(userId,username,inputId){
       const friendRef=(document.getElementById(inputId)?.value||'').trim();
