@@ -167,7 +167,12 @@
     .dashboard-chart svg { width:100%; height:220px; display:block; }
     .dashboard-chart .axis { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:4px; color:var(--muted-2); font-size:11px; }
     .dashboard-chart .axis span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .dashboard-recent-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+    .dashboard-chart-note { margin-top:2px; color:var(--muted); font-size:11px; }
+    .dashboard-recent-list { list-style:none; margin:0; padding:0 4px 0 0; display:flex; flex-direction:column; gap:8px; max-height:620px; overflow-y:auto; }
+    .dashboard-recent-list::-webkit-scrollbar { width:10px; }
+    .dashboard-recent-list::-webkit-scrollbar-track { background:rgba(255,255,255,0.03); border-radius:10px; }
+    .dashboard-recent-list::-webkit-scrollbar-thumb { background:rgba(132,167,214,0.42); border-radius:10px; }
+    .dashboard-recent-list::-webkit-scrollbar-thumb:hover { background:rgba(132,167,214,0.62); }
     .dashboard-recent-list li { border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,0.018); padding:9px 10px; }
     .dashboard-recent-list .e { font-size:12px; color:#9ec5ff; font-weight:700; margin-bottom:4px; }
     .dashboard-recent-list .u { font-size:13px; color:var(--text); margin-bottom:4px; }
@@ -347,6 +352,7 @@
       session_ended:'Oturumu sonlandirdi',
       match_attempt:'Eslesme aradi',
       match_search_started:'Eslesme aramasini baslatti',
+      match_search_queued:'Eslesme aramasi kuyruga alindi',
       match_search_cancelled:'Eslesme aramasini iptal etti',
       match_search_canceled:'Eslesme aramasini iptal etti',
       match_offered:'Eslesme bulundu',
@@ -366,6 +372,9 @@
       users:'Kullanicilar',
       match:'Eslesme',
       search:'Arama',
+      queue:'Kuyruk',
+      queued:'Kuyrukta',
+      attempt:'Deneme',
       cancelled:'Iptal',
       canceled:'Iptal',
       disconnected:'Ayrildi',
@@ -736,8 +745,20 @@
     }
     function renderDashboardMiniChart(rows){
       const ordered=[...(Array.isArray(rows)?rows:[])].sort((a,b)=>new Date(a?.bucket||0)-new Date(b?.bucket||0));
-      if(!ordered.length) return '';
+      if(!ordered.length){
+        return `
+          <div class="dashboard-chart">
+            <svg viewBox="0 0 920 220" preserveAspectRatio="none" role="img" aria-label="Aktivite trendi">
+              <line x1="18" y1="160" x2="902" y2="160" stroke="rgba(255,255,255,0.20)" stroke-width="2" stroke-dasharray="6 6" />
+              <text x="20" y="148" fill="rgba(182,199,225,0.78)" font-size="12">Grafik icin yeterli veri yok</text>
+            </svg>
+            <div class="axis"><span>-</span><span>-</span><span>-</span></div>
+            <div class="dashboard-chart-note">Veri geldikce trend otomatik olusur.</div>
+          </div>
+        `;
+      }
       const values=ordered.map((row)=>(
+        Number(row?.unique_arrivals||0)+
         Number(row?.match_attempts||0)+
         Number(row?.offers||0)+
         Number(row?.accepts||0)+
@@ -745,6 +766,23 @@
         Number(row?.rejects||0)+
         Number(row?.chats_started||0)
       ));
+      const hasActivity=values.some((v)=>v>0);
+      if(!hasActivity){
+        return `
+          <div class="dashboard-chart">
+            <svg viewBox="0 0 920 220" preserveAspectRatio="none" role="img" aria-label="Aktivite trendi">
+              <line x1="18" y1="160" x2="902" y2="160" stroke="rgba(255,255,255,0.24)" stroke-width="2.2" />
+              <text x="20" y="148" fill="rgba(182,199,225,0.78)" font-size="12">Son 24 saatte aktiviteler sifira yakin</text>
+            </svg>
+            <div class="axis">
+              <span>${esc(dashboardDateLabel(ordered[0]?.bucket))}</span>
+              <span>${esc(dashboardDateLabel(ordered[Math.floor((ordered.length-1)/2)]?.bucket))}</span>
+              <span>${esc(dashboardDateLabel(ordered[ordered.length-1]?.bucket))}</span>
+            </div>
+            <div class="dashboard-chart-note">Hareket arttiginda cizgi burada belirginlesir.</div>
+          </div>
+        `;
+      }
       const width=920;
       const height=220;
       const padX=18;
@@ -779,24 +817,25 @@
           <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Son 24 saat aktivite trendi">
             <defs>
               <linearGradient id="dashTrendFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="rgba(146,102,255,0.40)" />
-                <stop offset="100%" stop-color="rgba(146,102,255,0.02)" />
+                <stop offset="0%" stop-color="#9366ff" stop-opacity="0.36" />
+                <stop offset="100%" stop-color="#9366ff" stop-opacity="0.02" />
               </linearGradient>
               <linearGradient id="dashTrendStroke" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stop-color="#8e66ff" />
-                <stop offset="100%" stop-color="#62a5ff" />
+                <stop offset="0%" stop-color="#9f78ff" />
+                <stop offset="100%" stop-color="#69beff" />
               </linearGradient>
             </defs>
             ${gridLines}
             <path d="${areaPath}" fill="url(#dashTrendFill)" />
-            <path d="${linePath}" fill="none" stroke="url(#dashTrendStroke)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-            <circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="4.2" fill="#7c5dff" stroke="#d6e3ff" stroke-width="1.2" />
+            <path d="${linePath}" fill="none" stroke="url(#dashTrendStroke)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="5" fill="#8162ff" stroke="#d6e3ff" stroke-width="1.5" />
           </svg>
           <div class="axis">
             <span>${esc(dashboardDateLabel(ordered[0]?.bucket))}</span>
             <span>${esc(dashboardDateLabel(ordered[Math.floor((ordered.length-1)/2)]?.bucket))}</span>
             <span>${esc(dashboardDateLabel(ordered[ordered.length-1]?.bucket))}</span>
           </div>
+          <div class="dashboard-chart-note">Son saat: ${compactMetric(values[values.length-1])} | Zirve: ${compactMetric(Math.max(...values))}</div>
         </div>
       `;
     }
