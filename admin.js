@@ -375,6 +375,18 @@ const getOnlineSnapshot = () => {
     }
 };
 
+const getActiveConversationCount = () => {
+    const provider = router.getActiveConversationCount;
+    if (typeof provider !== 'function') return 0;
+    try {
+        const count = Number(provider());
+        return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+    } catch (e) {
+        console.error('active conversation provider error:', e?.message || e);
+        return 0;
+    }
+};
+
 const fetchOnlineUsersPayload = async () => {
     const snapshot = getOnlineSnapshot().map((entry) => ({
         clientId: String(entry?.clientId || '').trim(),
@@ -461,21 +473,21 @@ router.get('/stream', (req, res) => {
 
 router.get('/stats', async (req, res) => {
     try {
-        const [users, bans, reports, supportReports, active, online] = await Promise.all([
+        const [users, bans, reports, supportReports, online] = await Promise.all([
             pool.query('SELECT COUNT(*) FROM users'),
             pool.query('SELECT COUNT(*) FROM bans'),
             pool.query('SELECT COUNT(*) FROM reports WHERE created_at > NOW() - INTERVAL \'24 hours\''),
             pool.query('SELECT COUNT(*) FROM support_reports WHERE created_at > NOW() - INTERVAL \'24 hours\''),
-            pool.query('SELECT COUNT(*) FROM conversations WHERE ended_at IS NULL'),
             fetchOnlineUsersPayload()
         ]);
+        const activeConversations = getActiveConversationCount();
 
         res.json({
             totalUsers: users.rows[0].count,
             totalBans: bans.rows[0].count,
             reports24h: reports.rows[0].count,
             supportReports24h: supportReports.rows[0].count,
-            activeConversations: active.rows[0].count,
+            activeConversations,
             onlineUsers: online.onlineUsers || 0,
             onlineConnections: online.onlineConnections || 0
         });
@@ -583,9 +595,25 @@ router.get('/data', async (req, res) => {
             const result = await pool.query(
                 `
                 SELECT u.id, u.username, u.created_at, u.last_seen_at,
-                       p.display_name, p.avatar_url, p.bio
+                       p.display_name, p.avatar_url, p.bio,
+                       COALESCE(NULLIF(be_last.platform, 'unknown'), pd_last.platform, be_last.platform, 'unknown') AS last_platform
                 FROM users u
                 LEFT JOIN profiles p ON u.id = p.user_id
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(NULLIF(be.platform, ''), 'unknown') AS platform
+                    FROM behavior_events be
+                    WHERE be.user_id = u.id
+                      AND be.event_name = 'user_connected'
+                    ORDER BY be.created_at DESC
+                    LIMIT 1
+                ) AS be_last ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(NULLIF(pd.platform, ''), 'unknown') AS platform
+                    FROM push_devices pd
+                    WHERE pd.user_id = u.id
+                    ORDER BY pd.updated_at DESC NULLS LAST, pd.created_at DESC
+                    LIMIT 1
+                ) AS pd_last ON TRUE
                 ${whereSql}
                 ORDER BY ${orderColumn} ${sortDir.toUpperCase()} NULLS LAST, u.id ASC
                 LIMIT $${limitParam}

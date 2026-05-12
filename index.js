@@ -937,6 +937,20 @@ adminRoutes.getOnlineUsersSnapshot = () => {
     return items;
 };
 
+adminRoutes.getActiveConversationCount = () => {
+    let count = 0;
+    for (const [, room] of rooms) {
+        if (!room || !Array.isArray(room.users) || room.users.length < 2) continue;
+        const [a, b] = room.users;
+        const wsA = room.sockets?.[a?.clientId];
+        const wsB = room.sockets?.[b?.clientId];
+        if (wsA?.readyState === WebSocket.OPEN && wsB?.readyState === WebSocket.OPEN) {
+            count++;
+        }
+    }
+    return count;
+};
+
 const validateImageDataUrl = (dataUrl) => {
     if (typeof dataUrl !== 'string') return { ok: false, reason: 'Invalid image payload.' };
     if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
