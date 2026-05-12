@@ -1943,7 +1943,9 @@
         if(!seriesRes.ok) throw new Error(seriesJson.error||'Kullanici aktiviteleri okunamadi.');
         if(!recentRes.ok) throw new Error(recentJson.error||'Son aktiviteler okunamadi.');
 
-        const seriesAll=Array.isArray(seriesJson.items)?seriesJson.items:[];
+        const seriesAll=Array.isArray(seriesJson.series)
+          ? seriesJson.series
+          : (Array.isArray(seriesJson.items)?seriesJson.items:[]);
         const seriesRows=[...seriesAll]
           .sort((a,b)=>new Date(b?.bucket||0)-new Date(a?.bucket||0))
           .slice(0,24);
