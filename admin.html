@@ -154,6 +154,21 @@
 
     .system-diag { margin:0; border-radius:16px; padding:12px 14px; }
     .workspace-panel { margin:0; min-height:520px; }
+    .dashboard-surface { display:flex; flex-direction:column; gap:12px; }
+    .dashboard-columns { display:grid; gap:12px; grid-template-columns:minmax(0,1.7fr) minmax(0,1fr); align-items:start; }
+    .dashboard-panel { border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,0.02); padding:12px; }
+    .dashboard-panel h3 { margin:0 0 6px; font-size:18px; }
+    .dashboard-sub { margin:0 0 10px; color:var(--muted); font-size:12px; }
+    .dashboard-kpi-grid { display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); margin-bottom:10px; }
+    .dashboard-kpi { border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,0.02); padding:8px; }
+    .dashboard-kpi .k { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+    .dashboard-kpi .v { font-size:20px; font-weight:700; color:var(--text); line-height:1.1; }
+    .dashboard-recent-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+    .dashboard-recent-list li { border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,0.018); padding:9px 10px; }
+    .dashboard-recent-list .e { font-size:12px; color:var(--accent); font-weight:700; margin-bottom:4px; }
+    .dashboard-recent-list .u { font-size:13px; color:var(--text); margin-bottom:4px; }
+    .dashboard-recent-list .m { font-size:11px; color:var(--muted); margin-bottom:3px; }
+    .dashboard-recent-list .t { font-size:11px; color:var(--muted-2); }
 
     @media (max-width: 1180px) {
       .app-shell { grid-template-columns:1fr; }
@@ -162,6 +177,7 @@
       .nav-group { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:8px; }
       .nav-group-title { grid-column:1 / -1; }
       .top-search input { min-width:220px; }
+      .dashboard-columns { grid-template-columns:1fr; }
     }
 
     @media (max-width: 760px) {
@@ -191,8 +207,13 @@
       </div>
 
       <div class="nav-group">
+        <div class="nav-group-title">Genel</div>
+        <button class="tab active" onclick="switchTab('dashboard',event)"><span class="nav-icon">D</span> Dashboard</button>
+      </div>
+
+      <div class="nav-group">
         <div class="nav-group-title">Yonetim</div>
-        <button class="tab active" onclick="switchTab('reports',event)"><span class="nav-icon">#</span> Kullanici Raporlari</button>
+        <button class="tab" onclick="switchTab('reports',event)"><span class="nav-icon">#</span> Kullanici Raporlari</button>
         <button class="tab" onclick="switchTab('bans',event)"><span class="nav-icon">!</span> Yasaklar & Golge</button>
         <button class="tab" onclick="switchTab('profiles',event)"><span class="nav-icon">@</span> Profiller</button>
         <button class="tab" onclick="switchTab('app_reports',event)"><span class="nav-icon">?</span> Uygulama Raporlari</button>
@@ -219,8 +240,8 @@
     <main class="main-shell">
       <header class="topbar">
         <div class="topbar-left">
-          <h1>Dashboard</h1>
-          <p>TalkX Yonetim Paneli</p>
+          <h1 id="topbar-title">Dashboard</h1>
+          <p id="topbar-subtitle">TalkX Yonetim Paneli</p>
         </div>
         <div class="topbar-right">
           <div class="row top-search" id="search-wrap" style="display:none">
@@ -231,7 +252,7 @@
         </div>
       </header>
 
-      <section class="cards">
+      <section class="cards" id="dashboard-cards">
         <div class="card stat-card">
           <div class="stat-icon users">U</div>
           <div class="stat-body"><div class="t">Toplam Kullanici</div><div class="v" id="s_users">-</div></div>
@@ -255,7 +276,7 @@
         <div class="card"><div class="t">API Hata Orani (60 dk)</div><div class="v" id="s_perf_err">-%</div><div class="s" id="s_perf_slow">0 yavas istek</div></div>
       </section>
 
-      <section class="diag system-diag">
+      <section class="diag system-diag" id="dashboard-diag">
         <strong>Push Teshis (24 saat)</strong>
         <div id="push-diagnostics" class="diag-grid" style="margin-top:8px"><div>Yukleniyor...</div></div>
       </section>
@@ -275,7 +296,7 @@
   </div>
 
   <script>
-    let currentTab='reports';
+    let currentTab='dashboard';
     let currentDeletionStatus='requested';
     let currentPerformanceHours=24;
     let currentAnalyticsHours=24;
@@ -300,6 +321,29 @@
     let bulkBusy=false;
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
+    const TAB_LABELS={
+      dashboard:'Dashboard',
+      reports:'Kullanici Raporlari',
+      bans:'Yasaklar & Golge',
+      profiles:'Profiller',
+      app_reports:'Uygulama Raporlari',
+      notification_settings:'Bildirim Ayarlari',
+      performance:'Performans',
+      analytics:'Davranis Analitigi',
+      online_users:'Anlik Online Profiller',
+      deletion_requests:'Silme Talepleri',
+      audit_logs:'Audit Log',
+      legal:'Yasal Metinler'
+    };
+    const ANALYTICS_EVENT_LABELS={
+      arrival:'Uygulamaya giris',
+      match_attempt:'Match denemesi',
+      match_offered:'Match bulundu',
+      match_accept:'Eslesme kabul',
+      match_reject:'Eslesme red',
+      match_auto_accept:'Oto kabul',
+      chat_started:'Sohbet basladi'
+    };
     const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
     const val=id=>document.getElementById(id)?.value||'';
     const d=v=>v?new Date(v).toLocaleString():'-';
@@ -548,6 +592,22 @@
       if(!show) return;
       i.placeholder=currentTab==='profiles'?'Kullanici adi veya gorunen isim ara...':'Konu, aciklama, e-posta veya durum ara...';
     }
+    function applyTabChrome(){
+      const showDashboard=currentTab==='dashboard';
+      const titleEl=document.getElementById('topbar-title');
+      const subtitleEl=document.getElementById('topbar-subtitle');
+      const cards=document.getElementById('dashboard-cards');
+      const diag=document.getElementById('dashboard-diag');
+      const label=TAB_LABELS[currentTab]||'Dashboard';
+      if(titleEl) titleEl.innerText=label;
+      if(subtitleEl) subtitleEl.innerText=showDashboard?'TalkX Yonetim Ozeti':`TalkX Yonetim Paneli / ${label}`;
+      if(cards) cards.style.display=showDashboard?'grid':'none';
+      if(diag) diag.style.display=showDashboard?'block':'none';
+    }
+    function analyticsEventLabel(v){
+      const key=String(v||'').trim();
+      return ANALYTICS_EVENT_LABELS[key]||key||'-';
+    }
 
     async function switchTab(tab,ev){
       const tabChanged=currentTab!==tab;
@@ -557,6 +617,7 @@
       const targetTab=ev?.currentTarget || ev?.target?.closest?.('.tab') || null;
       if(targetTab) targetTab.classList.add('active');
       applySearchUI();
+      applyTabChrome();
       if(tab==='online_users') startOnlineUsersAutoRefresh();
       else stopOnlineUsersAutoRefresh();
       loadContent();
@@ -1638,9 +1699,120 @@
       }
     }
 
+    async function loadDashboardTab(){
+      const c=document.getElementById('content');
+      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Dashboard yukleniyor...</p>';
+      try{
+        const qs=new URLSearchParams({hours:'24',granularity:'hour',platform:'all'});
+        const [seriesRes,recentRes]=await Promise.all([
+          fetch(`/admin/analytics/timeseries?${qs.toString()}`),
+          fetch(`/admin/analytics/recent?${qs.toString()}`)
+        ]);
+        const [seriesJson,recentJson]=await Promise.all([seriesRes.json(),recentRes.json()]);
+        if(!seriesRes.ok) throw new Error(seriesJson.error||'Kullanici aktiviteleri okunamadi.');
+        if(!recentRes.ok) throw new Error(recentJson.error||'Son aktiviteler okunamadi.');
+
+        const seriesAll=Array.isArray(seriesJson.items)?seriesJson.items:[];
+        const seriesRows=[...seriesAll]
+          .sort((a,b)=>new Date(b?.bucket||0)-new Date(a?.bucket||0))
+          .slice(0,24);
+        const recentItems=(Array.isArray(recentJson.items)?recentJson.items:[]).slice(0,16);
+
+        let totalArrivals=0;
+        let totalAttempts=0;
+        let totalOffers=0;
+        let totalAccepts=0;
+        let totalRejects=0;
+        let totalChats=0;
+        seriesRows.forEach((row)=>{
+          totalArrivals+=Number(row?.unique_arrivals||0);
+          totalAttempts+=Number(row?.match_attempts||0);
+          totalOffers+=Number(row?.offers||0);
+          totalAccepts+=Number(row?.accepts||0)+Number(row?.auto_accepts||0);
+          totalRejects+=Number(row?.rejects||0);
+          totalChats+=Number(row?.chats_started||0);
+        });
+        const acceptRate=totalOffers>0?(totalAccepts/totalOffers)*100:0;
+
+        let html=`
+          <div class="dashboard-surface">
+            <div class="dashboard-columns">
+              <section class="dashboard-panel">
+                <h3>Kullanici Aktiviteleri</h3>
+                <p class="dashboard-sub">Son 24 saat - saatlik kirilim</p>
+                <div class="dashboard-kpi-grid">
+                  <div class="dashboard-kpi"><div class="k">Tekil Gelen</div><div class="v">${totalArrivals}</div></div>
+                  <div class="dashboard-kpi"><div class="k">Match Deneme</div><div class="v">${totalAttempts}</div></div>
+                  <div class="dashboard-kpi"><div class="k">Match Bulma</div><div class="v">${totalOffers}</div></div>
+                  <div class="dashboard-kpi"><div class="k">Kabul</div><div class="v">${totalAccepts}</div></div>
+                  <div class="dashboard-kpi"><div class="k">Red</div><div class="v">${totalRejects}</div></div>
+                  <div class="dashboard-kpi"><div class="k">Sohbet Baslangic</div><div class="v">${totalChats}</div></div>
+                  <div class="dashboard-kpi"><div class="k">Kabul Orani</div><div class="v">${acceptRate.toFixed(1)}%</div></div>
+                </div>
+        `;
+
+        if(!seriesRows.length){
+          html+='<p class="deletion-row-note">Aktivite verisi bulunamadi.</p>';
+        }else{
+          html+=`
+                <div class="table-scroll table-scroll--trend">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Zaman</th>
+                        <th>Tekil Gelen</th>
+                        <th>Match Deneme</th>
+                        <th>Match Bulma</th>
+                        <th>Kabul</th>
+                        <th>Red</th>
+                        <th>Sohbet</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+          `;
+          seriesRows.forEach((row)=>{
+            const accepted=Number(row?.accepts||0)+Number(row?.auto_accepts||0);
+            html+=`<tr><td>${d(row?.bucket)}</td><td>${Number(row?.unique_arrivals||0)}</td><td>${Number(row?.match_attempts||0)}</td><td>${Number(row?.offers||0)}</td><td>${accepted}</td><td>${Number(row?.rejects||0)}</td><td>${Number(row?.chats_started||0)}</td></tr>`;
+          });
+          html+='</tbody></table></div>';
+        }
+
+        html+=`
+              </section>
+              <section class="dashboard-panel">
+                <h3>Son Aktiviteler</h3>
+                <p class="dashboard-sub">Kullanicilarin son olay akisi</p>
+        `;
+        if(!recentItems.length){
+          html+='<p class="deletion-row-note">Son aktivite kaydi bulunamadi.</p>';
+        }else{
+          html+='<ul class="dashboard-recent-list">';
+          recentItems.forEach((row)=>{
+            const userLabel=row?.display_name?`${row?.username||'-'} (${row.display_name})`:(row?.username||'-');
+            const metaRaw=typeof row?.metadata==='string'?row.metadata:JSON.stringify(row?.metadata||{});
+            const metaPreview=metaRaw&&metaRaw.length>120?`${metaRaw.slice(0,117)}...`:metaRaw;
+            html+=`
+              <li>
+                <div class="e">${esc(analyticsEventLabel(row?.event_name))}</div>
+                <div class="u">${esc(userLabel)}</div>
+                <div class="m">${esc(metaPreview||'{}')}</div>
+                <div class="t">${d(row?.created_at)} | ${esc(row?.platform||'-')}</div>
+              </li>
+            `;
+          });
+          html+='</ul>';
+        }
+        html+='</section></div></div>';
+        c.innerHTML=html;
+      }catch(e){
+        c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Dashboard yuklenemedi: ${esc(e.message||e)}</p>`;
+      }
+    }
+
     async function loadContent(){
       const c=document.getElementById('content'); c.innerHTML='<p style="padding:16px;color:#9aa8c0">Veri getiriliyor...</p>';
       try{
+        if(currentTab==='dashboard'){ await loadDashboardTab(); return; }
         if(currentTab==='online_users'){ await loadOnlineUsersTab(); return; }
         if(currentTab==='legal'){ await loadLegalEditor(); return; }
         if(currentTab==='deletion_requests'){ await loadDeletionRequests(); return; }
@@ -1927,7 +2099,7 @@
     async function actionRejectDeletion(requestId){ if(!confirm('Silme talebini reddetmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reject`,{}); }
     async function actionReactivateDeletion(requestId){ if(!confirm('Bu kullaniciyi yeniden aktif etmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reactivate`,{}); }
 
-    loadStats(); loadPushHealth(); loadPushDiagnostics(); loadPerformanceSummaryCard(); applySearchUI(); loadContent();
+    loadStats(); loadPushHealth(); loadPushDiagnostics(); loadPerformanceSummaryCard(); applySearchUI(); applyTabChrome(); loadContent();
   </script>
 </body>
 </html>
