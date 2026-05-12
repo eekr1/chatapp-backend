@@ -163,9 +163,13 @@
     .dashboard-kpi { border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,0.02); padding:8px; }
     .dashboard-kpi .k { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
     .dashboard-kpi .v { font-size:20px; font-weight:700; color:var(--text); line-height:1.1; }
+    .dashboard-chart { border:1px solid var(--border); border-radius:12px; background:linear-gradient(180deg, rgba(76,115,214,0.08), rgba(76,115,214,0.015)); padding:8px 10px 10px; margin-bottom:10px; }
+    .dashboard-chart svg { width:100%; height:220px; display:block; }
+    .dashboard-chart .axis { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:4px; color:var(--muted-2); font-size:11px; }
+    .dashboard-chart .axis span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .dashboard-recent-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
     .dashboard-recent-list li { border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,0.018); padding:9px 10px; }
-    .dashboard-recent-list .e { font-size:12px; color:var(--accent); font-weight:700; margin-bottom:4px; }
+    .dashboard-recent-list .e { font-size:12px; color:#9ec5ff; font-weight:700; margin-bottom:4px; }
     .dashboard-recent-list .u { font-size:13px; color:var(--text); margin-bottom:4px; }
     .dashboard-recent-list .m { font-size:11px; color:var(--muted); margin-bottom:3px; }
     .dashboard-recent-list .t { font-size:11px; color:var(--muted-2); }
@@ -336,13 +340,72 @@
       legal:'Yasal Metinler'
     };
     const ANALYTICS_EVENT_LABELS={
-      arrival:'Uygulamaya giris',
-      match_attempt:'Match denemesi',
-      match_offered:'Match bulundu',
-      match_accept:'Eslesme kabul',
-      match_reject:'Eslesme red',
-      match_auto_accept:'Oto kabul',
-      chat_started:'Sohbet basladi'
+      arrival:'Uygulamaya giris yapti',
+      user_connected:'Uygulamaya baglandi',
+      user_disconnected:'Uygulamadan ayrildi',
+      session_started:'Oturum baslatti',
+      session_ended:'Oturumu sonlandirdi',
+      match_attempt:'Eslesme aradi',
+      match_search_started:'Eslesme aramasini baslatti',
+      match_search_cancelled:'Eslesme aramasini iptal etti',
+      match_search_canceled:'Eslesme aramasini iptal etti',
+      match_offered:'Eslesme bulundu',
+      match_offer_shown:'Eslesme teklifi gosterildi',
+      match_accept:'Eslesmeyi kabul etti',
+      match_reject:'Eslesmeyi reddetti',
+      match_auto_accept:'Eslesme otomatik kabul edildi',
+      chat_started:'Sohbet basladi',
+      chat_ended:'Sohbet sonlandi',
+      message_sent:'Mesaj gonderdi',
+      report_submitted:'Rapor gonderdi',
+      profile_updated:'Profilini guncelledi',
+      notification_opened:'Bildirimi acti'
+    };
+    const ANALYTICS_TOKEN_LABELS={
+      user:'Kullanici',
+      users:'Kullanicilar',
+      match:'Eslesme',
+      search:'Arama',
+      cancelled:'Iptal',
+      canceled:'Iptal',
+      disconnected:'Ayrildi',
+      connected:'Baglandi',
+      started:'Basladi',
+      ended:'Bitti',
+      accepted:'Kabul',
+      rejected:'Red',
+      auto:'Otomatik',
+      chat:'Sohbet',
+      room:'Oda',
+      message:'Mesaj',
+      sent:'Gonderdi',
+      push:'Bildirim',
+      notification:'Bildirim',
+      device:'Cihaz',
+      session:'Oturum',
+      created:'Olusturuldu',
+      updated:'Guncellendi'
+    };
+    const ANALYTICS_META_LABELS={
+      reason:'Neden',
+      source:'Kaynak',
+      status:'Durum',
+      channel:'Kanal',
+      room_id:'Oda ID',
+      queue_position:'Kuyruk Sirasi',
+      wait_seconds:'Bekleme (sn)',
+      wait_ms:'Bekleme (ms)',
+      duration_seconds:'Sure (sn)',
+      duration_ms:'Sure (ms)',
+      target_username:'Hedef Kullanici',
+      target_user_id:'Hedef ID',
+      partner_username:'Eslesen Kullanici',
+      partner_user_id:'Eslesen ID',
+      device_id:'Cihaz ID',
+      network_type:'Ag Tipi',
+      app_version:'Uygulama Surumu',
+      error:'Hata',
+      error_code:'Hata Kodu'
     };
     const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
     const val=id=>document.getElementById(id)?.value||'';
@@ -604,9 +667,138 @@
       if(cards) cards.style.display=showDashboard?'grid':'none';
       if(diag) diag.style.display=showDashboard?'block':'none';
     }
+    function humanizeAnalyticsKey(key){
+      const norm=String(key||'').trim().toLowerCase();
+      if(!norm) return '-';
+      const words=norm.split(/[_-]+/).filter(Boolean).map((part)=>{
+        const translated=ANALYTICS_TOKEN_LABELS[part];
+        if(translated) return translated;
+        return part.charAt(0).toUpperCase()+part.slice(1);
+      });
+      return words.join(' ');
+    }
     function analyticsEventLabel(v){
-      const key=String(v||'').trim();
-      return ANALYTICS_EVENT_LABELS[key]||key||'-';
+      const key=String(v||'').trim().toLowerCase();
+      if(!key) return '-';
+      return ANALYTICS_EVENT_LABELS[key]||humanizeAnalyticsKey(key);
+    }
+    function analyticsMetaLabel(key){
+      const normalized=String(key||'').trim().toLowerCase();
+      return ANALYTICS_META_LABELS[normalized]||humanizeAnalyticsKey(normalized);
+    }
+    function analyticsMetaSummary(meta){
+      if(meta===null||meta===undefined) return 'Detay yok';
+      let value=meta;
+      if(typeof value==='string'){
+        const trimmed=value.trim();
+        if(!trimmed) return 'Detay yok';
+        try{ value=JSON.parse(trimmed); }
+        catch{
+          return trimmed.length>120?`${trimmed.slice(0,117)}...`:trimmed;
+        }
+      }
+      if(typeof value!=='object' || !value || Array.isArray(value)){
+        const text=String(value||'').trim();
+        return text?(text.length>120?`${text.slice(0,117)}...`:text):'Detay yok';
+      }
+      const parts=[];
+      Object.entries(value).forEach(([k,v])=>{
+        if(parts.length>=3) return;
+        if(v===null||v===undefined||v==='') return;
+        if(typeof v==='object') return;
+        const raw=String(v).trim();
+        if(!raw) return;
+        const text=raw.length>36?`${raw.slice(0,33)}...`:raw;
+        parts.push(`${analyticsMetaLabel(k)}: ${text}`);
+      });
+      return parts.length?parts.join(' | '):'Detay yok';
+    }
+    function analyticsPlatformLabel(v){
+      const p=String(v||'').trim().toLowerCase();
+      if(!p) return '-';
+      if(p==='android') return 'Android';
+      if(p==='ios') return 'iOS';
+      if(p==='web'||p==='browser'||p==='desktop') return 'Web';
+      return humanizeAnalyticsKey(p);
+    }
+    function compactMetric(n){
+      const val=Number(n||0);
+      if(!Number.isFinite(val)) return '0';
+      if(Math.abs(val)>=1000000) return `${(val/1000000).toFixed(1)}M`;
+      if(Math.abs(val)>=1000) return `${(val/1000).toFixed(1)}K`;
+      return String(Math.round(val));
+    }
+    function dashboardDateLabel(value){
+      if(!value) return '-';
+      const dt=new Date(value);
+      if(Number.isNaN(dt.getTime())) return '-';
+      return dt.toLocaleDateString('tr-TR',{day:'2-digit',month:'short'});
+    }
+    function renderDashboardMiniChart(rows){
+      const ordered=[...(Array.isArray(rows)?rows:[])].sort((a,b)=>new Date(a?.bucket||0)-new Date(b?.bucket||0));
+      if(!ordered.length) return '';
+      const values=ordered.map((row)=>(
+        Number(row?.match_attempts||0)+
+        Number(row?.offers||0)+
+        Number(row?.accepts||0)+
+        Number(row?.auto_accepts||0)+
+        Number(row?.rejects||0)+
+        Number(row?.chats_started||0)
+      ));
+      const width=920;
+      const height=220;
+      const padX=18;
+      const padTop=14;
+      const padBottom=26;
+      const innerHeight=height-padTop-padBottom;
+      const max=Math.max(1,...values);
+      const range=max;
+      const step=values.length>1?(width-(padX*2))/(values.length-1):0;
+      const points=values.map((v,idx)=>{
+        const x=padX+(idx*step);
+        const y=padTop+((max-v)/range)*innerHeight;
+        return {x,y};
+      });
+      const linePath=points.map((pt,idx)=>`${idx===0?'M':'L'} ${pt.x.toFixed(2)} ${pt.y.toFixed(2)}`).join(' ');
+      const last=points[points.length-1];
+      const first=points[0];
+      const baseY=height-padBottom;
+      const areaPath=`${linePath} L ${last.x.toFixed(2)} ${baseY.toFixed(2)} L ${first.x.toFixed(2)} ${baseY.toFixed(2)} Z`;
+
+      let gridLines='';
+      for(let i=0;i<4;i++){
+        const ratio=i/3;
+        const y=padTop+(innerHeight*ratio);
+        const label=compactMetric(max-(max*ratio));
+        gridLines+=`<line x1="${padX}" y1="${y.toFixed(2)}" x2="${(width-padX).toFixed(2)}" y2="${y.toFixed(2)}" stroke="rgba(255,255,255,0.08)" stroke-width="1" />`;
+        gridLines+=`<text x="2" y="${(y+4).toFixed(2)}" fill="rgba(182,199,225,0.78)" font-size="11">${label}</text>`;
+      }
+
+      return `
+        <div class="dashboard-chart">
+          <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Son 24 saat aktivite trendi">
+            <defs>
+              <linearGradient id="dashTrendFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="rgba(146,102,255,0.40)" />
+                <stop offset="100%" stop-color="rgba(146,102,255,0.02)" />
+              </linearGradient>
+              <linearGradient id="dashTrendStroke" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#8e66ff" />
+                <stop offset="100%" stop-color="#62a5ff" />
+              </linearGradient>
+            </defs>
+            ${gridLines}
+            <path d="${areaPath}" fill="url(#dashTrendFill)" />
+            <path d="${linePath}" fill="none" stroke="url(#dashTrendStroke)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="${last.x.toFixed(2)}" cy="${last.y.toFixed(2)}" r="4.2" fill="#7c5dff" stroke="#d6e3ff" stroke-width="1.2" />
+          </svg>
+          <div class="axis">
+            <span>${esc(dashboardDateLabel(ordered[0]?.bucket))}</span>
+            <span>${esc(dashboardDateLabel(ordered[Math.floor((ordered.length-1)/2)]?.bucket))}</span>
+            <span>${esc(dashboardDateLabel(ordered[ordered.length-1]?.bucket))}</span>
+          </div>
+        </div>
+      `;
     }
 
     async function switchTab(tab,ev){
@@ -1754,6 +1946,7 @@
         if(!seriesRows.length){
           html+='<p class="deletion-row-note">Aktivite verisi bulunamadi.</p>';
         }else{
+          html+=renderDashboardMiniChart(seriesRows);
           html+=`
                 <div class="table-scroll table-scroll--trend">
                   <table>
@@ -1789,14 +1982,13 @@
           html+='<ul class="dashboard-recent-list">';
           recentItems.forEach((row)=>{
             const userLabel=row?.display_name?`${row?.username||'-'} (${row.display_name})`:(row?.username||'-');
-            const metaRaw=typeof row?.metadata==='string'?row.metadata:JSON.stringify(row?.metadata||{});
-            const metaPreview=metaRaw&&metaRaw.length>120?`${metaRaw.slice(0,117)}...`:metaRaw;
+            const metaPreview=analyticsMetaSummary(row?.metadata);
             html+=`
               <li>
                 <div class="e">${esc(analyticsEventLabel(row?.event_name))}</div>
                 <div class="u">${esc(userLabel)}</div>
                 <div class="m">${esc(metaPreview||'{}')}</div>
-                <div class="t">${d(row?.created_at)} | ${esc(row?.platform||'-')}</div>
+                <div class="t">${d(row?.created_at)} | ${esc(analyticsPlatformLabel(row?.platform))}</div>
               </li>
             `;
           });
