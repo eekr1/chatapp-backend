@@ -144,6 +144,23 @@ const buildAnalyticsWhere = ({ from, to, platform = 'all' }) => {
         params
     };
 };
+const SCHEDULE_TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const normalizeScheduleTime = (value) => {
+    const raw = String(value || '').trim();
+    if (!SCHEDULE_TIME_RE.test(raw)) return null;
+    return raw;
+};
+const normalizeScheduleTimezone = (value) => {
+    const raw = String(value || '').trim();
+    const tz = raw || 'Europe/Istanbul';
+    try {
+        new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date());
+        return tz;
+    } catch {
+        return null;
+    }
+};
+const clampNoticeDurationSeconds = (value, fallback = 10) => Math.max(3, Math.min(60, Number(value) || fallback));
 const normalizeIpForDisplay = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return '';
@@ -1201,6 +1218,276 @@ router.post('/notify', async (req, res) => {
     } catch (e) {
         console.error('admin notify error:', e);
         res.status(500).json({ error: 'Bildirim gonderilemedi.' });
+    }
+});
+
+router.get('/notification-schedules', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `
+            SELECT
+                id,
+                title,
+                body,
+                duration_ms,
+                schedule_time,
+                timezone,
+                is_active,
+                last_sent_local_date,
+                last_sent_at,
+                created_by,
+                created_at,
+                updated_at
+            FROM notification_schedules
+            ORDER BY is_active DESC, schedule_time ASC, created_at DESC
+            `
+        );
+        return res.json({ items: result.rows || [] });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/notification-schedules', async (req, res) => {
+    const title = String(req.body?.title || '').trim().slice(0, 120);
+    const body = String(req.body?.body || '').trim().slice(0, 400);
+    const scheduleTime = normalizeScheduleTime(req.body?.scheduleTime);
+    const timezone = normalizeScheduleTimezone(req.body?.timezone);
+    const durationSeconds = clampNoticeDurationSeconds(req.body?.durationSeconds, 10);
+    const isActive = req.body?.isActive === undefined ? true : !!req.body?.isActive;
+
+    if (!title || !body) {
+        return res.status(400).json({ error: 'Baslik ve bildirim metni zorunlu.' });
+    }
+    if (!scheduleTime) {
+        return res.status(400).json({ error: 'Saat formati gecersiz. HH:MM beklenir.' });
+    }
+    if (!timezone) {
+        return res.status(400).json({ error: 'Gecersiz timezone degeri.' });
+    }
+
+    const durationMs = durationSeconds * 1000;
+    try {
+        const insertRes = await pool.query(
+            `
+            INSERT INTO notification_schedules
+              (title, body, duration_ms, schedule_time, timezone, is_active, created_by, created_at, updated_at)
+            VALUES
+              ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+            RETURNING id, title, body, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
+            `,
+            [title, body, durationMs, scheduleTime, timezone, isActive, String(req.adminUser || 'admin').slice(0, 120)]
+        );
+
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'NOTIFY_SCHEDULE_CREATE',
+            entityType: 'notification_schedule',
+            entityId: insertRes.rows[0]?.id || null,
+            payload: {
+                title,
+                scheduleTime,
+                timezone,
+                durationMs,
+                isActive
+            }
+        });
+
+        return res.json({ success: true, item: insertRes.rows[0] || null });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.put('/notification-schedules/:id', async (req, res) => {
+    const scheduleId = String(req.params.id || '').trim();
+    if (!isUuid(scheduleId)) {
+        return res.status(400).json({ error: 'Gecersiz plan kimligi.' });
+    }
+
+    const title = String(req.body?.title || '').trim().slice(0, 120);
+    const body = String(req.body?.body || '').trim().slice(0, 400);
+    const scheduleTime = normalizeScheduleTime(req.body?.scheduleTime);
+    const timezone = normalizeScheduleTimezone(req.body?.timezone);
+    const durationSeconds = clampNoticeDurationSeconds(req.body?.durationSeconds, 10);
+    const isActive = req.body?.isActive === undefined ? true : !!req.body?.isActive;
+
+    if (!title || !body) {
+        return res.status(400).json({ error: 'Baslik ve bildirim metni zorunlu.' });
+    }
+    if (!scheduleTime) {
+        return res.status(400).json({ error: 'Saat formati gecersiz. HH:MM beklenir.' });
+    }
+    if (!timezone) {
+        return res.status(400).json({ error: 'Gecersiz timezone degeri.' });
+    }
+
+    const durationMs = durationSeconds * 1000;
+    try {
+        const updateRes = await pool.query(
+            `
+            UPDATE notification_schedules
+            SET
+                title = $2,
+                body = $3,
+                duration_ms = $4,
+                schedule_time = $5,
+                timezone = $6,
+                is_active = $7,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, title, body, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
+            `,
+            [scheduleId, title, body, durationMs, scheduleTime, timezone, isActive]
+        );
+        if (!updateRes.rows.length) {
+            return res.status(404).json({ error: 'Plan bulunamadi.' });
+        }
+
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'NOTIFY_SCHEDULE_UPDATE',
+            entityType: 'notification_schedule',
+            entityId: scheduleId,
+            payload: {
+                title,
+                scheduleTime,
+                timezone,
+                durationMs,
+                isActive
+            }
+        });
+
+        return res.json({ success: true, item: updateRes.rows[0] || null });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/notification-schedules/:id/toggle', async (req, res) => {
+    const scheduleId = String(req.params.id || '').trim();
+    if (!isUuid(scheduleId)) {
+        return res.status(400).json({ error: 'Gecersiz plan kimligi.' });
+    }
+    const isActive = !!req.body?.isActive;
+    try {
+        const updateRes = await pool.query(
+            `
+            UPDATE notification_schedules
+            SET is_active = $2, updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, title, body, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
+            `,
+            [scheduleId, isActive]
+        );
+        if (!updateRes.rows.length) {
+            return res.status(404).json({ error: 'Plan bulunamadi.' });
+        }
+
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'NOTIFY_SCHEDULE_TOGGLE',
+            entityType: 'notification_schedule',
+            entityId: scheduleId,
+            payload: {
+                isActive
+            }
+        });
+
+        return res.json({ success: true, item: updateRes.rows[0] || null });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/notification-schedules/:id/run-now', async (req, res) => {
+    const scheduleId = String(req.params.id || '').trim();
+    if (!isUuid(scheduleId)) {
+        return res.status(400).json({ error: 'Gecersiz plan kimligi.' });
+    }
+    if (typeof router.sendSystemNotice !== 'function') {
+        return res.status(503).json({ error: 'Bildirim sistemi hazir degil.' });
+    }
+    try {
+        const scheduleRes = await pool.query(
+            `
+            SELECT id, title, body, duration_ms, schedule_time, timezone, is_active
+            FROM notification_schedules
+            WHERE id = $1
+            LIMIT 1
+            `,
+            [scheduleId]
+        );
+        if (!scheduleRes.rows.length) {
+            return res.status(404).json({ error: 'Plan bulunamadi.' });
+        }
+        const schedule = scheduleRes.rows[0];
+        const safeTimezone = normalizeScheduleTimezone(schedule.timezone) || 'Europe/Istanbul';
+        const result = await router.sendSystemNotice({
+            title: schedule.title,
+            body: schedule.body,
+            durationMs: schedule.duration_ms,
+            target: 'all'
+        });
+
+        await pool.query(
+            `
+            UPDATE notification_schedules
+            SET
+                last_sent_at = NOW(),
+                last_sent_local_date = TO_CHAR(NOW() AT TIME ZONE $2, 'YYYY-MM-DD'),
+                updated_at = NOW()
+            WHERE id = $1
+            `,
+            [scheduleId, safeTimezone]
+        );
+
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'NOTIFY_SCHEDULE_RUN_NOW',
+            entityType: 'notification_schedule',
+            entityId: scheduleId,
+            payload: {
+                scheduleTime: schedule.schedule_time,
+                timezone: safeTimezone
+            }
+        });
+
+        return res.json({ success: true, schedule, result });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/notification-schedules/:id', async (req, res) => {
+    const scheduleId = String(req.params.id || '').trim();
+    if (!isUuid(scheduleId)) {
+        return res.status(400).json({ error: 'Gecersiz plan kimligi.' });
+    }
+    try {
+        const deleteRes = await pool.query(
+            `
+            DELETE FROM notification_schedules
+            WHERE id = $1
+            RETURNING id, title, schedule_time, timezone
+            `,
+            [scheduleId]
+        );
+        if (!deleteRes.rows.length) {
+            return res.status(404).json({ error: 'Plan bulunamadi.' });
+        }
+
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'NOTIFY_SCHEDULE_DELETE',
+            entityType: 'notification_schedule',
+            entityId: scheduleId,
+            payload: deleteRes.rows[0] || {}
+        });
+
+        return res.json({ success: true });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
     }
 });
 

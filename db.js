@@ -188,6 +188,21 @@ const createTablesQuery = `
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS notification_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    duration_ms INTEGER NOT NULL DEFAULT 10000,
+    schedule_time TEXT NOT NULL CHECK (schedule_time ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$'),
+    timezone TEXT NOT NULL DEFAULT 'Europe/Istanbul',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_sent_local_date TEXT,
+    last_sent_at TIMESTAMPTZ,
+    created_by TEXT DEFAULT 'admin',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
   CREATE TABLE IF NOT EXISTS legal_acceptances (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -424,6 +439,8 @@ const createTablesQuery = `
       CREATE INDEX IF NOT EXISTS idx_behavior_events_platform_created_at ON behavior_events(platform, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_behavior_events_match_created_at ON behavior_events(match_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_behavior_events_conversation_created_at ON behavior_events(conversation_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_notification_schedules_active_time ON notification_schedules(is_active, schedule_time);
+      CREATE INDEX IF NOT EXISTS idx_notification_schedules_updated_at ON notification_schedules(updated_at DESC);
 
       -- One-time cleanup: remove admin panel traffic from telemetry history.
       DELETE FROM http_request_events WHERE route LIKE '/admin%';

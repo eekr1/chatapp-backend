@@ -33,11 +33,14 @@ const REQUEST_TELEMETRY_CLEANUP_CHANCE = 0.02;
 const BEHAVIOR_EVENTS_RETENTION_DAYS = Math.max(7, Math.min(365, Number(process.env.BEHAVIOR_EVENTS_RETENTION_DAYS) || 90));
 const BEHAVIOR_EVENTS_CLEANUP_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const BEHAVIOR_EVENTS_CLEANUP_CHANCE = 0.01;
+const NOTIFICATION_SCHEDULER_INTERVAL_MS = Math.max(10000, Math.min(300000, Number(process.env.NOTIFICATION_SCHEDULER_INTERVAL_MS) || 30000));
+const DEFAULT_NOTIFICATION_TIMEZONE = process.env.NOTIFICATION_DEFAULT_TIMEZONE || 'Europe/Istanbul';
 const REQUEST_TELEMETRY_STATIC_FILE_RE = /\.(css|js|mjs|map|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|otf|mp4|webm|ogg)$/i;
 const UUID_SEGMENT_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/ig;
 const NUMERIC_SEGMENT_RE = /\/\d+(?=\/|$)/g;
 const requestTelemetryCleanupState = { running: false, lastRunAt: 0 };
 const behaviorEventsCleanupState = { running: false, lastRunAt: 0 };
+const notificationSchedulerState = { running: false, timer: null };
 
 const toTelemetryPath = (rawUrl = '/') => {
     const raw = String(rawUrl || '/').split('?')[0].trim() || '/';
@@ -128,6 +131,141 @@ const maybeCleanupBehaviorEvents = () => {
         .finally(() => {
             behaviorEventsCleanupState.running = false;
         });
+};
+
+const parseScheduleClock = (value) => {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value || '').trim());
+    if (!match) return null;
+    return {
+        hour: Number(match[1]),
+        minute: Number(match[2])
+    };
+};
+
+const normalizeScheduleTimezone = (value) => {
+    const raw = String(value || '').trim();
+    const candidate = raw || DEFAULT_NOTIFICATION_TIMEZONE;
+    try {
+        new Intl.DateTimeFormat('en-US', { timeZone: candidate }).format(new Date());
+        return candidate;
+    } catch {
+        return DEFAULT_NOTIFICATION_TIMEZONE;
+    }
+};
+
+const getZonedDateParts = (timeZone, at = new Date()) => {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+    const parts = fmt.formatToParts(at);
+    const map = {};
+    for (const p of parts) {
+        if (p.type !== 'literal') map[p.type] = p.value;
+    }
+    const year = Number(map.year);
+    const month = Number(map.month);
+    const day = Number(map.day);
+    const hour = Number(map.hour);
+    const minute = Number(map.minute);
+    if ([year, month, day, hour, minute].some((n) => Number.isNaN(n))) return null;
+    const monthText = String(month).padStart(2, '0');
+    const dayText = String(day).padStart(2, '0');
+    return {
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        localDate: `${year}-${monthText}-${dayText}`,
+        minutesSinceStartOfDay: (hour * 60) + minute
+    };
+};
+
+const runNotificationSchedulesTick = async () => {
+    if (notificationSchedulerState.running) return;
+    if (typeof adminRoutes.sendSystemNotice !== 'function') return;
+
+    notificationSchedulerState.running = true;
+    try {
+        const schedulesRes = await pool.query(
+            `
+            SELECT id, title, body, duration_ms, schedule_time, timezone, is_active, last_sent_local_date
+            FROM notification_schedules
+            WHERE is_active = TRUE
+            `
+        );
+
+        const now = new Date();
+        for (const row of schedulesRes.rows || []) {
+            const scheduleClock = parseScheduleClock(row.schedule_time);
+            if (!scheduleClock) continue;
+
+            const timeZone = normalizeScheduleTimezone(row.timezone);
+            const zonedNow = getZonedDateParts(timeZone, now);
+            if (!zonedNow) continue;
+
+            const scheduleMinute = (scheduleClock.hour * 60) + scheduleClock.minute;
+            if (zonedNow.minutesSinceStartOfDay < scheduleMinute) continue;
+            if (String(row.last_sent_local_date || '') === zonedNow.localDate) continue;
+
+            try {
+                await adminRoutes.sendSystemNotice({
+                    title: String(row.title || '').trim(),
+                    body: String(row.body || '').trim(),
+                    durationMs: Math.max(3000, Math.min(60000, Number(row.duration_ms) || 10000)),
+                    target: 'all'
+                });
+                await pool.query(
+                    `
+                    UPDATE notification_schedules
+                    SET
+                        last_sent_local_date = $2,
+                        last_sent_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = $1
+                    `,
+                    [row.id, zonedNow.localDate]
+                );
+                trackBehaviorEvent({
+                    eventName: 'scheduled_notification_sent',
+                    metadata: {
+                        schedule_id: row.id,
+                        timezone: timeZone,
+                        schedule_time: row.schedule_time
+                    }
+                });
+            } catch (e) {
+                console.warn('scheduled notice send failed:', row.id, e?.message || e);
+            }
+        }
+    } catch (e) {
+        console.warn('notification scheduler tick failed:', e?.message || e);
+    } finally {
+        notificationSchedulerState.running = false;
+    }
+};
+
+const startNotificationScheduler = () => {
+    if (notificationSchedulerState.timer) {
+        clearInterval(notificationSchedulerState.timer);
+    }
+    notificationSchedulerState.timer = setInterval(() => {
+        runNotificationSchedulesTick().catch((e) => {
+            console.warn('notification scheduler error:', e?.message || e);
+        });
+    }, NOTIFICATION_SCHEDULER_INTERVAL_MS);
+
+    setTimeout(() => {
+        runNotificationSchedulesTick().catch((e) => {
+            console.warn('notification scheduler bootstrap error:', e?.message || e);
+        });
+    }, 1500);
 };
 
 // Middleware to expose online status
@@ -2589,6 +2727,7 @@ app.get('*', (req, res) => {
 const startServer = async () => {
     try {
         await ensureTables();
+        startNotificationScheduler();
         server.listen(port, () => {
             console.log(`Backend running on ${port}`);
         });

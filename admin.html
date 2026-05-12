@@ -6,50 +6,50 @@
   <title>TalkX Yonetim Paneli</title>
   <style>
     :root {
-      --bg: #0f1420;
-      --bg-2: #0b101a;
-      --surface: #171d2b;
-      --surface-2: #1f2738;
-      --surface-3: #23304a;
-      --border: #2f3c58;
-      --text: #e8edf7;
-      --muted: #9aa8c0;
-      --muted-2: #7f8da6;
-      --accent: #4ea1ff;
-      --accent-2: #2b84e6;
-      --success: #39d98a;
-      --danger: #ff6b7a;
-      --warning: #ffbe55;
-      --shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+      --bg: #161d29;
+      --bg-2: #111722;
+      --surface: #1b2432;
+      --surface-2: #243043;
+      --surface-3: #2d3a52;
+      --border: #3a4861;
+      --text: #e9eef8;
+      --muted: #a4b2c8;
+      --muted-2: #8e9cb3;
+      --accent: #6aaeff;
+      --accent-2: #4f96eb;
+      --success: #45d89b;
+      --danger: #ff7988;
+      --warning: #ffc46d;
+      --shadow: 0 14px 34px rgba(4, 8, 16, 0.26);
     }
-    body { font-family: Segoe UI, Tahoma, sans-serif; margin: 0; padding: 20px; background:linear-gradient(180deg,var(--bg-2),var(--bg)); color:var(--text); }
+    body { font-family: Segoe UI, Tahoma, sans-serif; margin: 0; padding: 20px; background:radial-gradient(1000px 520px at 15% -10%, rgba(112,157,220,0.18), transparent 60%),linear-gradient(180deg,var(--bg-2),var(--bg)); color:var(--text); }
     .container { max-width: 1500px; margin: 0 auto; }
     .header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; }
     .brand { display:flex; align-items:center; gap:10px; }
-    .logo { width:34px; height:34px; border-radius:10px; object-fit:contain; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); }
+    .logo { width:34px; height:34px; border-radius:12px; object-fit:contain; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); }
     .cards { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); margin-bottom:16px; }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; box-shadow:var(--shadow); }
+    .card { background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); border:1px solid var(--border); border-radius:16px; padding:14px; box-shadow:var(--shadow); backdrop-filter: blur(2px); }
     .card .t { font-size:12px; color:var(--muted); text-transform:uppercase; margin-bottom:8px; }
     .card .v { font-size:28px; font-weight:700; }
     .card .s { font-size:12px; color:var(--success); margin-top:4px; }
-    .panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+    .panel { background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.012)); border:1px solid var(--border); border-radius:16px; padding:16px; box-shadow:var(--shadow); backdrop-filter: blur(2px); }
     .tabs { border-bottom:2px solid var(--border); margin-bottom:12px; display:flex; flex-wrap:wrap; gap:2px; }
-    .tab { border:none; border-radius:8px 8px 0 0; background:none; padding:10px 14px; color:var(--muted); font-weight:600; cursor:pointer; border-bottom:2px solid transparent; transition:background .12s ease,color .12s ease; }
+    .tab { border:none; border-radius:10px 10px 0 0; background:none; padding:10px 14px; color:var(--muted); font-weight:600; cursor:pointer; border-bottom:2px solid transparent; transition:background .14s ease,color .14s ease; }
     .tab:hover { background:rgba(255,255,255,0.04); color:var(--text); }
     .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
     .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
-    input, select { border:1px solid var(--border); border-radius:6px; padding:8px; background:var(--surface-2); color:var(--text); }
+    input, select { border:1px solid var(--border); border-radius:10px; padding:8px 10px; background:rgba(21,28,40,0.74); color:var(--text); }
     input::placeholder, textarea::placeholder { color:var(--muted-2); }
     input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px rgba(78,161,255,0.2); }
     table { width:100%; border-collapse:collapse; table-layout:fixed; }
     th, td { padding:10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle; word-break:break-word; }
-    th { background:var(--surface-2); color:var(--muted); }
-    tbody tr:nth-child(even) { background:rgba(255,255,255,0.015); }
-    tbody tr:hover { background:rgba(78,161,255,0.08); }
+    th { background:rgba(255,255,255,0.035); color:var(--muted); }
+    tbody tr:nth-child(even) { background:rgba(255,255,255,0.02); }
+    tbody tr:hover { background:rgba(106,174,255,0.06); }
     .th-sort { border:none; background:transparent; padding:0; color:var(--muted); font:inherit; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
     .th-sort:hover { color:var(--text); }
     .th-sort.is-active { color:var(--accent); }
-    .btn { border:none; border-radius:6px; padding:6px 10px; color:#fff; cursor:pointer; font-size:12px; margin-right:5px; }
+    .btn { border:none; border-radius:10px; padding:6px 10px; color:#fff; cursor:pointer; font-size:12px; margin-right:5px; }
     .btn:hover { filter:brightness(1.08); }
     .btn:disabled { opacity:.55; cursor:not-allowed; filter:none; }
     .btn-refresh, .btn-details { background:var(--accent-2); }
@@ -62,44 +62,52 @@
     .badge { display:inline-block; color:#fff; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:700; }
     .badge.sent { background:#2cad6b; } .badge.failed { background:#d94f4f; } .badge.pending { background:#c88b2f; }
     .badge.temp, .badge.system { background:#c88b2f; } .badge.perm { background:#b63c3c; } .badge.shadow { background:#4a5a75; }
-    .diag { border:1px solid var(--border); border-radius:10px; background:var(--surface-2); padding:10px; margin-bottom:12px; font-size:13px; color:var(--text); }
+    .diag { border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02); padding:10px; margin-bottom:12px; font-size:13px; color:var(--text); }
     .diag-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px 12px; }
     .modal { position:fixed; inset:0; background:rgba(0,0,0,.68); display:none; align-items:center; justify-content:center; padding:12px; z-index:9999; }
-    .modal-box { width:min(900px,100%); max-height:90vh; overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .modal-box { width:min(900px,100%); max-height:90vh; overflow-y:auto; background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); border:1px solid var(--border); border-radius:16px; padding:16px; }
     .modal-close { float:right; cursor:pointer; font-size:24px; line-height:1; color:var(--muted); }
     .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; margin-bottom:10px; }
-    .item { border:1px solid var(--border); border-radius:8px; background:var(--surface-2); padding:8px; font-size:13px; }
-    .desc { border:1px solid var(--border); border-radius:8px; background:var(--surface-2); padding:10px; white-space:pre-wrap; }
+    .item { border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,0.02); padding:8px; font-size:13px; }
+    .desc { border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,0.02); padding:10px; white-space:pre-wrap; }
     .media { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:10px; }
-    .media .m { border:1px solid var(--border); border-radius:8px; padding:8px; background:var(--surface-2); }
+    .media .m { border:1px solid var(--border); border-radius:10px; padding:8px; background:rgba(255,255,255,0.02); }
     .media img, .media video { width:100%; max-height:220px; object-fit:contain; background:#0a0f18; border-radius:8px; }
     .legal-editor { display:flex; flex-direction:column; gap:12px; }
     .legal-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
     .legal-field { display:flex; flex-direction:column; gap:6px; }
     .legal-field label { font-size:12px; color:var(--muted); font-weight:600; }
-    .legal-field textarea { border:1px solid var(--border); border-radius:8px; padding:10px; resize:vertical; min-height:110px; font-family:Consolas,monospace; font-size:12px; background:var(--surface-2); color:var(--text); }
+    .legal-field textarea { border:1px solid var(--border); border-radius:10px; padding:10px; resize:vertical; min-height:110px; font-family:Consolas,monospace; font-size:12px; background:rgba(21,28,40,0.74); color:var(--text); }
     .legal-status { font-size:12px; color:var(--muted); }
     .deletion-row-note { font-size:12px; color:var(--muted); margin-bottom:8px; }
     .warn { border:1px solid #89444e; background:#371f24; color:#ffbdc4; border-radius:8px; padding:10px; font-size:12px; }
     .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:8px 0 12px; }
-    .metric { border:1px solid var(--border); background:var(--surface-2); border-radius:10px; padding:10px; }
+    .metric { border:1px solid var(--border); background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; }
     .metric .k { font-size:11px; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
     .metric .n { font-size:22px; font-weight:700; color:var(--text); }
-    .analytics-toolbar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; margin-bottom:10px; padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
+    .analytics-toolbar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; margin-bottom:10px; padding:10px; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02); }
     .analytics-toolbar .f { display:flex; flex-direction:column; gap:4px; }
     .analytics-toolbar .f label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; }
     .funnel-grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin:8px 0 12px; }
-    .funnel-step { border:1px solid var(--border); border-radius:10px; background:var(--surface-2); padding:10px; }
+    .funnel-step { border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02); padding:10px; }
     .funnel-step .s { font-size:11px; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
     .funnel-step .v { font-size:22px; font-weight:700; }
     .funnel-step .r { font-size:12px; color:var(--success); margin-top:4px; }
     .profiles-pagination { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; color:var(--muted); font-size:12px; flex-wrap:wrap; }
     .profiles-pagination .controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .profiles-pagination .btn { margin-right:0; }
-    .bulk-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:10px 0 12px; padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); flex-wrap:wrap; }
+    .bulk-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:10px 0 12px; padding:10px; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02); flex-wrap:wrap; }
     .bulk-toolbar .bulk-left { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
     .bulk-toolbar .bulk-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-    .bulk-counter { display:inline-flex; align-items:center; border:1px solid var(--border); background:var(--surface-3); color:var(--text); border-radius:999px; padding:4px 8px; font-weight:700; }
+    .bulk-counter { display:inline-flex; align-items:center; border:1px solid var(--border); background:rgba(255,255,255,0.06); color:var(--text); border-radius:999px; padding:4px 8px; font-weight:700; }
+    .table-scroll { overflow:auto; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.015); }
+    .table-scroll--trend { max-height:320px; }
+    .table-scroll table { margin:0; }
+    .table-scroll thead th { position:sticky; top:0; z-index:2; background:rgba(19,25,36,0.95); }
+    .table-scroll::-webkit-scrollbar { width:10px; height:10px; }
+    .table-scroll::-webkit-scrollbar-track { background:rgba(255,255,255,0.03); border-radius:10px; }
+    .table-scroll::-webkit-scrollbar-thumb { background:rgba(132,167,214,0.42); border-radius:10px; }
+    .table-scroll::-webkit-scrollbar-thumb:hover { background:rgba(132,167,214,0.62); }
     .bulk-select-cell { width:42px; text-align:center; }
     .bulk-select-cell input { cursor:pointer; }
     .list-compact { margin:0; padding-left:18px; }
@@ -139,16 +147,9 @@
         <button class="tab" onclick="switchTab('deletion_requests',event)">Silme Talepleri</button>
         <button class="tab" onclick="switchTab('audit_logs',event)">Audit Log</button>
         <button class="tab" onclick="switchTab('performance',event)">Performans</button>
+        <button class="tab" onclick="switchTab('notification_settings',event)">Bildirim Ayarlari</button>
         <button class="tab" onclick="switchTab('analytics',event)">Davranis Analitigi</button>
         <button class="tab" onclick="switchTab('online_users',event)">Anlik Online Profiller</button>
-      </div>
-
-      <div class="row">
-        <input id="notify-title" type="text" placeholder="Bildirim basligi" style="min-width:190px">
-        <input id="notify-body" type="text" placeholder="Bildirim metni" style="min-width:280px">
-        <input id="notify-duration" type="number" min="3" max="60" step="1" value="10" style="width:120px">
-        <button class="btn btn-notify" onclick="sendNotice()">Bildirim Gonder</button>
-        <span id="notify-result" style="font-size:12px;color:#9aa8c0"></span>
       </div>
 
       <div class="diag">
@@ -185,6 +186,8 @@
     let currentAnalyticsFrom='';
     let currentAnalyticsTo='';
     let currentAnalyticsQuery='';
+    let notificationScheduleEditId=null;
+    let notificationSchedulesCache=[];
     let profileSortBy='created_at';
     let profileSortDir='desc';
     let profilePage=1;
@@ -853,6 +856,195 @@
       }
     }
 
+    function resetNotificationScheduleForm(){
+      notificationScheduleEditId=null;
+      const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v;};
+      const setChecked=(id,v)=>{const el=document.getElementById(id); if(el) el.checked=!!v;};
+      set('schedule-title','');
+      set('schedule-body','');
+      set('schedule-duration','10');
+      set('schedule-time','12:00');
+      set('schedule-timezone','Europe/Istanbul');
+      setChecked('schedule-active',true);
+      const mode=document.getElementById('schedule-form-mode');
+      if(mode) mode.textContent='Yeni Plan';
+    }
+    function editNotificationSchedule(scheduleId){
+      const item=(notificationSchedulesCache||[]).find((x)=>String(x.id||'')===String(scheduleId||''));
+      if(!item) return;
+      notificationScheduleEditId=item.id;
+      const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v;};
+      const setChecked=(id,v)=>{const el=document.getElementById(id); if(el) el.checked=!!v;};
+      set('schedule-title',item.title||'');
+      set('schedule-body',item.body||'');
+      set('schedule-duration',String(Math.max(3,Math.min(60,Math.round((Number(item.duration_ms)||10000)/1000)))));
+      set('schedule-time',item.schedule_time||'12:00');
+      set('schedule-timezone',item.timezone||'Europe/Istanbul');
+      setChecked('schedule-active',item.is_active!==false);
+      const mode=document.getElementById('schedule-form-mode');
+      if(mode) mode.textContent='Plan Duzenle';
+    }
+    function collectNotificationSchedulePayload(){
+      const title=String(val('schedule-title')||'').trim();
+      const body=String(val('schedule-body')||'').trim();
+      const durationSeconds=Math.max(3,Math.min(60,Number(val('schedule-duration'))||10));
+      const scheduleTime=String(val('schedule-time')||'').trim();
+      const timezone=String(val('schedule-timezone')||'').trim()||'Europe/Istanbul';
+      const isActive=!!document.getElementById('schedule-active')?.checked;
+      if(!title||!body) throw new Error('Baslik ve bildirim metni zorunlu.');
+      if(!/^([01]\d|2[0-3]):([0-5]\d)$/.test(scheduleTime)) throw new Error('Saat formati gecersiz. HH:MM girin.');
+      return { title, body, durationSeconds, scheduleTime, timezone, isActive };
+    }
+    async function saveNotificationSchedule(){
+      try{
+        const payload=collectNotificationSchedulePayload();
+        const url=notificationScheduleEditId?`/admin/notification-schedules/${notificationScheduleEditId}`:'/admin/notification-schedules';
+        const method=notificationScheduleEditId?'PUT':'POST';
+        const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Plan kaydedilemedi.');
+        notificationScheduleEditId=null;
+        await loadNotificationSettingsTab();
+      }catch(e){
+        alert(`Plan kaydetme hatasi: ${e.message||e}`);
+      }
+    }
+    async function toggleNotificationSchedule(scheduleId,isActive){
+      try{
+        const r=await fetch(`/admin/notification-schedules/${scheduleId}/toggle`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({isActive:!!isActive})
+        });
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Plan durumu guncellenemedi.');
+        await loadNotificationSettingsTab();
+      }catch(e){
+        alert(`Plan durum hatasi: ${e.message||e}`);
+      }
+    }
+    async function runNotificationScheduleNow(scheduleId){
+      if(!confirm('Bu plan hemen calistirilsin mi?')) return;
+      try{
+        const r=await fetch(`/admin/notification-schedules/${scheduleId}/run-now`,{method:'POST'});
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Plan tetiklenemedi.');
+        await loadNotificationSettingsTab();
+      }catch(e){
+        alert(`Plan calistirma hatasi: ${e.message||e}`);
+      }
+    }
+    async function deleteNotificationSchedule(scheduleId){
+      if(!confirm('Bu plan kalici olarak silinsin mi?')) return;
+      try{
+        const r=await fetch(`/admin/notification-schedules/${scheduleId}`,{method:'DELETE'});
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Plan silinemedi.');
+        await loadNotificationSettingsTab();
+      }catch(e){
+        alert(`Plan silme hatasi: ${e.message||e}`);
+      }
+    }
+    function renderNotificationSettingsTab(items){
+      const c=document.getElementById('content');
+      const list=Array.isArray(items)?items:[];
+      notificationSchedulesCache=list;
+      let html=`
+        <div class="metrics">
+          <div class="metric"><div class="k">Toplam Plan</div><div class="n">${list.length}</div></div>
+          <div class="metric"><div class="k">Aktif Plan</div><div class="n">${list.filter((x)=>x.is_active).length}</div></div>
+          <div class="metric"><div class="k">Pasif Plan</div><div class="n">${list.filter((x)=>!x.is_active).length}</div></div>
+        </div>
+
+        <h3>Anlik Bildirim Gonder</h3>
+        <div class="row">
+          <input id="notify-title" type="text" placeholder="Bildirim basligi" style="min-width:220px">
+          <input id="notify-body" type="text" placeholder="Bildirim metni" style="min-width:360px">
+          <input id="notify-duration" type="number" min="3" max="60" step="1" value="10" style="width:130px">
+          <button class="btn btn-notify" onclick="sendNotice()">Hemen Gonder</button>
+          <span id="notify-result" style="font-size:12px;color:#9aa8c0"></span>
+        </div>
+
+        <h3><span id="schedule-form-mode">Yeni Plan</span></h3>
+        <div class="panel" style="padding:12px">
+          <div class="row">
+            <input id="schedule-title" type="text" placeholder="Plan basligi" style="min-width:220px">
+            <input id="schedule-body" type="text" placeholder="Plan bildirimi metni" style="min-width:380px">
+            <input id="schedule-duration" type="number" min="3" max="60" step="1" value="10" style="width:120px">
+            <input id="schedule-time" type="time" value="12:00" style="width:130px">
+            <input id="schedule-timezone" type="text" value="Europe/Istanbul" style="min-width:180px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#9aa8c0"><input id="schedule-active" type="checkbox" checked>Aktif</label>
+            <button class="btn btn-refresh" onclick="saveNotificationSchedule()">Kaydet</button>
+            <button class="btn btn-shadow" onclick="resetNotificationScheduleForm()">Temizle</button>
+          </div>
+        </div>
+      `;
+
+      html+='<h3>Planli Bildirimler</h3>';
+      if(!list.length){
+        html+='<p class="deletion-row-note">Kayitli plan bulunamadi.</p>';
+        c.innerHTML=html;
+        resetNotificationScheduleForm();
+        return;
+      }
+
+      html+=`
+        <table>
+          <thead>
+            <tr>
+              <th>Durum</th>
+              <th>Saat</th>
+              <th>Timezone</th>
+              <th>Baslik</th>
+              <th>Metin</th>
+              <th>Sure (sn)</th>
+              <th>Son Gonderim</th>
+              <th>Islem</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      list.forEach((it)=>{
+        const sec=Math.max(3,Math.min(60,Math.round((Number(it.duration_ms)||10000)/1000)));
+        const status=it.is_active?'Aktif':'Pasif';
+        const statusBadge=it.is_active?'sent':'failed';
+        const nextToggleLabel=it.is_active?'Pasif Yap':'Aktif Yap';
+        const nextToggleState=!it.is_active;
+        html+=`
+          <tr>
+            <td><span class="badge ${statusBadge}">${status}</span></td>
+            <td>${esc(it.schedule_time||'-')}</td>
+            <td>${esc(it.timezone||'-')}</td>
+            <td>${esc(it.title||'-')}</td>
+            <td>${esc(it.body||'-')}</td>
+            <td>${sec}</td>
+            <td>${d(it.last_sent_at)}<br/><small>${esc(it.last_sent_local_date||'-')}</small></td>
+            <td>
+              <button class="btn btn-details" onclick="editNotificationSchedule('${it.id}')">Duzenle</button>
+              <button class="btn btn-shadow" onclick="toggleNotificationSchedule('${it.id}',${nextToggleState})">${nextToggleLabel}</button>
+              <button class="btn btn-notify" onclick="runNotificationScheduleNow('${it.id}')">Simdi Calistir</button>
+              <button class="btn btn-delete" onclick="deleteNotificationSchedule('${it.id}')">Sil</button>
+            </td>
+          </tr>
+        `;
+      });
+      html+='</tbody></table>';
+      c.innerHTML=html;
+      resetNotificationScheduleForm();
+    }
+    async function loadNotificationSettingsTab(){
+      const c=document.getElementById('content');
+      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Bildirim ayarlari yukleniyor...</p>';
+      try{
+        const r=await fetch('/admin/notification-schedules');
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok) throw new Error(x.error||'Bildirim planlari okunamadi.');
+        renderNotificationSettingsTab(Array.isArray(x.items)?x.items:[]);
+      }catch(e){
+        c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Bildirim ayarlari yuklenemedi: ${esc(e.message||e)}</p>`;
+      }
+    }
+
     function renderPerformanceView(overview,timeseries,slowItems){
       const c=document.getElementById('content');
       const hours=Number(overview?.hours||currentPerformanceHours||24);
@@ -1115,26 +1307,27 @@
         html+='<p class="deletion-row-note">Trend verisi bulunamadi.</p>';
       }else{
         html+=`
-          <table>
-            <thead>
-              <tr>
-                <th>Zaman</th>
-                <th>Tekil Gelen</th>
-                <th>Match Deneme</th>
-                <th>Match Bulma</th>
-                <th>Kabul</th>
-                <th>Red</th>
-                <th>Oto Kabul</th>
-                <th>Sohbet Baslangic</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div class="table-scroll table-scroll--trend">
+            <table>
+              <thead>
+                <tr>
+                  <th>Zaman</th>
+                  <th>Tekil Gelen</th>
+                  <th>Match Deneme</th>
+                  <th>Match Bulma</th>
+                  <th>Kabul</th>
+                  <th>Red</th>
+                  <th>Oto Kabul</th>
+                  <th>Sohbet Baslangic</th>
+                </tr>
+              </thead>
+              <tbody>
         `;
         series.forEach((row)=>{
           const accepted=Number(row.accepts||0)+Number(row.auto_accepts||0);
           html+=`<tr><td>${d(row.bucket)}</td><td>${Number(row.unique_arrivals||0)}</td><td>${Number(row.match_attempts||0)}</td><td>${Number(row.offers||0)}</td><td>${accepted}</td><td>${Number(row.rejects||0)}</td><td>${Number(row.auto_accepts||0)}</td><td>${Number(row.chats_started||0)}</td></tr>`;
         });
-        html+='</tbody></table>';
+        html+='</tbody></table></div>';
       }
 
       html+='<h3>Event Dagilimi</h3>';
@@ -1322,6 +1515,7 @@
         if(currentTab==='deletion_requests'){ await loadDeletionRequests(); return; }
         if(currentTab==='audit_logs'){ await loadAuditLogs(); return; }
         if(currentTab==='performance'){ await loadPerformanceTab(); return; }
+        if(currentTab==='notification_settings'){ await loadNotificationSettingsTab(); return; }
         if(currentTab==='analytics'){ await loadAnalyticsTab(); return; }
         const q=document.getElementById('search-input')?.value||'';
         const qs=new URLSearchParams({type:currentTab,q});
