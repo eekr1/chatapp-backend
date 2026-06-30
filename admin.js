@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const https = require('https');
+const http = require('http');
 const path = require('path');
 const { pool } = require('./db');
 const { getPushDiagnostics } = require('./utils/push');
@@ -57,7 +58,8 @@ const clampProfilePageSize = (value, fallback = 50) => Math.max(1, Math.min(100,
 const GEO_LOOKUP_TIMEOUT_MS = Math.max(500, Math.min(5000, Number(process.env.ADMIN_GEO_LOOKUP_TIMEOUT_MS) || 3500));
 const GEO_CACHE_TTL_MS = Math.max(60000, Math.min(7 * 24 * 60 * 60 * 1000, Number(process.env.ADMIN_GEO_CACHE_TTL_MS) || 24 * 60 * 60 * 1000));
 const GEO_DB_REFRESH_MS = Math.max(60 * 60 * 1000, Math.min(30 * 24 * 60 * 60 * 1000, Number(process.env.ADMIN_GEO_DB_REFRESH_MS) || 7 * 24 * 60 * 60 * 1000));
-const GEO_PROFILE_LIST_CONCURRENCY = Math.max(1, Math.min(6, Number(process.env.ADMIN_GEO_PROFILE_LIST_CONCURRENCY) || 3));
+const GEO_PROFILE_LIST_CONCURRENCY = Math.max(1, Math.min(6, Number(process.env.ADMIN_GEO_PROFILE_LIST_CONCURRENCY) || 2));
+const GEO_PROFILE_LIST_LOOKUP_LIMIT = Math.max(0, Math.min(25, Number(process.env.ADMIN_GEO_PROFILE_LIST_LOOKUP_LIMIT) || 8));
 const geoLookupCache = new Map();
 const PROFILE_SORT_COLUMN_MAP = Object.freeze({
     created_at: 'u.created_at',
@@ -205,7 +207,8 @@ const setCachedGeoLocation = (ip, value) => {
     });
 };
 const requestGeoJson = (url) => new Promise((resolve, reject) => {
-    const req = https.get(url, {
+    const client = String(url || '').startsWith('http:') ? http : https;
+    const req = client.get(url, {
         headers: {
             'Accept': 'application/json',
             'User-Agent': 'TalkX-Admin/1.0'
@@ -259,6 +262,18 @@ const lookupGeoFromIpWhoIs = async (ip) => {
         source: 'ipwho.is'
     };
 };
+const lookupGeoFromIpApiCom = async (ip) => {
+    const json = await requestGeoJson(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,city,query`);
+    if (json?.status !== 'success') return null;
+    const city = normalizeLocationText(json?.city);
+    const country = normalizeLocationText(json?.country);
+    if (!city && !country) return null;
+    return {
+        city,
+        country,
+        source: 'ip-api.com'
+    };
+};
 const buildFallbackLocation = (ip) => {
     if (!ip) {
         return {
@@ -305,21 +320,16 @@ const resolveRegistrationLocation = async (ipValue) => {
     }
 
     let resolved = null;
-    try {
-        resolved = await lookupGeoFromIpApiCo(ip);
-    } catch {
-        resolved = null;
-    }
-    if (!resolved) {
+    for (const lookup of [lookupGeoFromIpWhoIs, lookupGeoFromIpApiCo, lookupGeoFromIpApiCom]) {
         try {
-            resolved = await lookupGeoFromIpWhoIs(ip);
+            resolved = await lookup(ip);
         } catch {
             resolved = null;
         }
+        if (resolved) break;
     }
 
     if (!resolved) {
-        setCachedGeoLocation(ip, fallback);
         return fallback;
     }
 
@@ -392,10 +402,18 @@ const resolveRegistrationLocationForRow = async (row) => {
         ip: normalizedIp
     };
 
-    try {
-        await persistRegistrationLocation(row.registration_id || row.id, location);
-    } catch (e) {
-        console.warn('registration location persist failed:', e?.message || e);
+    const shouldPersist = Boolean(
+        location.city
+        || location.country
+        || location.source === 'local'
+        || location.source === 'private'
+    );
+    if (shouldPersist) {
+        try {
+            await persistRegistrationLocation(row.registration_id || row.id, location);
+        } catch (e) {
+            console.warn('registration location persist failed:', e?.message || e);
+        }
     }
 
     return location;
@@ -415,22 +433,36 @@ const mapWithConcurrency = async (items, limit, mapper) => {
     return results;
 };
 
-const attachRegistrationLocationToProfileRows = async (rows) => mapWithConcurrency(
-    rows,
-    GEO_PROFILE_LIST_CONCURRENCY,
-    async (row) => {
-        const location = row.registration_id ? await resolveRegistrationLocationForRow(row) : null;
-        return {
-            ...row,
-            registration_ip: location?.ip || normalizeIpForDisplay(row.registration_ip) || null,
-            location_city: location?.city || null,
-            location_country: location?.country || null,
-            location_label: location?.label || null,
-            location_source: location?.source || row.location_source || null,
-            location_resolved_at: row.location_resolved_at || null
-        };
-    }
-);
+const attachRegistrationLocationToProfileRows = async (rows) => {
+    let liveLookupBudget = GEO_PROFILE_LIST_LOOKUP_LIMIT;
+    return mapWithConcurrency(
+        rows,
+        GEO_PROFILE_LIST_CONCURRENCY,
+        async (row) => {
+            let location = null;
+            const normalizedIp = normalizeIpForDisplay(row.registration_ip) || null;
+
+            if (row.registration_id && hasFreshStoredRegistrationLocation(row)) {
+                location = locationFromRegistrationRow(row, normalizedIp);
+            } else if (row.registration_id && liveLookupBudget > 0) {
+                liveLookupBudget -= 1;
+                location = await resolveRegistrationLocationForRow(row);
+            } else if (row.registration_id) {
+                location = locationFromRegistrationRow(row, normalizedIp);
+            }
+
+            return {
+                ...row,
+                registration_ip: location?.ip || normalizedIp,
+                location_city: location?.city || null,
+                location_country: location?.country || null,
+                location_label: location?.label || null,
+                location_source: location?.source || row.location_source || null,
+                location_resolved_at: row.location_resolved_at || null
+            };
+        }
+    );
+};
 const logAdminAudit = async (dbOrPool, {
     actorAdmin = 'admin',
     actionType,

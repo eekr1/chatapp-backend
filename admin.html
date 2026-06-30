@@ -2083,11 +2083,11 @@
         if(allowBulk) h+='<th class="bulk-select-cell"><input id="bulk-select-all" type="checkbox" onclick="toggleBulkAll(this.checked)" aria-label="Tumunu sec"></th>';
         if(currentTab==='reports') h+='<th>Tarih</th><th>Raporlayan</th><th>Raporlanan</th><th>Sebep</th><th>Islem</th>';
         else if(currentTab==='bans') h+='<th>Kullanici</th><th>Tur</th><th>Bitis</th><th>Sebep</th><th>Islem</th>';
-        else if(currentTab==='profiles') h+=`${renderProfileSortHeader('Kullanici','username')}<th>Gorunen Isim</th><th>Sehir</th><th>Ulke</th>${renderProfileSortHeader('Son Gorulme','last_seen_at')}${renderProfileSortHeader('Kayit','created_at')}<th>Islem</th>`;
+        else if(currentTab==='profiles') h+=`${renderProfileSortHeader('Kullanici','username')}<th>Gorunen Isim</th><th>Sehir</th><th>Ulke</th><th>IP/Kaynak</th>${renderProfileSortHeader('Son Gorulme','last_seen_at')}${renderProfileSortHeader('Kayit','created_at')}<th>Islem</th>`;
         else h+='<th>Tarih</th><th>Konu</th><th>Kullanici</th><th>E-posta</th><th>Durum</th><th>Medya</th><th>Islem</th>';
         h+='</tr></thead><tbody>';
         if(!items.length){
-          const baseColSpan=currentTab==='reports'?5:currentTab==='bans'?5:currentTab==='profiles'?7:7;
+          const baseColSpan=currentTab==='reports'?5:currentTab==='bans'?5:currentTab==='profiles'?8:7;
           const colSpan=allowBulk?baseColSpan+1:baseColSpan;
           h+=`<tr><td colspan="${colSpan}">Kayit bulunamadi.</td></tr>`;
         }else{
@@ -2108,7 +2108,8 @@
             }else if(currentTab==='bans'){
               h+=`<td>${esc(it.nickname||'Bilinmiyor')}</td><td><span class="badge ${esc(it.ban_type)}">${esc((it.ban_type||'').toUpperCase())}</span></td><td>${it.ban_until?new Date(it.ban_until).toLocaleString():'SURESIZ'}</td><td>${esc(it.reason||'')}</td><td><button class="btn btn-unban" onclick="actionUnban('${it.user_id}')">Yasagi Kaldir</button></td>`;
             }else if(currentTab==='profiles'){
-              h+=`<td><span class="username-cell"><strong>${esc(it.username||'-')}</strong>${renderProfilePlatformIcon(it.last_platform)}</span></td><td>${esc(it.display_name||'-')}</td><td title="${esc(it.location_label||it.registration_ip||'')}">${esc(it.location_city||'-')}</td><td title="${esc(it.location_label||it.registration_ip||'')}">${esc(it.location_country||'-')}</td><td>${d(it.last_seen_at)}</td><td>${d(it.created_at)}</td><td><button class="btn btn-details" onclick="openProfileDetails('${it.id}','${esc(it.username||'-')}')">Detay</button><button class="btn btn-ban" onclick="actionBan('${it.id}',1,'Panel islemi')">Yasakla</button></td>`;
+              const geoHint=[it.registration_ip,it.location_source].filter(Boolean).join(' / ');
+              h+=`<td><span class="username-cell"><strong>${esc(it.username||'-')}</strong>${renderProfilePlatformIcon(it.last_platform)}</span></td><td>${esc(it.display_name||'-')}</td><td title="${esc(it.location_label||geoHint)}">${esc(it.location_city||'-')}</td><td title="${esc(it.location_label||geoHint)}">${esc(it.location_country||'-')}</td><td title="${esc(it.location_label||'')}">${esc(geoHint||'-')}</td><td>${d(it.last_seen_at)}</td><td>${d(it.created_at)}</td><td><button class="btn btn-details" onclick="openProfileDetails('${it.id}','${esc(it.username||'-')}')">Detay</button><button class="btn btn-ban" onclick="actionBan('${it.id}',1,'Panel islemi')">Yasakla</button></td>`;
             }else{
               h+=`<td>${d(it.created_at)}</td><td>${esc(subject(it.subject))}</td><td>${esc(it.username_snapshot||'-')}</td><td>${esc(it.contact_email||'-')}</td><td><span class="badge ${esc(it.brevo_status||'pending')}">${esc(brevo(it.brevo_status))}</span></td><td>${Number(it.media_count||0)}</td><td><button class="btn btn-details" onclick="openSupportDetails('${it.id}')">Detay</button><button class="btn btn-delete" onclick="deleteSupportReport('${it.id}')">Sil</button></td>`;
             }
@@ -2154,6 +2155,7 @@
           <div class="item"><strong>Kayit Sehir</strong>${esc(reg?.location_city||'-')}</div>
           <div class="item"><strong>Kayit Ulke</strong>${esc(reg?.location_country||'-')}</div>
           <div class="item"><strong>Kayit Konumu</strong>${esc(reg?.location_label||'-')}</div>
+          <div class="item"><strong>Kayit Kaynagi</strong>${esc(reg?.location_source||'-')}</div>
           <div class="item"><strong>Kayit IP</strong>${esc(reg?.ip||'-')}</div>
           <div class="item"><strong>Ilk Device</strong>${esc(firstSession?.device_id||'-')}</div>
           <div class="item"><strong>Ilk Session</strong>${d(firstSession?.created_at)}</div>
