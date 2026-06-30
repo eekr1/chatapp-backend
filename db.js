@@ -12,7 +12,7 @@ const pool = new Pool({
   } // Render postgres requires SSL
 });
 
-// Tablo oluşturma sorguları
+// Table creation queries
 const createTablesQuery = `
   CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -210,7 +210,12 @@ const createTablesQuery = `
     privacy_version TEXT NOT NULL,
     accepted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ip TEXT,
-    user_agent TEXT
+    user_agent TEXT,
+    location_city TEXT,
+    location_country TEXT,
+    location_label TEXT,
+    location_source TEXT,
+    location_resolved_at TIMESTAMPTZ
   );
 
   CREATE TABLE IF NOT EXISTS account_deletion_requests (
@@ -363,6 +368,26 @@ const createTablesQuery = `
 
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='media_id') THEN
           ALTER TABLE messages ADD COLUMN media_id UUID;
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='legal_acceptances' AND column_name='location_city') THEN
+          ALTER TABLE legal_acceptances ADD COLUMN location_city TEXT;
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='legal_acceptances' AND column_name='location_country') THEN
+          ALTER TABLE legal_acceptances ADD COLUMN location_country TEXT;
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='legal_acceptances' AND column_name='location_label') THEN
+          ALTER TABLE legal_acceptances ADD COLUMN location_label TEXT;
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='legal_acceptances' AND column_name='location_source') THEN
+          ALTER TABLE legal_acceptances ADD COLUMN location_source TEXT;
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='legal_acceptances' AND column_name='location_resolved_at') THEN
+          ALTER TABLE legal_acceptances ADD COLUMN location_resolved_at TIMESTAMPTZ;
       END IF;
 
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='client_msg_id') THEN
@@ -619,3 +644,4 @@ module.exports = {
   pool,
   ensureTables
 };
+

@@ -56,6 +56,8 @@ const clampPage = (value, fallback = 1) => Math.max(1, Math.min(100000, Number(v
 const clampProfilePageSize = (value, fallback = 50) => Math.max(1, Math.min(100, Number(value) || fallback));
 const GEO_LOOKUP_TIMEOUT_MS = Math.max(500, Math.min(5000, Number(process.env.ADMIN_GEO_LOOKUP_TIMEOUT_MS) || 1800));
 const GEO_CACHE_TTL_MS = Math.max(60000, Math.min(7 * 24 * 60 * 60 * 1000, Number(process.env.ADMIN_GEO_CACHE_TTL_MS) || 24 * 60 * 60 * 1000));
+const GEO_DB_REFRESH_MS = Math.max(60 * 60 * 1000, Math.min(30 * 24 * 60 * 60 * 1000, Number(process.env.ADMIN_GEO_DB_REFRESH_MS) || 7 * 24 * 60 * 60 * 1000));
+const GEO_PROFILE_LIST_CONCURRENCY = Math.max(1, Math.min(6, Number(process.env.ADMIN_GEO_PROFILE_LIST_CONCURRENCY) || 3));
 const geoLookupCache = new Map();
 const PROFILE_SORT_COLUMN_MAP = Object.freeze({
     created_at: 'u.created_at',
@@ -331,6 +333,102 @@ const resolveRegistrationLocation = async (ipValue) => {
     setCachedGeoLocation(ip, value);
     return value;
 };
+
+const hasFreshStoredRegistrationLocation = (row) => {
+    const resolvedAt = row?.location_resolved_at ? new Date(row.location_resolved_at).getTime() : 0;
+    if (!resolvedAt || Number.isNaN(resolvedAt)) return false;
+    if ((Date.now() - resolvedAt) > GEO_DB_REFRESH_MS) return false;
+    return Boolean(
+        normalizeLocationText(row?.location_city)
+        || normalizeLocationText(row?.location_country)
+        || normalizeLocationText(row?.location_label)
+        || normalizeLocationText(row?.location_source)
+    );
+};
+
+const locationFromRegistrationRow = (row, normalizedIp) => ({
+    city: normalizeLocationText(row?.location_city),
+    country: normalizeLocationText(row?.location_country),
+    label: normalizeLocationText(row?.location_label),
+    source: normalizeLocationText(row?.location_source),
+    ip: normalizedIp || null
+});
+
+const persistRegistrationLocation = async (registrationId, location) => {
+    if (!registrationId) return;
+    await pool.query(
+        `UPDATE legal_acceptances
+         SET location_city = $2,
+             location_country = $3,
+             location_label = $4,
+             location_source = $5,
+             location_resolved_at = NOW()
+         WHERE id = $1`,
+        [
+            registrationId,
+            location?.city || null,
+            location?.country || null,
+            location?.label || null,
+            location?.source || null
+        ]
+    );
+};
+
+const resolveRegistrationLocationForRow = async (row) => {
+    if (!row) return null;
+    const normalizedIp = normalizeIpForDisplay(row.ip || row.registration_ip) || null;
+    if (hasFreshStoredRegistrationLocation(row)) {
+        return locationFromRegistrationRow(row, normalizedIp);
+    }
+
+    const resolved = await resolveRegistrationLocation(normalizedIp);
+    const location = {
+        city: resolved?.city || null,
+        country: resolved?.country || null,
+        label: resolved?.label || null,
+        source: resolved?.source || null,
+        ip: normalizedIp
+    };
+
+    try {
+        await persistRegistrationLocation(row.registration_id || row.id, location);
+    } catch (e) {
+        console.warn('registration location persist failed:', e?.message || e);
+    }
+
+    return location;
+};
+
+const mapWithConcurrency = async (items, limit, mapper) => {
+    const results = new Array(items.length);
+    let index = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (index < items.length) {
+            const current = index;
+            index += 1;
+            results[current] = await mapper(items[current], current);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+};
+
+const attachRegistrationLocationToProfileRows = async (rows) => mapWithConcurrency(
+    rows,
+    GEO_PROFILE_LIST_CONCURRENCY,
+    async (row) => {
+        const location = row.registration_id ? await resolveRegistrationLocationForRow(row) : null;
+        return {
+            ...row,
+            registration_ip: location?.ip || normalizeIpForDisplay(row.registration_ip) || null,
+            location_city: location?.city || null,
+            location_country: location?.country || null,
+            location_label: location?.label || null,
+            location_source: location?.source || row.location_source || null,
+            location_resolved_at: row.location_resolved_at || null
+        };
+    }
+);
 const logAdminAudit = async (dbOrPool, {
     actorAdmin = 'admin',
     actionType,
@@ -596,9 +694,23 @@ router.get('/data', async (req, res) => {
                 `
                 SELECT u.id, u.username, u.created_at, u.last_seen_at,
                        p.display_name, p.avatar_url, p.bio,
+                       reg.id AS registration_id,
+                       reg.ip AS registration_ip,
+                       reg.location_city,
+                       reg.location_country,
+                       reg.location_label,
+                       reg.location_source,
+                       reg.location_resolved_at,
                        COALESCE(NULLIF(be_last.platform, 'unknown'), pd_last.platform, be_last.platform, 'unknown') AS last_platform
                 FROM users u
                 LEFT JOIN profiles p ON u.id = p.user_id
+                LEFT JOIN LATERAL (
+                    SELECT id, ip, location_city, location_country, location_label, location_source, location_resolved_at
+                    FROM legal_acceptances la
+                    WHERE la.user_id = u.id
+                    ORDER BY (NULLIF(TRIM(COALESCE(la.ip, '')), '') IS NULL) ASC, la.accepted_at ASC
+                    LIMIT 1
+                ) AS reg ON TRUE
                 LEFT JOIN LATERAL (
                     SELECT COALESCE(NULLIF(be.platform, ''), 'unknown') AS platform
                     FROM behavior_events be
@@ -625,8 +737,10 @@ router.get('/data', async (req, res) => {
             const total = Number(totalRes.rows[0]?.total) || 0;
             const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0;
 
+            const items = await attachRegistrationLocationToProfileRows(result.rows);
+
             res.json({
-                items: result.rows,
+                items,
                 pagination: {
                     page,
                     pageSize,
@@ -710,10 +824,10 @@ router.get('/profile-details/:userId', async (req, res) => {
         const [registrationRes, firstSessionRes, recentSessionsRes, pushDevicesRes] = await Promise.all([
             pool.query(
                 `
-                SELECT accepted_at, ip
+                SELECT id, accepted_at, ip, location_city, location_country, location_label, location_source, location_resolved_at
                 FROM legal_acceptances
                 WHERE user_id = $1
-                ORDER BY accepted_at ASC
+                ORDER BY (NULLIF(TRIM(COALESCE(ip, '')), '') IS NULL) ASC, accepted_at ASC
                 LIMIT 1
                 `,
                 [userId]
@@ -752,11 +866,10 @@ router.get('/profile-details/:userId', async (req, res) => {
 
         let registration = null;
         if (registrationRes.rows[0]) {
-            const normalizedIp = normalizeIpForDisplay(registrationRes.rows[0].ip) || null;
-            const location = await resolveRegistrationLocation(normalizedIp);
+            const location = await resolveRegistrationLocationForRow(registrationRes.rows[0]);
             registration = {
                 ...registrationRes.rows[0],
-                ip: normalizedIp,
+                ip: location?.ip || normalizeIpForDisplay(registrationRes.rows[0].ip) || null,
                 location_label: location?.label || null,
                 location_city: location?.city || null,
                 location_country: location?.country || null,
@@ -2559,3 +2672,5 @@ router.post('/deletion-requests/:id/reactivate', async (req, res) => {
 });
 
 module.exports = router;
+
+
