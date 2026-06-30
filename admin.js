@@ -54,7 +54,7 @@ const clampHours = (value, fallback = 24) => Math.max(1, Math.min(24 * 14, Numbe
 const clampLimit = (value, fallback = 100, max = 200) => Math.max(1, Math.min(max, Number(value) || fallback));
 const clampPage = (value, fallback = 1) => Math.max(1, Math.min(100000, Number(value) || fallback));
 const clampProfilePageSize = (value, fallback = 50) => Math.max(1, Math.min(100, Number(value) || fallback));
-const GEO_LOOKUP_TIMEOUT_MS = Math.max(500, Math.min(5000, Number(process.env.ADMIN_GEO_LOOKUP_TIMEOUT_MS) || 1800));
+const GEO_LOOKUP_TIMEOUT_MS = Math.max(500, Math.min(5000, Number(process.env.ADMIN_GEO_LOOKUP_TIMEOUT_MS) || 3500));
 const GEO_CACHE_TTL_MS = Math.max(60000, Math.min(7 * 24 * 60 * 60 * 1000, Number(process.env.ADMIN_GEO_CACHE_TTL_MS) || 24 * 60 * 60 * 1000));
 const GEO_DB_REFRESH_MS = Math.max(60 * 60 * 1000, Math.min(30 * 24 * 60 * 60 * 1000, Number(process.env.ADMIN_GEO_DB_REFRESH_MS) || 7 * 24 * 60 * 60 * 1000));
 const GEO_PROFILE_LIST_CONCURRENCY = Math.max(1, Math.min(6, Number(process.env.ADMIN_GEO_PROFILE_LIST_CONCURRENCY) || 3));
@@ -338,12 +338,14 @@ const hasFreshStoredRegistrationLocation = (row) => {
     const resolvedAt = row?.location_resolved_at ? new Date(row.location_resolved_at).getTime() : 0;
     if (!resolvedAt || Number.isNaN(resolvedAt)) return false;
     if ((Date.now() - resolvedAt) > GEO_DB_REFRESH_MS) return false;
-    return Boolean(
-        normalizeLocationText(row?.location_city)
-        || normalizeLocationText(row?.location_country)
-        || normalizeLocationText(row?.location_label)
-        || normalizeLocationText(row?.location_source)
-    );
+
+    const city = normalizeLocationText(row?.location_city);
+    const country = normalizeLocationText(row?.location_country);
+    const source = normalizeLocationText(row?.location_source);
+
+    // Do not pin transient lookup failures as fresh; retry later/admin refresh can recover them.
+    if (source === 'unresolved' || source === 'none') return false;
+    return Boolean(city || country || source === 'local' || source === 'private');
 };
 
 const locationFromRegistrationRow = (row, normalizedIp) => ({

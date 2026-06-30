@@ -1,7 +1,8 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { WebSocketServer, WebSocket } = require('ws');
 const http = require('http');
 const { v4: uuidv4 } = require('uuid');
@@ -2732,11 +2733,19 @@ setInterval(() => {
     }
 }, 60000);
 
-// Serve Frontend Static Files (Production)
-app.use(express.static(path.join(__dirname, '../chatapp-frontend/dist')));
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../chatapp-frontend/dist/index.html'));
-});
+// Serve Frontend Static Files (Production) when the web build is present.
+const frontendDistPath = path.join(__dirname, '../chatapp-frontend/dist');
+const frontendIndexPath = path.join(frontendDistPath, 'index.html');
+if (fs.existsSync(frontendIndexPath)) {
+    app.use(express.static(frontendDistPath));
+    app.get('*', (req, res) => {
+        res.sendFile(frontendIndexPath);
+    });
+} else {
+    app.get('/', (req, res) => {
+        res.status(200).send('TalkX backend is running. Frontend build is not bundled on this service.');
+    });
+}
 
 const startServer = async () => {
     try {
