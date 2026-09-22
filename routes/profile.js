@@ -159,8 +159,17 @@ router.put('/me/profile', authenticate, requireLegalAcceptance, async (req, res)
     const { display_name, avatar_url, bio, tags, locale } = req.body || {};
     const normalizedLocale = locale === undefined ? undefined : normalizeLang(locale, null);
 
-    if (display_name && !String(display_name).trim()) {
+    if (display_name !== undefined && (typeof display_name !== 'string' || !display_name.trim() || display_name.length > 80)) {
         return sendApiError(req, res, 400, 'PROFILE_NAME_REQUIRED');
+    }
+    if (avatar_url !== undefined && (typeof avatar_url !== 'string' || avatar_url.length > 2048)) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
+    if (bio !== undefined && (typeof bio !== 'string' || bio.length > 500)) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
+    if (tags !== undefined && (!Array.isArray(tags) || tags.length > 20 || tags.some((tag) => typeof tag !== 'string' || tag.length > 40))) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
     if (locale !== undefined && !normalizedLocale) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
@@ -201,7 +210,7 @@ router.put('/me/password', authenticate, requireLegalAcceptance, async (req, res
     const currentPassword = String(req.body?.current_password || '');
     const newPassword = String(req.body?.new_password || '');
 
-    if (!currentPassword || !newPassword) {
+    if (!currentPassword || !newPassword || currentPassword.length > 128 || newPassword.length > 128) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
     if (newPassword.length < 6) {
@@ -246,7 +255,7 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
     const currentPassword = String(req.body?.current_password || '');
     const confirmText = String(req.body?.confirm_text || '').trim();
 
-    if (!currentPassword) {
+    if (!currentPassword || currentPassword.length > 128) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
     if (confirmText !== DELETE_CONFIRM_TEXT) {

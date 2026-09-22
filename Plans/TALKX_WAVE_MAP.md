@@ -2,7 +2,7 @@
 
 > Plan A/B/C içindeki 67 stable uygulama maddesini bağımlılık sırasına göre wave'lere yönlendiren canonical yürütme haritası.
 > Bu belge plan ayrıntısını tekrar etmez; ayrıntının otoritesi ilgili Plan A/B/C maddesidir.
-> Harita ile Wave 01–19 planları hazırdır. On dokuz wave de aktif değildir ve hiçbir uygulama wave'i başlamamıştır.
+> Harita ile Wave 01–19 planları hazırdır. Wave 01 Sale Release kapsamı 2026-09-23 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı; Wave 02–19 başlatılmadı.
 
 > **Sale Release override:** Bu harita, Master Backlog ile Plan A/B/C'deki uzun vadeli kararları değiştirmez. Satış öncesinde hangi parçanın uygulanacağını, hangi parçanın küçültüldüğünü ve hangisinin **Post-acquisition Roadmap / Deferred** olarak korunacağını belirler. Bir wave dosyasındaki eski kapanış veya manuel QA dili bu override ile çelişirse bu harita geçerlidir.
 
@@ -25,10 +25,10 @@ Wave yeni ürün kararı veya mimari üretmez. Çelişkide uygulama durur; önce
 - **Wave Map durumu:** Hazır
 - **Aktif wave:** Yok
 - **Hazırlanmış Wave Planları:** `waves/TALKX_WAVE_01.md`, `waves/TALKX_WAVE_02.md`, `waves/TALKX_WAVE_03.md`, `waves/TALKX_WAVE_04.md`, `waves/TALKX_WAVE_05.md`, `waves/TALKX_WAVE_06.md`, `waves/TALKX_WAVE_07.md`, `waves/TALKX_WAVE_08.md`, `waves/TALKX_WAVE_09.md`, `waves/TALKX_WAVE_10.md`, `waves/TALKX_WAVE_11.md`, `waves/TALKX_WAVE_12.md`, `waves/TALKX_WAVE_13.md`, `waves/TALKX_WAVE_14.md`, `waves/TALKX_WAVE_15.md`, `waves/TALKX_WAVE_16.md`, `waves/TALKX_WAVE_17.md`, `waves/TALKX_WAVE_18.md` ve `waves/TALKX_WAVE_19.md` — on dokuz plan da aktif değil
-- **Uygulama durumu:** Başlamadı
-- **İlk yürütme adayı:** Wave 01
-- **Wave 01 yetkisi:** Verilmedi
-- **Sonraki işlem:** Kullanıcının açık planlama veya Wave 01 başlangıç talimatını bekle
+- **Uygulama durumu:** Wave 01 auto-verified; ayrı backend/frontend commitleriyle kapanışa hazır
+- **İlk yürütme adayı:** Wave 02 — yalnız ayrı açık kullanıcı talimatıyla
+- **Wave 01 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
+- **Sonraki işlem:** Wave 02 için açık başlangıç talimatını bekle
 
 Bu haritanın oluşturulması Wave 01'in başladığı, hazırlandığı, test edildiği veya uygulanmış olduğu anlamına gelmez.
 
@@ -118,7 +118,7 @@ Roadmap'e taşınan stable ID ve kabul kriterleri silinmez. Canonical Plan A/B/C
 
 | Wave | Sonuç | Plan refs — uygulama sırası | Birincil çıkış kapısı | Durum |
 |---:|---|---|---|---|
-| 01 | Ürün sınırı, internet yüzeyi güvenliği ve global uyum başlangıcı | A-PRD-001 → B-SEC-001 → C-COMP-001 | Ürün vaadi ile güvenlik/uyum kararları çelişmiyor | Bekliyor |
+| 01 | Ürün sınırı, internet yüzeyi güvenliği ve global uyum başlangıcı | A-PRD-001 → B-SEC-001 → C-COMP-001 | Ürün vaadi ile güvenlik/uyum kararları çelişmiyor | Auto-verified / commit & QA deferred |
 | 02 | Core API, auth, logging, abuse, socket ve admin erişim temeli | B-API-001 → B-AUTH-001 → B-OBS-001 → B-SEC-002 → B-WS-001 → C-ADMIN-001 | Sürümlü platform erişim sözleşmesi kanıtlı | Bekliyor |
 | 03 | Test edilebilir client kabuğu, tema/state temeli ve dürüst auth UX | A-FND-001 → A-FND-002 → A-A11Y-001 → A-AUTH-001 | Client temeli TalkX temasını ve erişilebilirliği koruyor | Bekliyor |
 | 04 | Health, performans verisi, DB runtime ve operasyon güvenliği | B-API-002 → B-ANL-002 → B-DB-001 → C-PERF-001 → C-OPS-001 → C-OPS-002 | Readiness, migration ve kurtarma zemini kanıtlı | Bekliyor |
@@ -270,4 +270,4 @@ Yeni kanıt bir bağımlılığın yanlış olduğunu gösterirse wave durur; il
 
 Bu harita ancak 67 stable ID tam ve benzersiz dağıtılmış, bütün bağımlılıklar ileri/aynı-wave sırasıyla uyumlu, QA-001–017 sahiplikleri korunmuş, QA-017 sırası Master ile uyumlu ve riskli işlem sınırları görünür olduğunda hazırdır.
 
-**Mevcut sonuç:** Wave Map hazırdır. Aktif wave yoktur. Wave 01 başlamamıştır.
+**Mevcut sonuç:** Wave Map hazırdır. Wave 01 Sale Release kapsamı auto-verified olup ayrı backend/frontend commitleriyle kapanışa hazırdır; manuel QA Checkpoint A / Wave 19'a ertelenmiştir. Aktif wave yoktur ve Wave 02 başlatılmamıştır.

@@ -2,16 +2,16 @@
 
 > Bu belge yalnız Wave 01 için hazırlanmış uygulama planıdır.
 > Canonical ayrıntı Plan A/B/C stable ID maddelerindedir; burada yeniden mimari üretilmez.
-> Plan hazırdır. Wave 01 aktif değildir ve uygulama başlamamıştır.
+> Wave 01 Sale Release kapsamı 2026-09-23 tarihinde uygulandı ve otomatik doğrulandı. Manuel QA Checkpoint A / Wave 19'a ertelendi.
 
 ## 1. Durum ve yürütme sınırı
 
 - **Wave:** 01
 - **Wave adı:** Ürün sınırı, internet yüzeyi güvenliği ve global uyum başlangıcı
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Uygulandı
+- **Wave durumu:** AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED
+- **Uygulama durumu:** Sale Release kapsamı tamamlandı
+- **Uygulama yetkisi:** 2026-09-23 tarihinde kullanıcı tarafından verildi
 - **Önceki wave:** Yok
 - **Sonraki wave:** Wave 02 — ayrı kullanıcı talimatıyla planı hazırlandı; aktif değil ve uygulanmayacak
 
@@ -331,32 +331,31 @@ Checkbox yalnız kanıtlanan canonical kabul kriteri için işaretlenir. Yerel k
 
 Wave 01 uygulamasına geçmeden önce:
 
-- [ ] Kullanıcı açıkça “Wave 01'i başlat” dedi.
-- [ ] Dirty repo başlangıç fotoğrafı hedef dosyalar için kaydedildi.
-- [ ] Mevcut Web ve Android desteklenen originleri doğrulama yöntemi belirlendi.
-- [ ] Canlı/harici panel işlemlerinin ayrıca onay istediği kabul edildi.
-- [ ] Wave 02 kapsamına taşma olmadığı tekrar kontrol edildi.
+- [x] Kullanıcı açıkça “Wave 01'i başlat” dedi.
+- [x] Backend ve frontend repo başlangıç fotoğrafı hedef dosyalar için kaydedildi; ikisi de temiz ve `origin/main` ile 0/0 idi.
+- [x] Web ve Android desteklenen originleri explicit allowlist + otomatik policy testiyle doğrulandı; gerçek cihaz handshake kontrolü Checkpoint A'ya ertelendi.
+- [x] Canlı/harici panel işlemlerinin ayrıca onay istediği kabul edildi ve bu işlemler yapılmadı.
+- [x] Wave 02 kapsamına taşma olmadığı tekrar kontrol edildi.
 
 Bu kutular plan hazırlanırken işaretlenmez.
 
 ## 13. Sonuç alanı
 
-- **Başlangıç zamanı:** —
-- **Tamamlanan Plan refs:** —
-- **Değişen dosyalar:** —
-- **Otomatik kanıt:** —
+- **Başlangıç zamanı:** 2026-09-23
+- **Tamamlanan Plan refs:** A-PRD-001 Sale Release kapsamı; B-SEC-001'in guest/payload/origin/limit/header kriterleri; C-COMP-001 repo içi uyum başlangıcı ve A-PRD-001 çelişki kontrolü
+- **Değişen dosyalar:** Backend güvenlik doğrulaması/testleri, HTTP input sınırları, global uyum matrisi ve canonical plan kapanışı; frontend TR/EN Splash/Home/manifest/store-copy kaynağı
+- **Otomatik kanıt:** Backend syntax + 6/6 unit; frontend lint 0 error/9 warning; production build; frontend audit 0; backend audit 8 moderate transitive; text encoding; Capacitor sync/asset equality; Android Gradle unit test
 - **Manuel QA:** Checkpoint A / Wave 19'a ertelendi
-- **Harici uyum kanıtı:** —
-- **Kullanıcı onayı:** —
-- **Wave durumu:** Bekliyor
+- **Harici uyum kanıtı:** Play Console, store listing, child-safety owner/escalation/contact ve TR/EN insan legal incelemesi `docs/TALKX_GLOBAL_COMPLIANCE_MATRIX.md` içinde açık eksik olarak kaydedildi
+- **Kullanıcı onayı:** Wave 01 başlangıç/onay talimatı alındı; final manuel kabul Wave 19'a ertelendi
+- **Wave durumu:** AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED
 - **Sonraki wave:** Başlatılmadı
 
 ## 14. Durma kuralı
 
-Bu belge hazırlandıktan sonra durulur. Kullanıcının açık Wave 01 başlangıç talimatı olmadan:
+Wave 01 Sale Release kapsamı uygulandı, otomatik doğrulandı ve manuel QA Checkpoint A / Wave 19'a ertelendi. Bu kapanıştan sonra:
 
-- Kod veya dependency değiştirilmez,
-- Test altyapısı hazırlanmaz,
-- Play Console veya canlı servis işlemi yapılmaz,
-- Wave 02 yalnız ayrı açık planlama talimatıyla belgelenebilir; aktive edilmez veya uygulanmaz,
-- Wave Map'te Wave 01 `Aktif` yapılmaz.
+- Wave 01 dışında kod, dependency, test hazırlığı veya refactor yapılmaz,
+- Play Console veya canlı servis işlemi açık onay olmadan yapılmaz,
+- Wave 02 ayrı açık kullanıcı talimatı olmadan aktive edilmez veya uygulanmaz,
+- Wave 02 `Bekliyor` kalır.

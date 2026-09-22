@@ -133,12 +133,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Token gerektiren event guest bağlantıda çalışmıyor.
-- [ ] Bilinmeyen veya fazla alanlı payload kontrollü reddediliyor.
-- [ ] Aşırı payload bağlantı/servis belleğini tüketmiyor.
-- [ ] Anonim ve direkt mesaj uzunluğu server'da uygulanıyor.
-- [ ] TalkX origin ve izinli native bağlam dışında CORS açık değil.
-- [ ] Security header ve `x-powered-by` kararı uygulanmış.
+- [x] Token gerektiren event guest bağlantıda çalışmıyor.
+- [x] Bilinmeyen veya fazla alanlı payload kontrollü reddediliyor.
+- [x] Aşırı payload bağlantı/servis belleğini tüketmiyor.
+- [x] Anonim ve direkt mesaj uzunluğu server'da uygulanıyor.
+- [x] TalkX origin ve izinli native bağlam dışında CORS açık değil.
+- [x] Security header ve `x-powered-by` kararı uygulanmış.
 - [ ] Dependency güncellemesi davranış testiyle yapılmış.
 - [ ] Hata log'u token/mesaj/şifre taşımıyor.
 

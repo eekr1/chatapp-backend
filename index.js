@@ -4,6 +4,11 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { WebSocketServer, WebSocket } = require('ws');
+const {
+    WS_MAX_PAYLOAD_BYTES,
+    isAllowedWebSocketOrigin,
+    validateWsEvent
+} = require('./utils/wave01Security');
 const http = require('http');
 const { v4: uuidv4 } = require('uuid');
 const { pool, ensureTables } = require('./db');
@@ -293,6 +298,7 @@ const defaultAllowedOrigins = [
     "http://localhost",
     "https://localhost",
     "http://localhost:3000",
+    "http://localhost:5173",
     "capacitor://localhost"
 ];
 const envAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
@@ -315,7 +321,27 @@ const isSameHostOrigin = (origin, req) => {
     }
 };
 
-app.use(express.json());
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (process.env.NODE_ENV === 'production') {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+});
+app.use(express.json({ limit: '128kb', strict: true }));
+app.use((err, req, res, next) => {
+    if (err?.type === 'entity.too.large') {
+        return res.status(413).json({ error: 'Request payload is too large.', code: 'PAYLOAD_TOO_LARGE' });
+    }
+    if (err instanceof SyntaxError && err.status === 400 && Object.prototype.hasOwnProperty.call(err, 'body')) {
+        return res.status(400).json({ error: 'Invalid JSON payload.', code: 'INVALID_JSON' });
+    }
+    return next(err);
+});
 
 app.use(cors((req, callback) => {
     const origin = req.get('Origin');
@@ -468,7 +494,11 @@ app.get('/health', (req, res) => {
 });
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+    server,
+    maxPayload: WS_MAX_PAYLOAD_BYTES,
+    verifyClient: ({ origin }) => isAllowedWebSocketOrigin(origin, allowedOrigins)
+});
 
 /**
  * Global State (Only Transients)
@@ -1001,24 +1031,6 @@ cleanupEphemeralMedia();
 setInterval(cleanupEphemeralMedia, 6 * 60 * 60 * 1000); // every 6 hours
 
 // --- DB Logic Helpers ---
-
-async function getOrCreateUser(deviceId, ip) {
-    try {
-        let res = await pool.query('SELECT * FROM users_anon WHERE device_id = $1', [deviceId]);
-        if (res.rows.length > 0) {
-            // Update last seen
-            await pool.query('UPDATE users_anon SET last_seen_at = NOW(), last_ip = $2 WHERE id = $1', [res.rows[0].id, ip]);
-            return res.rows[0];
-        } else {
-            // Create
-            res = await pool.query('INSERT INTO users_anon (device_id, last_ip) VALUES ($1, $2) RETURNING *', [deviceId, ip]);
-            return res.rows[0];
-        }
-    } catch (e) {
-        console.error('DB Error getOrCreateUser:', e);
-        return null; // Fail safe
-    }
-}
 
 async function setDbNickname(userId, nickname) {
     try {
@@ -1689,7 +1701,20 @@ wss.on('connection', (ws, req) => {
 
     ws.on('message', async (raw) => {
         let data;
-        try { data = JSON.parse(raw); } catch { return; }
+        try {
+            data = JSON.parse(raw);
+        } catch {
+            sendError(ws, 'INVALID_JSON');
+            return;
+        }
+
+        const validation = validateWsEvent(data);
+        if (!validation.ok) {
+            const isHandshake = data && data.type === 'hello_ack';
+            sendError(ws, isHandshake ? 'AUTH_ERROR' : validation.code);
+            if (isHandshake) ws.close(1008, 'Authentication required');
+            return;
+        }
 
         // Security: WebSocket Rate Limiting
         const now = Date.now();
@@ -1709,14 +1734,12 @@ wss.on('connection', (ws, req) => {
             const deviceId = data.deviceId;
             const requestedLang = normalizeLang(data.lang || ws.prefLang, 'en');
             let dbUser = null;
-            let isAnon = false;
 
-            if (data.token) {
-                // Token Auth
-                const { hashToken } = require('./utils/security');
-                const tokenHash = hashToken(data.token);
-                try {
-                    const sessionRes = await pool.query(`
+            // Token authentication is mandatory. Guest/legacy fallback is intentionally unsupported.
+            const { hashToken } = require('./utils/security');
+            const tokenHash = hashToken(data.token);
+            try {
+                const sessionRes = await pool.query(`
                         SELECT s.*, u.id as user_id, u.username, u.status, p.display_name
                         FROM sessions s
                         JOIN users u ON s.user_id = u.id
@@ -1724,32 +1747,24 @@ wss.on('connection', (ws, req) => {
                         WHERE s.token_hash = $1 AND s.expires_at > NOW()
                      `, [tokenHash]);
 
-                    if (sessionRes.rows.length > 0) {
-                        const session = sessionRes.rows[0];
-                        dbUser = {
-                            id: session.user_id,
-                            username: session.username,
-                            nickname: session.display_name || session.username, // Use Display Name as nickname in chat
-                            status: session.status
-                        };
-                    }
-                } catch (e) { console.error('Token Auth Error', e); }
-            }
-
-            // Fallback to Anon (Legacy / Guest) if no token or token invalid
-            if (!dbUser) {
-                // For now, allow anon fallback if we supported it. 
-                // But since UI enforces login, this might mean "Session Expired"
-                // Let's send AUTH_ERROR if token was provided but failed.
-                if (data.token) {
-                    return sendError(ws, 'AUTH_ERROR');
+                if (sessionRes.rows.length > 0) {
+                    const session = sessionRes.rows[0];
+                    dbUser = {
+                        id: session.user_id,
+                        username: session.username,
+                        nickname: session.display_name || session.username,
+                        status: session.status
+                    };
                 }
-                // If no token was provided at all (legacy client?), use getOrCreateUser
-                dbUser = await getOrCreateUser(deviceId, req.socket.remoteAddress);
-                isAnon = true;
+            } catch (e) {
+                console.error('Token Auth Error:', e?.message || e);
             }
 
-            if (!dbUser) return sendError(ws, 'DB_ERROR');
+            if (!dbUser) {
+                sendError(ws, 'AUTH_ERROR');
+                ws.close(1008, 'Authentication required');
+                return;
+            }
 
             // Check Status
             if (dbUser.status && dbUser.status !== 'active') {
@@ -1793,7 +1808,7 @@ wss.on('connection', (ws, req) => {
                 platform: data.platform === 'android' ? 'android' : 'web',
                 metadata: {
                     lang: requestedLang,
-                    is_anon: Boolean(isAnon),
+                    is_anon: false,
                     app_version: toText(data.appVersion || data.version || '', '').trim().slice(0, 60) || null
                 }
             });

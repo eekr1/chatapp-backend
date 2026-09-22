@@ -5,6 +5,10 @@ const { hashPassword, comparePassword, generateSessionToken, hashToken } = requi
 const { fetchLegalSettings } = require('../utils/legalContent');
 const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
 
+const isBoundedString = (value, min, max) => typeof value === 'string'
+    && value.length >= min
+    && value.length <= max;
+
 const getClientIp = (req) => {
     const forwarded = req.headers['x-forwarded-for'];
     if (typeof forwarded === 'string' && forwarded.trim()) {
@@ -24,17 +28,19 @@ router.post('/register', async (req, res) => {
     } = req.body || {};
 
     const lang = resolveRequestLang(req);
-    if (!username || !password) return sendApiError(req, res, 400, 'INVALID_INPUT');
+    if (!isBoundedString(username, 3, 32) || !isBoundedString(password, 1, 128)) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
 
     const cleanUsername = String(username).trim().toLowerCase();
     if (cleanUsername.length < 3) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
-    if (String(password).length < 6) {
-        return sendApiError(req, res, 400, 'WEAK_PASSWORD');
-    }
     if (!/^[a-z0-9_]+$/.test(cleanUsername)) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
+    if (password.length < 6) {
+        return sendApiError(req, res, 400, 'WEAK_PASSWORD');
     }
     if (terms_accepted !== true) {
         return sendApiError(req, res, 400, 'LEGAL_ACCEPT_REQUIRED');
@@ -42,7 +48,7 @@ router.post('/register', async (req, res) => {
 
     const submittedTermsVersion = String(terms_version || '').trim();
     const submittedPrivacyVersion = String(privacy_version || '').trim();
-    if (!submittedTermsVersion || !submittedPrivacyVersion) {
+    if (!submittedTermsVersion || submittedTermsVersion.length > 60 || !submittedPrivacyVersion || submittedPrivacyVersion.length > 60) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
@@ -116,7 +122,12 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
     const lang = resolveRequestLang(req);
     const { username, password, device_id } = req.body || {};
-    if (!username || !password) return sendApiError(req, res, 400, 'INVALID_INPUT');
+    if (!isBoundedString(username, 3, 32) || !isBoundedString(password, 1, 128)) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
+    if (device_id !== undefined && !isBoundedString(device_id, 1, 200)) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
 
     const cleanUsername = String(username).trim().toLowerCase();
 

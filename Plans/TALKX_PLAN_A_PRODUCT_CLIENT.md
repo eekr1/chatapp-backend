@@ -141,12 +141,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Beş saniyede ürünün anonim birebir eşleşme olduğu anlaşılıyor.
-- [ ] Hesap bulunması anonimlik iddiasıyla çelişkili anlatılmıyor.
-- [ ] Kullanıcılar arası görünmezlik ve servis veri sahipliği açık ayrılıyor.
-- [ ] Anonim ve arkadaş sohbeti saklama farkı doğru kaynağa dayanıyor.
-- [ ] Web/Android ana metinleri aynı anlamı taşıyor.
-- [ ] C-COMP-001 sonuçları ürünü sessizce 18+ veya bölgesel başka kimliğe dönüştürmüyor.
+- [x] Beş saniyede ürünün anonim birebir eşleşme olduğu anlaşılıyor.
+- [x] Hesap bulunması anonimlik iddiasıyla çelişkili anlatılmıyor.
+- [x] Kullanıcılar arası görünmezlik ve servis veri sahipliği açık ayrılıyor.
+- [x] Anonim ve arkadaş sohbeti saklama farkı doğru kaynağa dayanıyor.
+- [x] Web/Android ana metinleri aynı anlamı taşıyor.
+- [x] C-COMP-001 sonuçları ürünü sessizce 18+ veya bölgesel başka kimliğe dönüştürmüyor.
 
 **Kanıt:** TR/EN metin karşılaştırması, privacy/data-flow incelemesi, Web/Android ekran görüntüsü.
 

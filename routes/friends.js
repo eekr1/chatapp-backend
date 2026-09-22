@@ -65,12 +65,15 @@ const removeFriendshipAndConversation = async (db, userAId, userBId) => {
 // Send Friend Request
 router.post('/request', async (req, res) => {
     const { target_username } = req.body;
-    if (!target_username) return sendApiError(req, res, 400, 'INVALID_INPUT');
+    const cleanTargetUsername = typeof target_username === 'string' ? target_username.trim().toLowerCase() : '';
+    if (cleanTargetUsername.length < 3 || cleanTargetUsername.length > 32 || !/^[a-z0-9_]+$/.test(cleanTargetUsername)) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
 
     const myId = req.user.user_id;
 
     try {
-        const targetRes = await pool.query('SELECT id FROM users WHERE username = $1', [target_username.toLowerCase()]);
+        const targetRes = await pool.query('SELECT id FROM users WHERE username = $1', [cleanTargetUsername]);
         const target = targetRes.rows[0];
 
         if (!target) return sendApiError(req, res, 404, 'USER_NOT_FOUND');
@@ -334,6 +337,7 @@ router.post('/unblock', async (req, res) => {
 router.post('/accept', async (req, res) => {
     const { request_user_id } = req.body;
     const myId = req.user.user_id;
+    if (!isUuid(request_user_id)) return sendApiError(req, res, 400, 'INVALID_TARGET_ID');
 
     try {
         const result = await pool.query(`
@@ -361,6 +365,7 @@ router.post('/accept', async (req, res) => {
 router.post('/reject', async (req, res) => {
     const { target_user_id } = req.body;
     const myId = req.user.user_id;
+    if (!isUuid(target_user_id)) return sendApiError(req, res, 400, 'INVALID_TARGET_ID');
 
     try {
         await pool.query(`

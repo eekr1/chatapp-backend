@@ -141,7 +141,7 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 - [ ] Store/Data Safety/content rating cevapları kod ve veriyle uyumlu.
 - [ ] TR/EN yasal metinler insan incelemesinden geçmiş.
 - [ ] Bölgesel kısıt varsa kullanıcı ve operasyon etkisi açık.
-- [ ] A-PRD-001 ürün vaadiyle çelişki yok.
+- [x] A-PRD-001 ürün vaadiyle çelişki yok.
 
 **Kanıt:** Play Console ekran kaydı, politika/version listesi, sorumlu/iletişim doğrulaması, uyum matrisi.
 

@@ -46,11 +46,13 @@ const authenticate = async (req, res, next) => {
 router.use(authenticate);
 
 router.post('/register', async (req, res) => {
-    const token = (req.body.token || '').trim();
-    const platform = (req.body.platform || 'android').trim().toLowerCase();
-    const deviceId = (req.body.deviceId || '').trim() || null;
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    const platform = typeof req.body?.platform === 'string' ? req.body.platform.trim().toLowerCase() : 'android';
+    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() || null : null;
 
-    if (!token) return sendApiError(req, res, 400, 'INVALID_INPUT');
+    if (!token || token.length > 4096 || !['android', 'web'].includes(platform) || (deviceId && deviceId.length > 200)) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
 
     try {
         await pool.query(
@@ -88,10 +90,10 @@ router.post('/register', async (req, res) => {
 });
 
 router.post('/unregister', async (req, res) => {
-    const token = (req.body.token || '').trim();
-    const deviceId = (req.body.deviceId || '').trim();
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() : '';
 
-    if (!token && !deviceId) {
+    if ((!token && !deviceId) || token.length > 4096 || deviceId.length > 200) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
