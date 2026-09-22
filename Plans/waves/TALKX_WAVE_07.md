@@ -14,12 +14,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 06 `QA kapalı` ve kullanıcıdan açık “Wave 07'yi başlat” talimatı
-- **Mevcut blokaj:** Wave 01–06 uygulanıp kapanmadı; Wave 07 uygulanamaz
+- **Giriş kapısı:** Wave 06 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 07'yi başlat” talimatı
+- **Mevcut blokaj:** Wave 06 henüz committed değil; Wave 07 uygulanamaz
 - **Önceki wave:** Wave 06 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 08 — planı hazır, aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 07 aktivasyonu, kod/test/dependency değişikliği, migration, dış servis, canlı veri, deploy veya Wave 08 uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Server-otoriteli join/search/cancel/requeue modeli, gerçek searchId/state, client'ın yalnız server phase'ini göstermesi ve double/stale queue temizliği.
+- **Post-acquisition Roadmap / Deferred:** Yeni matchmaking özellikleri, yeni filtreler veya scope genişletmesi.
+- **Kapanış:** Search lifecycle ve iki-client otomatik senaryoları geçer, tek Wave 07 commit'i alınır ve **DUR**. Web/Android manuel akış Checkpoint B/Wave 19'a gider.
+- Wave 08 Global/Country scope'u bu wave'e çekilmez.
 
 ## 2. Canonical referanslar ve öncelik
 
@@ -418,7 +425,7 @@ DB schema, country resolver, Home selector, offer yeniden tasarımı, admin ekra
 
 Test komutları mevcut package scriptlerine göre başlangıçta netleştirilir; yeni dependency sırf plan varsayımıyla eklenmez. Flaky test product code değişikliğiyle maskelenmez; izole yeniden çalıştırma ve kanıt kaydı gerekir.
 
-## 13. Manuel QA matrisi
+## 13. Manuel QA havuzu — Checkpoint B / Wave 19 (commit kapısı değil)
 
 | Alan | Senaryo | Beklenen |
 |---|---|---|
@@ -570,7 +577,7 @@ Wave 07 yürütülürse kapanış kaydı en az şunları içerir:
 - Syntax/lint/build/encoding/focused/full test komutları ve exit code'ları
 - Rollout/rollback provası ve ilgili metric özeti
 - B-MM-001, A-MATCH-001 ve Master QA-014 kabul tablosu
-- Kullanıcı manuel QA onayı
+- Checkpoint B / Wave 19'a aktarılmış manuel QA kaydı
 - Wave 08'in başlatılmadığına dair açık durma kaydı
 
 ## 20. Durma kuralı

@@ -2,6 +2,8 @@
 
 > Bu klasör, canonical `TALKX_WAVE_MAP.md` içindeki 19 wave'in ayrıntılı uygulama planlarını taşır. Dosyanın varlığı wave'i aktif etmez.
 
+> **Sale Release yürütme kuralı:** Kullanıcı wave'i açıkça başlatır; yalnız ilgili Sale Release override kapsamı uygulanır, zorunlu otomatik kontroller çalışır, tek wave commit'i alınır ve işlem durur. Manuel QA Wave 01–18 için ilerleme kapısı değildir; checkpoint/Wave 19 havuzuna taşınır.
+
 ## Canonical yapı
 
 - Toplam wave sayısı: **19** (`01`–`19`).
@@ -13,8 +15,8 @@
 ## Agent okuma sırası
 
 1. `../TALKX_MASTER_BACKLOG.md`
-2. İlgili Plan A/B/C stable ID'leri
-3. `../TALKX_WAVE_MAP.md`
+2. `../TALKX_WAVE_MAP.md` — Sale Release scope ve yürütme override'ı
+3. İlgili Plan A/B/C stable ID'leri
 4. Yalnız seçilen `TALKX_WAVE_NN.md`
 5. Güncel repo, kod, test ve ortam kanıtı
 
@@ -51,7 +53,10 @@ Boş şablon veya placeholder wave dosyaları oluşturulmaz. Her wave dosyası, 
 - Hazır bir wave, kendiliğinden aktif olmaz.
 - Aktivasyonda plan, repo gerçeği ve önceki wave kapanışı yeniden doğrulanır.
 - Aynı anda yalnız bir wave aktif olabilir.
-- Önceki wave `QA kapalı` olmadan sonraki wave uygulanmaz.
+- Wave 01–18 için önceki wave **AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED** olduğunda teknik ön koşul sağlanır; sonraki wave yine yalnız kullanıcının ayrı açık talimatıyla başlar.
+- Wave 16 ürün implementasyonu değil, **PAS / Post-acquisition Roadmap** kaydıdır.
+- Wave 19 terminal **Sale Acceptance QA + Release Freeze** aşamasıdır.
+- Canonical Plan A/B/C'de kanıtlanmayan veya deferred kriterler açık kalır; roadmap kapsamı silinmez ve yanlış biçimde tamamlanmış işaretlenmez.
 
 ## Her wave dosyasının zorunlu iskeleti
 
@@ -63,11 +68,11 @@ Boş şablon veya placeholder wave dosyaları oluşturulmaz. Her wave dosyası, 
 6. Dosya/servis etki alanı
 7. Açık kapsam dışı maddeler
 8. Otomatik kanıt kapıları
-9. Manuel QA
+9. Checkpoint/Wave 19 havuzuna taşınacak manuel QA
 10. Risk, rollback ve canlı işlem yetkileri
-11. Sonuç/evidence ve kullanıcı onayı
+11. Otomatik sonuç/evidence, tek commit kimliği ve ertelenmiş QA kaydı
 12. “Sonraki wave başlatılmadı” koruması
 
 ## Mevcut durma noktası
 
-Wave 01–19 planları hazır fakat aktif değildir. Planlama envanteri 19/19 tamamdır; hiçbir wave aktif değildir.
+Wave 01–19 Sale Release planları hazır fakat aktif değildir. Planlama envanteri 19/19 tamamdır; hiçbir wave aktif değildir. İlk uygulama adımı yalnız açık **“Wave 01'i başlat”** talimatıdır.

@@ -13,12 +13,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 04 `QA kapalı` ve kullanıcıdan açık “Wave 05'i başlat” talimatı
-- **Mevcut blokaj:** Wave 01–04 uygulanıp kapanmadı; Wave 05 uygulanamaz
+- **Giriş kapısı:** Wave 04 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 05'i başlat” talimatı
+- **Mevcut blokaj:** Wave 04 henüz committed değil; Wave 05 uygulanamaz
 - **Önceki wave:** Wave 04 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 06 — planı ayrı talimatla hazırlandı; aktif değil ve uygulanmadı
 
 Bu dosyanın hazırlanması Wave 05 aktivasyonu, kod/test/dependency değişikliği, DB migrationı, Android sync, canlı servis işlemi, deploy veya Wave 06 aktivasyonu/uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Reconnect sonrası server-state recovery, ghost queue/room/offer temizliği, stale socket event koruması, gerçek online/offline/last-seen ve match/friend/system state izolasyonu.
+- **Post-acquisition Roadmap / Deferred:** Redis, multi-instance veya distributed realtime mimarisi.
+- **Kapanış:** Deterministik focused/two-client otomatik senaryolar geçer, tek Wave 05 commit'i alınır ve **DUR**. Background/foreground ve gerçek cihaz QA'sı Checkpoint A/Wave 19'a gider.
+- Eski manuel QA/onay cümleleri canonical kabul kanıtı olarak korunur; bir sonraki wave'in teknik giriş kapısı değildir.
 
 ## 2. Canonical referanslar
 
@@ -36,9 +43,9 @@ Kilitli karar ve başlangıç kanıtı: `../TALKX_MASTER_BACKLOG.md` / §3, §5,
 
 Bağımlılık yorumu:
 
-- `B-WS-001` ve sürümlü WebSocket erişim sözleşmesi Wave 02'de QA kapalı olmalıdır.
-- `A-FND-001`, `A-FND-002` ve `A-A11Y-001` Wave 03'te QA kapalı olmalıdır; client state ayrımı mevcut tema/state standardını tüketir.
-- `B-API-002` ve `B-DB-001` Wave 04'te QA kapalı olmalıdır; recovery/presence health ve migration kapıları bunları tüketir.
+- `B-WS-001` ve sürümlü WebSocket erişim sözleşmesi Wave 02 Sale Release scope'unda otomatik doğrulanmış ve committed olmalıdır.
+- Wave 03'ün kritik state ayrımı ve a11y temeli otomatik doğrulanmış ve committed olmalıdır; deferred design-system kapsamı giriş kapısı değildir.
+- `B-API-002` ve `B-DB-001` Wave 04 Sale Release scope'unda otomatik doğrulanmış ve committed olmalıdır; recovery/presence health ve migration kapıları bunları tüketir.
 - `B-MM-001`, `B-MM-002`, `B-MM-003`, `A-MATCH-001/002/003` sonraki wave'lerin otoritesidir. Wave 05 bunların `searchId`, scope/country veya offer karar protokolünü erkenden kurmaz.
 - `B-MSG-001` Wave 10'un kalıcı mesaj idempotency otoritesidir. Wave 05 yalnız recovery sırasında belirsiz komutu otomatik tekrar etmeyerek duplicate üretmez.
 
@@ -397,7 +404,7 @@ Arkadaş listesi:
 4. Desktop web, dar mobil viewport ve mevcut Android build üzerinde background/foreground manuel QA yap.
 5. Full lint/test/build/encoding ve Wave 02–04 regresyon kapılarını çalıştır.
 6. Gerçek değişen dosyalar, config/migration ve kanıt yollarını sonuç alanına yaz.
-7. Kullanıcı manuel QA onayı gelmeden canonical checkbox/durum kapatma.
+7. Canonical checkbox'ı yalnız mevcut kanıt kadar güncelle; manuel QA sonucunu Checkpoint A/Wave 19 havuzuna taşı.
 8. Wave 06'yı bu wave'in parçası olarak aktive etme veya uygulama.
 
 **Çıkış:** Wave 05 kanıtlı kapanışa hazır; ardıl wave başlamadı.

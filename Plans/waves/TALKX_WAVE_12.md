@@ -16,12 +16,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 11 `QA kapalı` ve kullanıcıdan açık “Wave 12'yi başlat” talimatı
-- **Mevcut blokaj:** Wave 01–11 uygulanıp kapanmadı; Wave 12 uygulanamaz
+- **Giriş kapısı:** Wave 11 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 12'yi başlat” talimatı
+- **Mevcut blokaj:** Wave 11 henüz committed değil; Wave 12 uygulanamaz
 - **Önceki wave:** Wave 11 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 13 — planı hazır, aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 12 aktivasyonu, kod/test/dependency değişikliği, migration, production legal publish, reaccept zorlaması, gerçek hesap silme/destek işlemi, session invalidation, canlı veri sorgusu, deploy veya Wave 13 uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — KÜÇÜLTÜLMÜŞ
+
+- **Satış öncesi uygulanır:** Session-expired/recovery UX, account settings, deletion/support akışı ve gerekli legal acceptance/version davranışı.
+- **Post-acquisition Roadmap / Deferred:** Gelişmiş legal publishing/workflow sistemi, CMS benzeri legal yönetim ve satış öncesi gerekmeyen hesap özellikleri.
+- **Canlı sınır:** Production legal publish veya gerçek kullanıcı hesabı silme ayrıca açık yetki ister.
+- **Kapanış:** Focused auth/account/legal otomatik testleri ve build geçer, tek Wave 12 commit'i alınır ve **DUR**. Manuel/legal human review Checkpoint B/Wave 19'a gider.
 
 ## 2. Canonical referanslar ve otorite
 
@@ -690,7 +697,7 @@ Genel admin navigation/dashboard redesign veya auth mimarisinin Wave 12 dışı 
 - Success socket/reconnect/queue/chat/outbox/token/cache cleanup.
 - Aynı cihazda sonraki login önceki user state'ini görmüyor.
 - Web/Android deep-link ve hardware back.
-## 19. Manuel QA matrisi
+## 19. Manuel QA havuzu — Checkpoint B / Wave 19 (commit kapısı değil)
 
 | Alan | Senaryo | Beklenen sonuç |
 |---|---|---|
@@ -836,7 +843,7 @@ Production migration, current content backfill, live publish, reaccept requireme
 - [ ] Kullanıcı açıkça “Wave 12'yi başlat” dedi.
 - [ ] Root/backend/frontend Git snapshot'ı alındı.
 - [ ] Wave 04 migration/backup/restore runbook gerçek kodda doğrulandı.
-- [ ] Wave 06 retention/deletion/support/account cleanup sözleşmeleri QA kapalı.
+- [ ] Wave 06 retention/deletion/support/account cleanup çekirdeği **AUTO-VERIFIED / COMMITTED**.
 - [ ] Current legal/admin/auth/session/account/support data flow yeniden envanterlendi.
 - [ ] Document formatı ve ortak sanitizer/renderer kararı owner tarafından onaylandı.
 - [ ] Terms/Privacy changeClass, version ve reaccept politikası onaylandı.
@@ -869,7 +876,7 @@ Production migration, current content backfill, live publish, reaccept requireme
 - Deletion sonrası socket/timer/token/local state cleanup kanıtı
 - Privacy/log/telemetry/IP/UA/geo redaction taraması
 - Syntax/lint/build/encoding/focused/full test exit code'ları
-- Stable ID checkbox ve kullanıcı manuel QA onayı
+- Stable ID checkbox için gerçek kanıt; manuel QA Checkpoint B / Wave 19 havuzunda
 - Production destructive işlemlerin yapılmadığı kayıt
 - Wave 13'ün başlatılmadığı açık durma kaydı
 

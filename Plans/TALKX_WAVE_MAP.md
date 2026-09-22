@@ -4,6 +4,8 @@
 > Bu belge plan ayrıntısını tekrar etmez; ayrıntının otoritesi ilgili Plan A/B/C maddesidir.
 > Harita ile Wave 01–19 planları hazırdır. On dokuz wave de aktif değildir ve hiçbir uygulama wave'i başlamamıştır.
 
+> **Sale Release override:** Bu harita, Master Backlog ile Plan A/B/C'deki uzun vadeli kararları değiştirmez. Satış öncesinde hangi parçanın uygulanacağını, hangi parçanın küçültüldüğünü ve hangisinin **Post-acquisition Roadmap / Deferred** olarak korunacağını belirler. Bir wave dosyasındaki eski kapanış veya manuel QA dili bu override ile çelişirse bu harita geçerlidir.
+
 ## 1. Belge rolü ve otorite
 
 TalkX yürütme belgelerinin otorite sırası:
@@ -40,10 +42,14 @@ Bu haritanın oluşturulması Wave 01'in başladığı, hazırlandığı, test e
 6. Aynı wave'deki A/B/C maddeleri tek dikey teslimat olabilir; canonical sahiplik ilgili planda kalır.
 7. Plan ön koşulu ile çapraz-plan sağlayıcı/tüketici sözleşmesi birbirine karıştırılmaz.
 8. Güvenlik, canlı DB, migration, deploy, bildirim, legal yayın, toplu moderasyon ve mağaza işlemi ayrıca açık yetki ister.
-9. Otomatik test manuel QA veya kullanıcı onayının yerine geçmez.
-10. Bir wave kapanmadan sonraki wave uygulanmaz ve kod/test hazırlığı yapılmaz; ayrı wave plan belgesi yalnız kullanıcının açık planlama talimatıyla hazırlanabilir ve aktivasyon sayılmaz.
-11. Kapanışta ilgili plan checkbox'ları, Wave Map, aktif Wave Plan sonucu ve gerekli AI handoff kayıtları birlikte senkronize edilir.
-12. Fikir Parkı maddeleri bu haritaya otomatik girmez.
+9. Her wave yalnız kullanıcı mobilde veya bu görevde wave numarasını açıkça başlattığında yürütülür.
+10. Wave akışı: **implement → otomatik doğrula → tek wave commit'i → DUR**. Sonraki wave kendiliğinden başlamaz.
+11. Başarısız otomatik kapı, çözülmemiş contract/decision blocker'ı veya ayrıca yetki isteyen canlı/geri döndürülemez işlem wave'i durdurur.
+12. Manuel QA, Wave 01–18'in tekil ilerleme kapısı değildir. İlgili adımlar silinmez; checkpoint/final havuzuna aktarılır ve en geç Wave 19 Sale Acceptance QA'da çalıştırılır.
+13. Commit sonrası wave **AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED** durumuna gelir. Bu durum bir sonraki wave için yeterli teknik ön koşuldur; kullanıcı yine açıkça başlatmalıdır.
+14. Plan A/B/C checkbox'ları yalnız gerçekten elde edilen kanıt kadar güncellenir. Ertelenen manuel veya roadmap kriterleri yanlış biçimde tamamlanmış gösterilmez.
+15. Kapanışta Wave Map ile aktif Wave Plan sonucu senkronize edilir; sonraki wave **Bekliyor** kalır.
+16. Fikir Parkı maddeleri bu haritaya otomatik girmez.
 
 ## 4. Durum modeli
 
@@ -51,9 +57,11 @@ Bu haritanın oluşturulması Wave 01'in başladığı, hazırlandığı, test e
 |---|---|
 | Bekliyor | Haritada; uygulama veya hazırlık başlamadı |
 | Aktif | Kullanıcı açıkça başlattı ve hazırlanmış plan tek aktif Wave Plan olarak yürütülüyor |
-| Yerel tamam | Kod/doküman ve otomatik kanıt tamam; manuel QA/onay bekliyor |
-| QA bekliyor | Manuel doğrulama adımları ve kanıt hazır |
-| QA kapalı | Otomatik kanıt, manuel QA ve gerekli kullanıcı onayı tamam |
+| Auto-verified | Sale Release scope'u uygulandı ve zorunlu otomatik kapılar geçti |
+| Committed / QA deferred | Tek wave commit'i alındı; manuel QA checkpoint/Wave 19 havuzunda |
+| Checkpoint QA | Birden çok committed wave toplu manuel smoke/regression altında |
+| QA kapalı | Wave 19 Sale Acceptance kanıtı ve gerekli kullanıcı onayı tamam |
+| Deferred / Roadmap | Satış öncesi uygulanmayacak kapsam, canonical plan referanslarıyla korunuyor |
 | Bloke | Somut dış bağımlılık veya kullanıcı kararı gerekiyor |
 | Kapsam dışı | Yalnız açık gerekçe ve kullanıcı kabulüyle uygulanmaz |
 
@@ -76,9 +84,35 @@ Faz bir uygulama yetkisi değildir; yürütme birimi wave'dir.
 - Ayrıntılı wave planlarının canonical klasörü `docs/waves/` ve klasör sözleşmesi `waves/README.md` dosyasıdır.
 - Toplam **19 wave** vardır; dosya adları `TALKX_WAVE_01.md`–`TALKX_WAVE_19.md` kalıbını izler.
 - Wave dosyaları topluca veya boş placeholder olarak oluşturulmaz. Kullanıcı hangi wave'in yazılmasını açıkça isterse yalnız o dosya hazırlanır ve ardından durulur.
-- Hazırlanmış bir dosya wave'i aktif etmez. Aktivasyon ayrıca açık kullanıcı talimatı, önceki wave'in `QA kapalı` olması ve güncel repo doğrulaması ister.
+- Hazırlanmış bir dosya wave'i aktif etmez. Aktivasyon açık kullanıcı talimatı, önceki wave'in **Committed / QA deferred** veya **QA kapalı** olması ve güncel repo doğrulaması ister.
 - Bu harita sıra, Plan A/B/C katılımı ve durum otoritesidir; wave dosyası yalnız ilgili stable ID'lerin uygulama ayrıntısını ve kanıtını taşır.
 - Mevcut envanter: `waves/TALKX_WAVE_01.md`, `waves/TALKX_WAVE_02.md`, `waves/TALKX_WAVE_03.md`, `waves/TALKX_WAVE_04.md`, `waves/TALKX_WAVE_05.md`, `waves/TALKX_WAVE_06.md`, `waves/TALKX_WAVE_07.md`, `waves/TALKX_WAVE_08.md`, `waves/TALKX_WAVE_09.md`, `waves/TALKX_WAVE_10.md`, `waves/TALKX_WAVE_11.md`, `waves/TALKX_WAVE_12.md`, `waves/TALKX_WAVE_13.md`, `waves/TALKX_WAVE_14.md`, `waves/TALKX_WAVE_15.md`, `waves/TALKX_WAVE_16.md`, `waves/TALKX_WAVE_17.md`, `waves/TALKX_WAVE_18.md` ve `waves/TALKX_WAVE_19.md` hazır fakat aktif değil; 19/19 planlama envanteri tamamdır.
+
+## 5.2 Sale Release scope matrisi
+
+| Wave | Sale sınıfı | Satış öncesi çekirdek | Post-acquisition Roadmap / Deferred |
+|---:|---|---|---|
+| 01 | TAM / ÇEKİRDEK | Ürün dili; HTTP/WS input, payload, origin ve guest fallback güvenliği | Play Console, store ve insan legal incelemesi Wave 19 manuel checklist'inde |
+| 02 | TAM / ÇEKİRDEK | API/error standardı; session; socket identity; abuse/rate-limit; redaction; admin erişim sertleştirmesi | Büyük backend framework/refactor ve enterprise capability katmanı |
+| 03 | KÜÇÜLTÜLMÜŞ | Riskli state/domain ayrımı; auth UX; kritik responsive/a11y | Komple App.jsx parçalama, design-system ve geniş token migration |
+| 04 | TAM / ÇEKİRDEK | Liveness/readiness; release identity; migration disiplini; DB sınırları; backup/restore; deploy/rollback runbook | Gelişmiş SLO/performance gözlem platformu |
+| 05 | TAM / ÇEKİRDEK | Deterministik reconnect/recovery; ghost state temizliği; presence/last seen; state izolasyonu | Redis veya distributed realtime mimarisi |
+| 06 | TAM / ÇEKİRDEK | Canonical country; veri sahipliği; deletion; retention/anonymization; privacy eşliği | Geniş privacy automation/platform yatırımı |
+| 07 | TAM / ÇEKİRDEK | Server-otoriteli join/search/cancel/requeue ve stale/double queue temizliği | Yeni matchmaking ürün kapsamı |
+| 08 | TAM / ÇEKİRDEK | Ayrı Global/Kendi Ülkem queue-scope; kesin country filtresi; açık fallback; temel telemetry | Gelişmiş segment/deney altyapısı |
+| 09 | TAM / ÇEKİRDEK | Pending offer; server countdown; accept/pass/timeout; duplicate karar; requeue | Yeni eşleşme varyantları |
+| 10 | TAM / ÇEKİRDEK | Kalıcı DM; clientMsgId; idempotency; outbox/retry; offline/reconnect; unread/read | Mesajlaşma platformu genişletmeleri |
+| 11 | TAM / ÇEKİRDEK | Mevcut tek kullanımlık medya; report/block; ban/shadowban; evidence zinciri; admin bağlantısı | Yeni medya özellikleri |
+| 12 | KÜÇÜLTÜLMÜŞ | Session-expired/recovery UX; account settings; deletion/support; gerekli legal acceptance/version | Gelişmiş legal publishing sistemi |
+| 13 | ÇOK KÜÇÜLTÜLMÜŞ | TR/EN fallback; mevcut push; notification deep-link güvenilirliği | TalkX System inbox, campaign ve çok dilli iletişim platformu |
+| 14 | MİNİMAL | Users, active/online, searches/matches, reports ve mümkünse basic activity; no-data/0 ayrımı | Davranış rollup, confidence window ve gelişmiş analytics |
+| 15 | TAM / ÇEKİRDEK | User list/detail; reports; ban/block/moderation; state'ler; makul maskeleme | Enterprise admin console genişletmeleri |
+| 16 | PAS / ROADMAP | Wave 04 health/version/deploy identity yeterlilik doğrulaması ve PAS kaydı | B-OBS-002/C-REL-001 gelişmiş Release Health ingestion/UI bütünü |
+| 17 | KÜÇÜLTÜLMÜŞ | Frontend lint/build; backend syntax/core tests; kritik two-client/auth/reconnect/duplicate regresyonu; basit CI | Enterprise test matrisi, geniş artifact/audit sistemi |
+| 18 | TAM / ÇEKİRDEK | Version hizası; prod build; Capacitor sync; stale asset; signed AAB/RC; temel Android davranışı | Mağaza yayını ve production rollout ayrıca açık yetki ister |
+| 19 | SALE ACCEPTANCE | Toplu manuel QA; bug triage/fix-regression; release freeze | Yeni özellik, yeni ürün dönemi veya roadmap implementasyonu |
+
+Roadmap'e taşınan stable ID ve kabul kriterleri silinmez. Canonical Plan A/B/C'de açık kalır; ilgili wave dosyasındaki Sale Release override bölümünde yönlendirilir ve satış paketinde **Post-acquisition Roadmap / Deferred** olarak korunur.
 
 ## 6. Canonical Wave Map
 
@@ -142,24 +176,24 @@ Bu matris her wave'in hangi kalıcı planlardan iş aldığını görünür kıl
 | Wave | Giriş kapısı | Özellikle dâhil değil |
 |---:|---|---|
 | 01 | Açık Wave 01 yetkisi ve aktif Wave Plan | API/auth uygulaması, UI refactor, deploy |
-| 02 | Wave 01 QA kapalı | Reconnect, matchmaking, migration, admin görev ekranları |
-| 03 | Wave 02 QA kapalı | Match/search işlevi ve Android release |
-| 04 | Wave 03 QA kapalı | Açık yetkisiz canlı DB, cutover, restart veya deploy |
-| 05 | Wave 04 QA kapalı | Match scope ve offer protokolü |
-| 06 | Wave 05 QA kapalı | Partition queue ve Global/Country selector |
-| 07 | Wave 06 QA kapalı | Country scope, fallback ve QA-003 offer |
-| 08 | Wave 07 QA kapalı | Manuel ülke, canlı havuz sayısı ve yeni match filtresi |
-| 09 | Wave 08 QA kapalı | QA-003 içine scope kontrolü veya peer konumu |
-| 10 | Wave 09 QA kapalı | Tek kullanımlık medya ve moderasyon |
-| 11 | Wave 10 QA kapalı | Toplu moderasyon ve yetkisiz destructive işlem |
-| 12 | Wave 11 QA kapalı | Yetkisiz production legal publish veya gerçek hesap silme |
-| 13 | Wave 12 QA kapalı | Pazarlama tercih merkezi ve yetkisiz canlı bildirim |
-| 14 | Wave 13 QA kapalı | Tahmine dayalı AI özeti ve kaynaksız metrik |
-| 15 | Wave 14 QA kapalı | Yetkisiz hassas veri açma veya toplu canlı aksiyon |
-| 16 | Wave 15 QA kapalı | Ham stack/mesaj/token ve veri yokken sağlıklı sonucu |
-| 17 | Wave 16 QA kapalı | Başarısız kapıyla deploy veya otomatik Wave 18 geçişi |
-| 18 | Wave 17 QA kapalı | Yetkisiz mağaza yayını veya production rollout |
-| 19 | Wave 18 QA kapalı | Fikir Parkı, yeni özellik veya yeni ürün dönemi |
+| 02 | Wave 01 committed + açık Wave 02 yetkisi | Reconnect, matchmaking, migration, admin görev ekranları |
+| 03 | Wave 02 committed + açık Wave 03 yetkisi | Match/search işlevi, geniş design-system ve Android release |
+| 04 | Wave 03 committed + açık Wave 04 yetkisi | Açık yetkisiz canlı DB, cutover, restart veya deploy |
+| 05 | Wave 04 committed + açık Wave 05 yetkisi | Match scope, offer protokolü ve distributed mimari |
+| 06 | Wave 05 committed + açık Wave 06 yetkisi | Partition queue ve Global/Country selector UI |
+| 07 | Wave 06 committed + açık Wave 07 yetkisi | Country scope, fallback ve QA-003 offer |
+| 08 | Wave 07 committed + açık Wave 08 yetkisi | Manuel ülke, canlı havuz sayısı ve yeni match filtresi |
+| 09 | Wave 08 committed + açık Wave 09 yetkisi | QA-003 içine scope kontrolü veya peer konumu |
+| 10 | Wave 09 committed + açık Wave 10 yetkisi | Tek kullanımlık medya ve moderasyon |
+| 11 | Wave 10 committed + açık Wave 11 yetkisi | Yeni medya özelliği, toplu moderasyon ve yetkisiz destructive işlem |
+| 12 | Wave 11 committed + açık Wave 12 yetkisi | Gelişmiş legal publishing, yetkisiz production publish veya gerçek hesap silme |
+| 13 | Wave 12 committed + açık Wave 13 yetkisi | System campaign/inbox platformu ve yetkisiz canlı bildirim |
+| 14 | Wave 13 committed + açık Wave 14 yetkisi | Gelişmiş behavior analytics, tahmine dayalı AI özeti ve kaynaksız metrik |
+| 15 | Wave 14 committed + açık Wave 15 yetkisi | Yetkisiz hassas veri açma, enterprise console veya toplu canlı aksiyon |
+| 16 | Wave 15 committed + açık Wave 16 PAS kaydı yetkisi | Release Health implementasyonu; kapsam roadmap'e kaydedilir |
+| 17 | Wave 16 deferred kaydı committed + açık Wave 17 yetkisi | Enterprise test matrisi ve otomatik Wave 18 geçişi |
+| 18 | Wave 17 committed + açık Wave 18 yetkisi | Yetkisiz mağaza yayını veya production rollout |
+| 19 | Wave 18 committed + açık Wave 19 yetkisi | Fikir Parkı, yeni özellik veya yeni ürün dönemi |
 
 Bir wave'in ayrıntılı otomatik ve manuel kanıt listesi hazırlanmış `waves/TALKX_WAVE_NN.md` içinde ilgili Plan refs kabul kriterlerine bağlanır; liste ancak açık başlangıç talimatıyla uygulanır.
 
@@ -185,10 +219,10 @@ Kullanıcı belirli bir wave için planlama aşamasına geçilmesini açıkça i
 5. Başlangıç ve bağımlılık doğrulaması
 6. Uygulama adımları
 7. Otomatik test kapıları
-8. Manuel QA adımları
+8. Checkpoint/Wave 19 havuzuna taşınacak manuel QA adımları
 9. Risk, rollback ve canlı işlem yetkileri
 10. Sonuç/evidence
-11. Kullanıcı onayı ve kapanış
+11. Otomatik kapanış, commit ve ertelenmiş manuel QA kaydı
 12. “Sonraki wave başlatılmadı” koruması
 
 Wave Planın hazırlanması tek başına uygulama yetkisi değildir. Wave ancak kullanıcı ayrıca açıkça başlattığında `Aktif` olur.
@@ -197,7 +231,7 @@ Wave Planın hazırlanması tek başına uygulama yetkisi değildir. Wave ancak 
 
 ### Açılış
 
-- Önceki wave `QA kapalı` değilse yeni wave açılmaz.
+- Önceki wave **AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED** veya **QA kapalı** değilse yeni wave açılmaz.
 - Kullanıcı açıkça wave numarasını başlatır.
 - Canonical Plan refs ve mevcut repo gerçeği yeniden doğrulanır.
 - Hazırlanmış `waves/TALKX_WAVE_NN.md`, canonical Plan refs ve güncel repo gerçeğiyle yeniden doğrulanır.
@@ -212,12 +246,21 @@ Wave Planın hazırlanması tek başına uygulama yetkisi değildir. Wave ancak 
 
 ### Kapanış
 
-- Otomatik kanıt ve manuel QA sonuçları kaydedilir.
-- Gerekli kullanıcı onayı alınır.
+- Zorunlu otomatik kanıt kaydedilir; başarısız kapı varsa commit alınmaz ve wave bloke edilir.
+- Sale Release scope'u tek wave commit'iyle kapatılır; commit kimliği sonuç alanına yazılır.
+- Manuel QA maddeleri checkpoint/Wave 19 havuzuna aktarılır; Wave 01–18'de kullanıcı manuel QA onayı aranmaz.
 - Plan A/B/C checkbox'ları yalnız kanıt kadar güncellenir.
 - Wave Map ve aktif Wave Plan sonucu senkronize edilir.
-- Master QA ve gerekli AI handoff belgeleri stale durum dili için taranır.
+- Canonical planlar roadmap/deferred kapsamını korur; kanıtlanmayan kriterler açık kalır.
 - Sonraki wave yalnız `Bekliyor` kalır.
+
+## 10.1 Toplu manuel QA checkpoint modeli
+
+- **Checkpoint A — Core (Wave 01–06):** auth/security, reconnect/presence, account/data lifecycle, DB/deploy smoke.
+- **Checkpoint B — Product (Wave 07–15):** Global/Country, search, offer, chat, friend DM, media, report/block ve admin operasyonları.
+- **Checkpoint C — Release (Wave 17–19):** CI, Android gerçek cihaz, production-readiness ve tam regression.
+- Checkpoint'ler kullanıcı uygun olduğunda toplu çalıştırılır. Yapılmamış checkpoint, otomatik kapıları geçmiş tekil wave'in commit edilmesini engellemez.
+- Wave 19 tüm açık manuel QA maddelerinin terminal **Sale Acceptance QA + freeze** kapısıdır.
 
 ## 11. Harita değişiklik kuralı
 

@@ -14,12 +14,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 07 `QA kapalı` ve kullanıcıdan açık “Wave 08'i başlat” talimatı
-- **Mevcut blokaj:** Wave 01–07 uygulanıp kapanmadı; Wave 08 uygulanamaz
+- **Giriş kapısı:** Wave 07 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 08'i başlat” talimatı
+- **Mevcut blokaj:** Wave 07 henüz committed değil; Wave 08 uygulanamaz
 - **Önceki wave:** Wave 07 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 09 — planı hazır, aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 08 aktivasyonu, kod/test/dependency değişikliği, migration, gerçek geo/IP sorgusu, canlı veri, admin telemetry sorgusu, feature flag, deploy veya Wave 09 uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Ayrı Global/Kendi Ülkem queue-scope davranışı, kesin country filtresi, sessiz Global fallback'in kaldırılması, doğru UI scope durumu ve temel telemetry.
+- **Post-acquisition Roadmap / Deferred:** Yeni segmentler, deney/rollout altyapısı, manuel ülke seçimi ve gelişmiş matching analytics.
+- **Kapanış:** Scope izolasyonu/fallback otomatik testleri geçer, tek Wave 08 commit'i alınır ve **DUR**. Gerçek iki-client Web/Android QA'sı Checkpoint B/Wave 19'a gider.
+- Telemetry yalnız işlevi doğrulayacak minimum düzeyde tutulur.
 
 ## 2. Canonical referanslar ve bağımlılık sırası
 
@@ -73,7 +80,7 @@ Wave 08 sonunda:
 
 - `legal_acceptances.location_country` serbest metin tarihsel kabul snapshot'ıdır ve doğrudan queue anahtarı olamaz.
 - Wave 06 planı canonical ISO alpha-2 code, source/status/freshness/policy version ve privacy yaşam döngüsünü sahiplenir.
-- Wave 06 QA kapanmadan geçerli `COUNTRY` capability açılamaz.
+- Wave 06 canonical country çekirdeği **AUTO-VERIFIED / COMMITTED** olmadan geçerli `COUNTRY` capability açılamaz.
 - Tam IP, GPS, şehir veya adres queue/pending/telemetry kaydına kopyalanmaz.
 
 ### 4.3 Mevcut client yüzeyi
@@ -548,7 +555,7 @@ Wave 06 canonical country migrationı zaten kapanmış olmalıdır; Wave 08 ayn�
 - Source/time window/generatedAt/freshness ve denominator görünürlüğü.
 - Kullanıcı listesinde country tracking drill-down bulunmaması.
 
-## 18. Manuel QA matrisi
+## 18. Manuel QA havuzu — Checkpoint B / Wave 19 (commit kapısı değil)
 
 | Grup | Senaryo | Beklenen |
 |---|---|---|
@@ -728,7 +735,7 @@ Wave yürütülürse kapanış kaydı en az şunları içerir:
 - QA-014 mood/prompt/phase ve QA-003 görsel/işlev regresyonu
 - Analytics payload/privacy/cohort/metric/Jarvis kanıtı
 - Syntax/lint/build/encoding/focused/full test exit code'ları
-- Kullanıcı manuel QA onayı
+- Checkpoint B / Wave 19'a aktarılmış manuel QA kaydı
 - Wave 09'un başlatılmadığı açık durma kaydı
 
 ## 25. Durma kuralı

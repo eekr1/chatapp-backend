@@ -15,12 +15,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 17 `QA kapalı` ve kullanıcıdan açık "Wave 18'i başlat" talimatı
-- **Mevcut blokaj:** Wave 01–17 uygulanıp kapanmadı; Wave 18 uygulanamaz
+- **Giriş kapısı:** Wave 17 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık "Wave 18'i başlat" talimatı
+- **Mevcut blokaj:** Wave 17 henüz committed ve minimum CI yeşil değil; Wave 18 uygulanamaz
 - **Önceki wave:** Wave 17 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 19 — ayrı planı hazır; aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 18 aktivasyonu, version bump, frontend/Gradle build, Capacitor sync, dependency/lockfile değişikliği, signing/keystore erişimi, secret/config değişikliği, emulator/cihaz çalıştırma, Firebase/Play Console işlemi, AAB/APK upload, rollout, production deploy veya Wave 19 aktivasyonu için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Version kaynaklarının hizalanması, frontend production build, Capacitor sync, stale asset kontrolü, signed release build/AAB, release candidate ve Android back/lifecycle/network/push/media temel davranışı.
+- **Ayrı yetki gerekenler:** Play Console production publish, staged rollout veya canlı mağaza değişikliği bu wave başlangıcıyla otomatik yetkilendirilmez.
+- **Kapanış:** Build/sync/signing/static otomatik kapıları ve üretilebilen artifact doğrulaması geçer, tek Wave 18 commit'i alınır ve **DUR**. Gerçek cihaz ve mağaza kontrolleri Checkpoint C/Wave 19'a gider.
+- Wave 19 kullanıcı tarafından ayrıca başlatılır.
 
 ## 2. Canonical referanslar ve otorite
 
@@ -519,7 +526,7 @@ Telemetry yokluğu sağlıklı değildir. Low sample "izleniyor"; kritik core-fl
 3. Internal track kullanılacaksa exact onay al, upload/read-back kanıtını kaydet.
 4. Production rollout yapmadan staged rollout prosedürünü dry-run doğrula.
 5. Canonical checkbox/evidence'i yalnız gerçek kanıtla senkronize et.
-6. Kullanıcı manuel QA sonucunu al ve Wave 19'u başlatmadan dur.
+6. Manuel QA matrisini Checkpoint C/Wave 19 havuzuna aktar, tek commit'i al ve Wave 19'u başlatmadan dur.
 
 ## 20. Komut ve artifact sözleşmesi
 
@@ -594,7 +601,7 @@ Keystore/password, `google-services.json` içeriği, signing temp files ve conso
 - Rollout/halt/read-back komutları idempotent ve explicit approval'lıdır.
 - Release note ve artifact provenance aynı release kaydına bağlıdır.
 
-## 23. Manuel QA matrisi
+## 23. Manuel QA havuzu — Checkpoint C / Wave 19 (commit kapısı değil)
 
 ### 23.1 Install, update ve identity
 
@@ -671,7 +678,7 @@ Kriterler plan hazırlandığı için işaretlenmez. Browser/debug/emulator sonu
 
 ### 25.1 Giriş
 
-- [ ] Wave 17 `QA kapalı`.
+- [ ] Wave 17 minimum CI scope'u **AUTO-VERIFIED / COMMITTED**.
 - [ ] Kullanıcı açıkça Wave 18'i başlattı.
 - [ ] Repo/ownership/branch/remote/dirty snapshot kayıtlı.
 - [ ] Wave 17 required checks ve artifact handoff hazır.
@@ -687,14 +694,14 @@ Kriterler plan hazırlandığı için işaretlenmez. Browser/debug/emulator sonu
 - [ ] Emulator/device otomatik ve manuel smoke evidence'i var.
 - [ ] Secret/credential/PII hiçbir log/artifact/evidence'e girmedi.
 
-### 25.3 QA kapalı
+### 25.3 Sale Release otomatik kapanışı
 
 - [ ] Signed release artifact gerçek cihazda ana akış smoke geçti.
 - [ ] Minimum/orta/güncel API ve WebView risk matrisi sonuçlandı.
 - [ ] Internal track gerekiyorsa açık onay + upload/read-back kanıtlı; onay yoksa yapılmadı kaydı var.
 - [ ] Rollout/halt/forward-fix runbook dry-run doğrulandı.
 - [ ] Store beyanı C-COMP-001 ve gerçek dependency/permission davranışıyla uyumlu.
-- [ ] Kullanıcı manuel QA sonucunu açıkça onayladı.
+- [ ] Manuel QA maddeleri Checkpoint C/Wave 19 havuzuna aktarıldı.
 - [ ] Canonical Plan A/C, Master, Wave Map ve sonuç alanı senkronize edildi.
 - [ ] Wave 19 başlatılmadan duruldu.
 
@@ -777,7 +784,7 @@ Wave 18 yürütüldüğünde en az:
 - Data Safety/content rating/listing evidence review
 - internal upload/rollout yapılmadı veya exact onay/read-back kaydı
 - halt/rollback/forward-fix dry-run ve last-known-good kayıt
-- canonical checkbox ve kullanıcı manuel QA onayı
+- canonical checkbox için mevcut otomatik kanıt; manuel QA Checkpoint C / Wave 19 havuzunda
 - Wave 19'un başlatılmadığı açık durma kaydı
 
 Kriter yalnız kanıtla `[x]` olur. Build success, emulator screenshot, asset dosya adı eşitliği veya Play Console'da artifact görünmesi tek başına uçtan uca release/parity kanıtı değildir.

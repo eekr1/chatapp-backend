@@ -16,12 +16,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 10 `QA kapalı` ve kullanıcıdan açık “Wave 11'i başlat” talimatı
-- **Mevcut blokaj:** Wave 01–10 uygulanıp kapanmadı; Wave 11 uygulanamaz
+- **Giriş kapısı:** Wave 10 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 11'i başlat” talimatı
+- **Mevcut blokaj:** Wave 10 henüz committed değil; Wave 11 uygulanamaz
 - **Önceki wave:** Wave 10 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 12 — planı hazır, aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 11 aktivasyonu, kod/test/dependency değişikliği, migration, medya/PII export'u, moderasyon işlemi, ban/block, retention cleanup, canlı veri, deploy veya Wave 12 uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Mevcut tek kullanımlık medya güvenilirliği, report/block, ban/shadowban davranışı, moderation evidence zinciri ve admin bağlantısı.
+- **Post-acquisition Roadmap / Deferred:** Yeni medya özellikleri, medya ürün genişletmesi ve toplu moderasyon platformu.
+- **Kapanış:** Media/report/block/moderation otomatik testleri geçer, tek Wave 11 commit'i alınır ve **DUR**. Web/Android/privacy owner manuel QA'sı Checkpoint B/Wave 19'a gider.
+- Wave 10 text/outbox kanıtı **committed** teknik ön koşuldur; Wave 10'un tekil manuel QA'sı giriş kapısı değildir.
 
 ## 2. Canonical referanslar ve otorite
 
@@ -335,7 +342,7 @@ Expired, consumed ve error tek boolean altında aynılaştırılmaz. Server medi
 
 ### 10.4 A-FRIEND-003 kapanış koşulu
 
-Wave 10 text/outbox evidence'i gerçekten QA kapalıysa ve Wave 11 şu sonuçları kanıtlarsa A-FRIEND-003 üst checkbox'ı kapanabilir:
+Wave 10 text/outbox evidence'i otomatik doğrulanmış/committed ise ve Wave 11 şu sonuçları kanıtlarsa Sale Release çekirdeği tamamlanır; A-FRIEND-003 canonical checkbox'ı yalnız bütün canonical kanıtla kapanabilir:
 
 - Expired/consumed media tekrar açılabilir görünmüyor.
 - Media content telemetry/log/local outbox persistence'a sızmıyor.
@@ -528,7 +535,7 @@ Genel admin yeniden tasarımı bu Wave'e girmez; C-TRUST-001 için yalnız mevcu
 - Anonymous/friend mode ve text outbox regresyonu.
 - TR/EN, large font, screen reader ve reduced motion.
 
-## 17. Manuel QA matrisi
+## 17. Manuel QA havuzu — Checkpoint B / Wave 19 (commit kapısı değil)
 
 | Grup | Senaryo | Beklenen |
 |---|---|---|
@@ -589,7 +596,7 @@ Genel admin yeniden tasarımı bu Wave'e girmez; C-TRUST-001 için yalnız mevcu
 | Fotoğraf içeriği telemetry/log'a sızmıyor | Genel redaction regresyonu | Binary/EXIF/payload/storage/log scan |
 | Web/Android aynı sonuç semantiği | Text/outbox kanıtı | Permission/send/open/expire/error matrisi |
 
-A-FRIEND-003 yalnız Wave 10 text kanıtı QA kapalı ve bu üç media sonucu tamam ise `[x]` olabilir.
+A-FRIEND-003 yalnız Wave 10 text kanıtı ile bu üç media sonucu dahil bütün canonical kanıt tamam ise `[x]` olabilir; eksik manuel kanıt Wave 19'a taşınır.
 
 ### 18.5 Master QA-002 — 7 kriter
 
@@ -685,7 +692,7 @@ Production migration, gerçek blob/report/IP erişimi, retention execute, eviden
 - Privacy/log/telemetry/EXIF/body scan sonucu
 - Web/Android permission/send/open/expire/retry/error sonucu
 - Syntax/lint/build/encoding/focused/full test exit code'ları
-- Stable ID checkbox ve kullanıcı manuel QA onayı
+- Stable ID checkbox için gerçek kanıt; manuel QA Checkpoint B / Wave 19 havuzunda
 - Wave 12'nin başlatılmadığı açık durma kaydı
 
 ## 24. Durma kuralı

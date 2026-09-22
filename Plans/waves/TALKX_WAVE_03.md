@@ -12,12 +12,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 02 `QA kapalı` ve kullanıcıdan açık “Wave 03'ü başlat” talimatı
-- **Mevcut blokaj:** Wave 01 ve Wave 02 uygulanıp kapanmadı; Wave 03 uygulanamaz
+- **Giriş kapısı:** Wave 02 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 03'ü başlat” talimatı
+- **Mevcut blokaj:** Wave 02 henüz committed değil; Wave 03 uygulanamaz
 - **Önceki wave:** Wave 02 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 04 — planı ayrı talimatla hazırlandı; aktif değil ve uygulanmadı
 
 Bu dosyanın hazırlanması Wave 03 aktivasyonu, frontend kodu/CSS'i, dependency veya test altyapısı değişikliği, Android sync, deploy ya da Wave 04 aktivasyonu/uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — KÜÇÜLTÜLMÜŞ
+
+- **Satış öncesi uygulanır:** Yalnız riskli match/friend/system state ayrımı, gerekli küçük extraction'lar, auth hata/recovery UX'i ve kritik mobile/responsive/accessibility düzeltmeleri.
+- **Post-acquisition Roadmap / Deferred:** App.jsx'in komple parçalanması, tam design-system/semantic-token migration'ı, geniş component standardizasyonu ve kozmetik yeniden tasarım.
+- **Koruma:** Mevcut TalkX görünümü ve çalışan akışlar değişmez; refactor kendi başına amaç değildir.
+- **Kapanış:** Focused test + lint/build geçer, tek Wave 03 commit'i alınır ve **DUR**. Manuel görsel/a11y doğrulama Checkpoint A/Wave 19'a gider.
 
 ## 2. Canonical referanslar
 
@@ -34,7 +41,7 @@ Kilitli karar ve kanıt kaynağı: `../TALKX_MASTER_BACKLOG.md` / §1, §3, §5,
 
 Bağımlılık yorumu:
 
-- `B-API-001` ve `B-WS-001`, Wave 02'de QA kapalı olmalıdır; client server state'ini veya hata anlamını tahmin etmez.
+- `B-API-001` ve `B-WS-001` Wave 02 Sale Release scope'unda otomatik doğrulanmış ve committed olmalıdır; client server state'ini veya hata anlamını tahmin etmez.
 - `A-QA-001` Wave 17'nin bütünleşik kalite programıdır. Wave 03, extraction güvenliği için focused test altyapısı ve kanıt üretir fakat `A-QA-001` maddesini kapatmaz.
 - A-A11Y-001 bu wave içinde bütün yeni/ayrılan client temelinin kabul kapısıdır; sonradan uygulanacak kozmetik kontrol değildir.
 
@@ -430,7 +437,7 @@ Test grupları:
 - Loading/başarı/hata state'leri
 - Session sona ermesinin hesap silinmesi gibi anlatılmaması
 
-## 10. Manuel QA planı
+## 10. Manuel QA havuzu — Checkpoint A / Wave 19 (commit kapısı değil)
 
 ### Davranış regresyonu
 
@@ -517,7 +524,7 @@ Wave 03 frontend foundation planıdır. Aşağıdakiler ayrıca açık yetki vey
 
 Wave 03 uygulamasına geçmeden önce:
 
-- [ ] Wave 01 ve Wave 02 bütün canonical refs ile `QA kapalı` ve kullanıcı onaylı.
+- [ ] Wave 01 ve Wave 02 **AUTO-VERIFIED / COMMITTED**; açık canonical/manual maddeler checkpoint havuzunda.
 - [ ] Kullanıcı açıkça “Wave 03'ü başlat” dedi.
 - [ ] Dirty repo başlangıç fotoğrafı hedef JSX/CSS/package dosyaları için kaydedildi.
 - [ ] Wave 02 API/error/session/socket capability sözleşmeleri güncel kodda yeniden doğrulandı.
@@ -539,14 +546,14 @@ Bu kutular plan hazırlanırken işaretlenmez.
 - **Otomatik kanıt:** —
 - **Accessibility kanıtı:** —
 - **Web/Android smoke:** —
-- **Manuel QA:** —
+- **Manuel QA:** Checkpoint A / Wave 19'a ertelendi
 - **Kullanıcı görsel onayı:** —
 - **Wave durumu:** Bekliyor
 - **Sonraki wave:** Başlatılmadı
 
 ## 16. Durma kuralı
 
-Bu belge hazırlandıktan sonra durulur. Wave 02 `QA kapalı` olmadan ve kullanıcı açıkça Wave 03'ü başlatmadan:
+Bu belge hazırlandıktan sonra durulur. Wave 02 **AUTO-VERIFIED / COMMITTED** olmadan ve kullanıcı açıkça Wave 03'ü başlatmadan:
 
 - Frontend kodu, CSS, dependency, lockfile veya test config'i değiştirilmez.
 - App extraction, token migration veya auth UI değişikliği yapılmaz.

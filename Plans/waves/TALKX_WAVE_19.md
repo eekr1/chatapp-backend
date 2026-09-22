@@ -1,4 +1,4 @@
-# TalkX Wave 19 Plan — Bütünleşik Admin, Operasyon ve Release QA Kapanışı
+# TalkX Wave 19 Plan — Sale Acceptance QA ve Release Freeze
 
 > Bu belge yalnız Wave 19 için hazırlanmış uygulama planıdır.
 > Canonical kapsam Plan C `C-QA-001` maddesidir.
@@ -15,13 +15,21 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 18 `QA kapalı` ve kullanıcıdan açık "Wave 19'u başlat" talimatı
-- **Mevcut blokaj:** Wave 01–18 uygulanıp kapanmadı; Wave 19 uygulanamaz
+- **Giriş kapısı:** Wave 18 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık "Wave 19'u başlat" talimatı
+- **Mevcut blokaj:** Wave 01–18'in Sale Release sonuçları committed değil; Wave 19 uygulanamaz
 - **Önceki wave:** Wave 18 — planı hazır, aktif değil
 - **Sonraki wave:** Yok — Wave 19 mevcut canonical haritanın terminal wave'idir
 - **Terminal sınır:** Fikir Parkı, yeni özellik veya yeni ürün dönemi ayrı karar ve ayrı planlama ister
 
 Bu dosyanın hazırlanması Wave 19 aktivasyonu; test, build, sync, deploy, migration, notification send, legal publish, admin mutation, backup/restore, Play Console işlemi, production smoke veya yeni ürün dönemi için yetki değildir.
+
+## 1.1 Sale Release override — SALE ACCEPTANCE / TERMINAL QA
+
+- **Yeni feature geliştirme yoktur.** Wave 19'un işi Wave 01–18'den taşınan manuel QA'yı toplamak, hataları triage etmek, ilgili sahip wave kapsamında fix commit'i çıkarmak, regresyonu yeniden çalıştırmak ve release'i dondurmaktır.
+- **Zorunlu uçtan uca rota:** register/login → home → Global/Kendi Ülkem → search → offer → accept/pass → anonymous chat → media → report/block → friend → persistent DM → presence → reconnect → account → admin/moderation → Android.
+- **Acceptance:** Checkpoint A/B/C açıkları, legal/store/Play Console insan kontrolleri ve gerçek cihaz matrisi burada kapanır. Bulgu varsa freeze verilmez.
+- **Freeze:** Kritik/major blocker kalmadığında otomatik regresyon yeniden yeşil, final kullanıcı onayı kayıtlı ve Sale Release artifact'leri izlenebilir olur; ardından **SALE RELEASE FREEZE** ilan edilir.
+- **Roadmap koruması:** Wave 03/12/13/14/16/17'den ertelenen kapsam release bug'ı sayılmaz; **Post-acquisition Roadmap / Deferred** olarak satış paketinde kalır.
 
 ## 2. Canonical referanslar ve otorite
 
@@ -42,7 +50,7 @@ Bu dosyanın hazırlanması Wave 19 aktivasyonu; test, build, sync, deploy, migr
 
 Wave 19 sonunda tek bir release adayı için:
 
-- Wave 01–18 `QA kapalı` ve kullanıcı onaylıdır.
+- Wave 01–18 Sale Release sonuçları **AUTO-VERIFIED / COMMITTED** durumundadır; ertelenmiş manuel maddeler bu wave'in acceptance havuzundadır.
 - 67 stable ID kanıt veya açık onaylı istisna ile izlenebilir.
 - Admin sayı/durum/aksiyonları gerçek kaynağa ve zaman penceresine bağlıdır.
 - Web, backend, admin ve Android release kimlikleri uyumludur.
@@ -275,7 +283,7 @@ Her defect Plan/QA/wave sahibi, repro, expected/actual, ortam ve evidence taşı
 
 1. **Preflight/freeze:** Wave 01–18 kapanışı, Git/environment/release kimliği, registry, invalidation ve canlı sınır.
 2. **Otomatik kapılar:** Auth/API/admin/source/audit/notification/legal/analytics/health/CI/Android.
-3. **Manuel QA:** QA-004–013/015–017, desktop/mobile/a11y/failure states ve Android matrisi.
+3. **Sale Acceptance manuel QA:** Checkpoint A/B/C havuzu, QA-004–013/015–017, desktop/mobile/a11y/failure states ve Android matrisi.
 4. **Operasyon rehearsal:** İzole backup/restore, deploy/rollback/forward-fix dry-run ve gerekiyorsa ayrı onaylı smoke.
 5. **Final reconciliation:** Stable ID/QA coverage, defect/istisna kararı, manifest, kullanıcı onayı, canonical senkron ve terminal durma.
 

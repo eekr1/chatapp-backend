@@ -14,12 +14,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 09 `QA kapalı` ve kullanıcıdan açık “Wave 10'u başlat” talimatı
-- **Mevcut blokaj:** Wave 01–09 uygulanıp kapanmadı; Wave 10 uygulanamaz
+- **Giriş kapısı:** Wave 09 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 10'u başlat” talimatı
+- **Mevcut blokaj:** Wave 09 henüz committed değil; Wave 10 uygulanamaz
 - **Önceki wave:** Wave 09 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 11 — planı hazır, aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 10 aktivasyonu, kod/test/dependency değişikliği, migration, production mesaj/veri sorgusu, push gönderimi, deploy veya Wave 11 uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Persistent friend DM, clientMsgId/idempotency, outbox/retry, duplicate önleme, offline/reconnect teslimi ve unread/read state.
+- **Post-acquisition Roadmap / Deferred:** Yeni mesajlaşma özellikleri, kapsamlı sync platformu veya genel amaçlı messaging architecture.
+- **Kapanış:** Persistence, retry, duplicate ve reconnect otomatik regresyonları geçer, tek Wave 10 commit'i alınır ve **DUR**. Gerçek cihaz/history QA'sı Checkpoint B/Wave 19'a gider.
+- Wave 11 medya/moderasyon işi bu wave'e çekilmez.
 
 ## 2. Canonical referanslar ve kapsam yorumu
 
@@ -515,7 +522,7 @@ B-MSG-002 media lifecycle, Sistem inbox, read receipt ürünü, genel chat redes
 - Existing direct image happy/error path yalnız regression.
 - Anonymous room send ile friend outbox isolation.
 
-## 19. Manuel QA matrisi
+## 19. Manuel QA havuzu — Checkpoint B / Wave 19 (commit kapısı değil)
 
 | Grup | Senaryo | Beklenen |
 |---|---|---|
@@ -656,7 +663,7 @@ Production message/PII query, migration, feature flag, push, deploy/restart veya
 - Existing media smoke regresyonu ve açık Wave 11 handoff'u
 - Syntax/lint/build/encoding/focused/full test exit code'ları
 - B-MSG-001 kapanışı ve A-FRIEND-003 açık/kapalı alt kriter tablosu
-- Kullanıcı manuel QA onayı
+- Checkpoint B / Wave 19'a aktarılmış manuel QA kaydı
 - Wave 11'in başlatılmadığı açık durma kaydı
 
 ## 26. Durma kuralı

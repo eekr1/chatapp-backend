@@ -15,12 +15,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 15 `QA kapalı` ve kullanıcıdan açık "Wave 16'yı başlat" talimatı
-- **Mevcut blokaj:** Wave 01–15 uygulanıp kapanmadı; Wave 16 uygulanamaz
+- **Giriş kapısı:** Wave 15 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık "Wave 16 PAS kaydını başlat" talimatı
+- **Mevcut blokaj:** Wave 15 henüz committed değil; Wave 16 PAS/roadmap kaydı kapatılamaz
 - **Önceki wave:** Wave 15 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 17 — ayrı planı hazır; aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması aktivasyon, dependency/provider satın alma, telemetry açma, migration, production event toplama, source map/symbol yükleme, alarm gönderme, canlı DB sorgusu, config/secret değişikliği, deploy veya Wave 17 aktivasyonu için yetki değildir.
+
+## 1.1 Sale Release override — PAS / POST-ACQUISITION ROADMAP
+
+- **Satış öncesi ürün implementasyonu yoktur.** Wave 04'teki health/readiness, version/commit ve deploy identity Sale Release için yeterli baseline'dır.
+- **Post-acquisition Roadmap / Deferred:** B-OBS-002 ile C-REL-001'in crash/release ingestion, redaction pipeline, health aggregation ve gelişmiş Release Health UI kapsamının tamamı korunur; silinmez veya tamamlanmış işaretlenmez.
+- **Yürütme:** Kullanıcı Wave 16'yı açıkça başlattığında yalnız Wave 04 baseline'ı doğrulanır, roadmap/PAS sonucu kaydedilir ve gerekirse tek dokümantasyon commit'i alınır. Ürün kodu, schema veya UI değişmez.
+- **Kapanış:** Durum **DEFERRED / ROADMAP / COMMITTED** olarak kaydedilir ve **DUR**. Wave 17 yalnız ayrı kullanıcı talimatıyla başlar; Wave 16 için manuel QA zorunlu değildir.
 
 ## 2. Canonical referanslar ve otorite
 
@@ -456,7 +463,7 @@ Yeni dependency ancak provider kararı, security/privacy/lisans/maliyet ve lockf
 - Lifecycle/idempotency/revision conflict/audit testlidir.
 - Frontend lint/build, backend syntax/unit/integration, Android ve encoding geçer.
 
-## 14. Manuel QA matrisi
+## 14. Roadmap'te korunan eski full-scope manuel QA matrisi — Sale Release'te yürütülmez
 
 1. React render crash ve screen/app ErrorBoundary.
 2. Window error ve unhandled rejection.
@@ -532,7 +539,7 @@ Plan hazırlandığı için kriter işaretlenmez. Yalnız uygulama, otomatik kan
 
 ### 16.1 Giriş
 
-- [ ] Wave 15 `QA kapalı`.
+- [ ] Wave 15 **AUTO-VERIFIED / COMMITTED**.
 - [ ] Kullanıcı Wave 16'yı açıkça başlattı.
 - [ ] Repo/unrelated değişiklik snapshotı alındı.
 - [ ] Provider kararı veya blokajı kayıtlı.
@@ -548,14 +555,14 @@ Plan hazırlandığı için kriter işaretlenmez. Yalnız uygulama, otomatik kan
 - [ ] Migration fresh/existing/rollback kayıtlı.
 - [ ] Secret/PII evidence bundle'a girmedi.
 
-### 16.3 QA kapalı
+### 16.3 Deferred / Roadmap kapanışı
 
 - [ ] QA-016 manuel matrisi staging'de tamam.
 - [ ] Web ve gerçek Android cihaz/emülatör kanıtı var.
 - [ ] Admin desktop/mobile/a11y/TR/EN doğrulandı.
 - [ ] Low sample/no-data/outage/zero ayrımı kanıtlandı.
 - [ ] Provider privacy/retention/cost/runbook tamam.
-- [ ] Kullanıcı manuel QA sonucunu onayladı.
+- [ ] Wave 16 PAS/roadmap sonucu kaydedildi; manuel QA gerekmiyor.
 - [ ] Canonical belgeler ve sonuç senkronize edildi.
 - [ ] Wave 17 başlatılmadan duruldu.
 

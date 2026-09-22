@@ -12,12 +12,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 03 `QA kapalı` ve kullanıcıdan açık “Wave 04'ü başlat” talimatı
-- **Mevcut blokaj:** Wave 01–03 uygulanıp kapanmadı; Wave 04 uygulanamaz
+- **Giriş kapısı:** Wave 03 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 04'ü başlat” talimatı
+- **Mevcut blokaj:** Wave 03 henüz committed değil; Wave 04 uygulanamaz
 - **Önceki wave:** Wave 03 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 05 — planı ayrı talimatla hazırlandı; aktif değil ve uygulanmadı
 
 Bu dosyanın hazırlanması Wave 04 aktivasyonu, DB sorgusu/migrationı, backup/restore, canlı config, Render restart/deploy veya Wave 05 aktivasyonu/uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Liveness/readiness ayrımı, version/commit release identity, migration disiplini, DB timeout/config sınırları, backup/restore doğrulaması ve kısa deploy/rollback runbook.
+- **Post-acquisition Roadmap / Deferred:** Gelişmiş SLO, performance observability/dashboard ve satış devri için gerekli olmayan operasyon platformu.
+- **Canlı sınır:** Production DB cutover, restart ve deploy ayrıca açık kullanıcı yetkisi ister; yerel plan implementasyonu bu yetkiyi vermez.
+- **Kapanış:** Migration/health/backup otomatik kanıtı geçer, tek Wave 04 commit'i alınır ve **DUR**. Manuel operasyon smoke'u Checkpoint A/Wave 19'a gider.
 
 ## 2. Canonical referanslar
 
@@ -36,8 +43,8 @@ Kilitli karar ve kanıt kaynağı: `../TALKX_MASTER_BACKLOG.md` / §8, §10–§
 
 Bağımlılık yorumu:
 
-- `B-OBS-001` ve `B-API-001`, Wave 02'de QA kapalı olmalıdır; health, performance ve hata cevapları aynı request/release sözleşmesini tüketir.
-- `C-ADMIN-001`, Wave 02'de QA kapalı olmalıdır; C-PERF-001 yalnız güvenli admin kabuğuna eklenir.
+- `B-OBS-001` ve `B-API-001` Wave 02 Sale Release scope'unda otomatik doğrulanmış ve committed olmalıdır; health ve hata cevapları aynı request/release sözleşmesini tüketir.
+- `C-ADMIN-001` Wave 02 Sale Release scope'unda otomatik doğrulanmış ve committed olmalıdır; minimal performans görünürlüğü yalnız güvenli admin kabuğuna eklenir.
 - Wave 04 DB migration otoritesidir fakat canlı DB işlemi yine ayrıca açık kullanıcı yetkisi ister.
 - Önceki TalkX Neon restore kanıtı tarihsel referanstır; mevcut endpoint, credential, schema ve satır sayıları uygulama anında yeniden doğrulanmadan güncel kabul edilmez.
 

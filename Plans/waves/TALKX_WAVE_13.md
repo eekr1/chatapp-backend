@@ -15,12 +15,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 12 `QA kapalı` ve kullanıcıdan açık “Wave 13'ü başlat” talimatı
-- **Mevcut blokaj:** Wave 01–12 uygulanıp kapanmadı; Wave 13 uygulanamaz
+- **Giriş kapısı:** Wave 12 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 13'ü başlat” talimatı
+- **Mevcut blokaj:** Wave 12 henüz committed değil; Wave 13 uygulanamaz
 - **Önceki wave:** Wave 12 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 14 — planı ayrı talimatla hazırlandı; aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 13 aktivasyonu, kod/test/dependency değişikliği, migration, production recipient sorgusu, canlı global/segment/test bildirimi, push gönderimi, campaign çalıştırma, schedule `run-now`, feature flag, deploy veya Wave 14 aktivasyonu/uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — ÇOK KÜÇÜLTÜLMÜŞ
+
+- **Satış öncesi uygulanır:** TR/EN fallback ve key eşliği, mevcut push davranışının güvenilirliği ve notification deep-link akışı.
+- **Post-acquisition Roadmap / Deferred:** TalkX System kalıcı inbox, campaign platformu, recipient orchestration ve çok dilli campaign altyapısı. B-SYS-001, C-SYS-001 ve A-SYS-001 silinmez; roadmap olarak korunur.
+- **Canlı sınır:** Gerçek push kampanyası veya production bildirim gönderimi ayrıca açık yetki ister.
+- **Kapanış:** i18n/push/deep-link otomatik kontrolleri geçer, tek Wave 13 commit'i alınır ve **DUR**. Cihaz bildirim QA'sı Checkpoint B/Wave 19'a gider.
 
 ## 2. Canonical referanslar ve otorite
 
@@ -886,7 +893,7 @@ Genel Friends/Chat redesign, Bildirim Tercih Merkezi veya analytics dashboard Wa
 - Account switch/logout no cached data leak.
 - TR/EN/long content/320 px/large text/keyboard/SR/reduced motion.
 - Android back/reinstall/process recreation/multi-device.
-## 20. Manuel QA matrisi
+## 20. Manuel QA havuzu — Checkpoint B / Wave 19 (commit kapısı değil)
 
 | Alan | Senaryo | Beklenen sonuç |
 |---|---|---|
@@ -1100,7 +1107,7 @@ Production migration, target estimate query, test/campaign send, push, schedule 
 - [ ] Root/backend/frontend Git snapshot'ı alındı.
 - [ ] Wave 02 auth/security/admin/WS foundation gerçek kodda doğrulandı.
 - [ ] Wave 04 migration/scheduler/multi-instance/backup runbook doğrulandı.
-- [ ] Wave 06 country/geo/retention/deletion sözleşmeleri QA kapalı.
+- [ ] Wave 06 country/geo/retention/deletion çekirdeği **AUTO-VERIFIED / COMMITTED**.
 - [ ] Wave 10 stable identity/idempotency ilkeleri doğrulandı.
 - [ ] Current locale/profile/client/device/push/schedule/admin notice flow yeniden envanterlendi.
 - [ ] Profile/session/device/target/render locale source priority owner tarafından onaylandı.
@@ -1137,7 +1144,7 @@ Production migration, target estimate query, test/campaign send, push, schedule 
 - QA-015 target/persisted/live/push/read reconciliation
 - Retention/deletion/redaction/audit kanıtı
 - Syntax/lint/build/encoding/focused/full test exit code'ları
-- Stable ID checkbox ve kullanıcı manuel QA onayı
+- Stable ID checkbox için gerçek kanıt; manuel QA Checkpoint B / Wave 19 havuzunda
 - Production delivery/destructive işlemlerin yapılmadığı kayıt
 - Wave 14'ün başlatılmadığı açık durma kaydı
 

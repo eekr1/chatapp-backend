@@ -17,6 +17,13 @@
 
 Bu planın hazırlanması kod, bağımlılık güncellemesi, güvenlik politikası değişikliği, Play Console işlemi, deploy veya Wave 02 aktivasyonu/uygulaması için yetki değildir.
 
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Web/Android ürün vaadi, HTTP/WS type-length validation, body/payload limiti, origin kontrolü, guest/legacy fallback'in kapatılması ve minimum HTTP güvenlik header'ları.
+- **Final manuel checklist'e taşınır:** Play Console hedef kitle/content rating/Data Safety, mağaza metni karşılaştırması ve insan legal/child-safety incelemesi. Bunlar Wave 01 commit'ini engellemez; Wave 19 Sale Acceptance QA'da kapanır.
+- **Kapanış:** Zorunlu otomatik kontroller geçer, tek Wave 01 commit'i alınır ve **DUR**. Wave 02 yalnız kullanıcının ayrı açık başlatma talimatıyla açılır.
+- Bu override, aşağıdaki ayrıntılı planın manuel QA'yı Wave 01 ilerleme kapısı yapan cümlelerinden üstündür; canonical Plan A/B/C kriterleri silinmez ve kanıtlanmayanlar açık kalır.
+
 ## 2. Canonical referanslar
 
 Uygulama sırası değişmez:
@@ -261,7 +268,7 @@ Testler tekrarlanabilir bir backend test komutuna bağlanır; yalnız ad-hoc ell
 - Manifestte cleartext/backup/app id regresyonu
 - Wave 18 release zinciri veya mağaza bundle/publish çalıştırılmaz
 
-## 9. Manuel QA planı
+## 9. Manuel QA havuzu — Checkpoint A / Wave 19 (commit kapısı değil)
 
 ### Web TR/EN
 
@@ -296,7 +303,7 @@ Kullanıcı veya yetkili insan inceleyici:
 - Çocuk güvenliği owner/irtibat/escalation bilgisini doğrular,
 - TR/EN legal içerik için insan incelemesi sonucunu kaydeder.
 
-Bu kanıt olmadan C-COMP-001 ve Wave 01 `QA kapalı` yapılamaz.
+Bu kanıt olmadan C-COMP-001 canonical olarak kapanmaz; ancak Wave 01 Sale Release scope'u otomatik doğrulanıp commit edilebilir. Açık kanıt Wave 19'a taşınır.
 
 ## 10. Kanıt ve kabul eşlemesi
 
@@ -338,7 +345,7 @@ Bu kutular plan hazırlanırken işaretlenmez.
 - **Tamamlanan Plan refs:** —
 - **Değişen dosyalar:** —
 - **Otomatik kanıt:** —
-- **Manuel QA:** —
+- **Manuel QA:** Checkpoint A / Wave 19'a ertelendi
 - **Harici uyum kanıtı:** —
 - **Kullanıcı onayı:** —
 - **Wave durumu:** Bekliyor

@@ -15,12 +15,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 16 `QA kapalı` ve kullanıcıdan açık "Wave 17'yi başlat" talimatı
-- **Mevcut blokaj:** Wave 01–16 uygulanıp kapanmadı; Wave 17 uygulanamaz
+- **Giriş kapısı:** Wave 16 **DEFERRED / ROADMAP / COMMITTED** ve kullanıcıdan açık "Wave 17'yi başlat" talimatı
+- **Mevcut blokaj:** Wave 16 PAS/roadmap kaydı henüz committed değil; Wave 17 uygulanamaz
 - **Önceki wave:** Wave 16 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 18 — ayrı planı hazır; aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 17 aktivasyonu, dependency/lockfile değişikliği, test çalıştırma, fixture/seed yazma, CI workflow veya branch protection oluşturma, repository setting/deploy trigger değiştirme, canlı DB/provider kullanma, secret erişimi, Android release uygulaması ya da Wave 18 aktivasyonu için yetki değildir.
+
+## 1.1 Sale Release override — KÜÇÜLTÜLMÜŞ AMA UYGULANIR
+
+- **Satış öncesi uygulanır:** Frontend lint/build, backend syntax/core tests, kritik matchmaking two-client testleri, birkaç auth/session testi, duplicate/reconnect regresyonu ve basit GitHub CI.
+- **Post-acquisition Roadmap / Deferred:** Enterprise component/E2E/integration matrisi, geniş PostgreSQL kombinasyonları, artifact platformu ve kapsamlı audit/test cathedral.
+- **Kapanış:** Tanımlı minimum CI kapıları yeşil olur, tek Wave 17 commit'i alınır ve **DUR**. Cihaz/browser manuel matrisi Checkpoint C/Wave 19'a gider.
+- Başarısız zorunlu CI kapısı Wave 18'e geçişi bloke eder; ekstra enterprise coverage eksikliği bloke etmez.
 
 ## 2. Canonical referanslar ve otorite
 
@@ -427,7 +434,7 @@ Ham binlerce log ilk görünüm değildir. Summary failure'ı stable kategoriye 
 3. Production DB/provider/recipient/deploy kullanılmadığını doğrula.
 4. Required-check/branch-protection sonucu açık yetki verilirse read-back ile kanıtla.
 5. Canonical checkbox ve evidence alanını yalnız gerçek sonuçla senkronize et.
-6. Kullanıcı manuel QA/onayını al ve Wave 18'i başlatmadan dur.
+6. Manuel QA matrisini Checkpoint C/Wave 19 havuzuna aktar, tek commit'i al ve Wave 18'i başlatmadan dur.
 
 ## 14. Komut ve job isim sözleşmesi
 
@@ -499,7 +506,7 @@ Wave 18'e ait signing, store upload, production AAB rollout veya cihaz release m
 - Secret/PII sentinel build/log/artifact'ta bulunursa kapı kırılır.
 - Flaky isolated rerun ilk failure'ı korur ve final sonucu doğru sınıflar.
 
-## 17. Manuel QA ve operasyon matrisi
+## 17. Manuel QA ve operasyon havuzu — Checkpoint C / Wave 19 (commit kapısı değil)
 
 1. Temiz checkout ile documented setup ve `quality:all` çalıştırma.
 2. Windows/local ile CI Linux runtime farkı ve path/case/newline davranışı.
@@ -530,7 +537,7 @@ Her manuel sonuç tarih, commit, environment, runner/browser, command, exit code
 - [ ] Plan ID kabul kriterleri kanıtla işaretli.
 - [ ] Bağlı Plan B/C sözleşmeleri tamam veya açıkça kapsam dışı.
 - [ ] Test sonucu tarih/komut/sayı ile kayıtlı.
-- [ ] Manuel QA sonucu ve cihaz/browser kayıtlı.
+- [ ] Manuel QA sonucu ve cihaz/browser kaydı Checkpoint C/Wave 19 havuzuna aktarıldı.
 - [ ] Bilinen hata saklanmıyor.
 - [ ] Sonraki wave başlatılmıyor.
 
@@ -560,7 +567,7 @@ Kriterler plan hazırlandığı için işaretlenmez. Önceki Plan ID'lerin check
 
 ### 19.1 Giriş
 
-- [ ] Wave 16 `QA kapalı`.
+- [ ] Wave 16 **DEFERRED / ROADMAP / COMMITTED**.
 - [ ] Kullanıcı açıkça Wave 17'yi başlattı.
 - [ ] Repo sahipliği/branch/remote/dirty snapshot kayıtlı.
 - [ ] Runtime/lockfile/test/CI inventory yeniden doğrulandı.
@@ -576,14 +583,14 @@ Kriterler plan hazırlandığı için işaretlenmez. Önceki Plan ID'lerin check
 - [ ] Success/failure/infra/cancel/skip/flaky sonuçları doğru sınıflı.
 - [ ] Artifact, secret/redaction ve cleanup kanıtları mevcut.
 
-### 19.3 QA kapalı
+### 19.3 Sale Release otomatik kapanışı
 
 - [ ] Required checks bilerek failure ile fail-closed kanıtlandı.
 - [ ] Branch protection/deploy gate açık onay varsa read-back ile doğrulandı; yoksa açık manual external gate kaldı.
 - [ ] Full command/test count/runtime/artifact evidence kayıtlı.
 - [ ] Flaky registry boş veya her kayıt owner/issue/expiry ve onaylı koruma taşıyor.
 - [ ] Master §11 ilgili maddeleri gerçek kanıtla senkronize edildi.
-- [ ] Kullanıcı manuel QA sonucunu açıkça onayladı.
+- [ ] Manuel QA maddeleri Checkpoint C/Wave 19 havuzuna aktarıldı.
 - [ ] Canonical Plan A/B/C, Wave Map ve sonuç alanı senkronize edildi.
 - [ ] Wave 18 başlatılmadan duruldu.
 
@@ -660,7 +667,7 @@ Wave 17 yürütüldüğünde en az:
 - required checks/branch protection/deploy read-back veya açık external manual gate
 - local/CI parity ve süre/test-count sonucu
 - production/live mutation yapılmadığı kayıt
-- canonical checkbox ve kullanıcı manuel QA onayı
+- canonical checkbox için mevcut otomatik kanıt; manuel QA Checkpoint C / Wave 19 havuzunda
 - Wave 18'in başlatılmadığı açık durma kaydı
 
 Kriter yalnız kanıtla `[x]` olur. Bir scriptin varlığı, tek başarılı yerel run, otomatik retry sonrası yeşil veya workflow dosyasının commit edilmesi main/deploy enforcement kanıtı değildir.

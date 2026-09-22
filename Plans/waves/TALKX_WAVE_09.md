@@ -14,12 +14,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 08 `QA kapalı` ve kullanıcıdan açık “Wave 09'u başlat” talimatı
-- **Mevcut blokaj:** Wave 01–08 uygulanıp kapanmadı; Wave 09 uygulanamaz
+- **Giriş kapısı:** Wave 08 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 09'u başlat” talimatı
+- **Mevcut blokaj:** Wave 08 henüz committed değil; Wave 09 uygulanamaz
 - **Önceki wave:** Wave 08 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 10 — planı hazır, aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 09 aktivasyonu, kod/test/dependency değişikliği, migration, canlı queue/socket/conversation işlemi, feature flag, deploy veya Wave 10 uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Pending match protokolü, server-time countdown, accept/reject-pass/timeout, duplicate karar önleme ve deterministik requeue.
+- **Post-acquisition Roadmap / Deferred:** Yeni match offer varyantları, ek karar modları veya eşleşme ürünü genişletmeleri.
+- **Kapanış:** Offer/countdown/decision/requeue two-client testleri geçer, tek Wave 09 commit'i alınır ve **DUR**. Web/Android manuel QA Checkpoint B/Wave 19'a gider.
+- Scope/country davranışı Wave 08 sözleşmesini tüketir; bu wave'de yeniden tasarlanmaz.
 
 ## 2. Canonical referanslar ve öncelik
 
@@ -487,7 +494,7 @@ Mesaj outbox, kalıcı friend messaging, genel ChatScreen redesignı, country se
 - Duplicate/reordered/stale event injection.
 - Web Chromium ve Android WebView kritik akışları.
 
-## 20. Manuel QA matrisi
+## 20. Manuel QA havuzu — Checkpoint B / Wave 19 (commit kapısı değil)
 
 | Grup | Senaryo | Beklenen |
 |---|---|---|
@@ -628,7 +635,7 @@ Production migration, gerçek queue/conversation sorgusu, feature flag, deployme
 - A11y, responsive, reduced-motion ve Android kanıtı
 - Syntax/lint/build/encoding/focused/full test exit code'ları
 - B-MM-003, A-MATCH-002 ve Master QA-003 kabul tablosu
-- Kullanıcı manuel QA onayı
+- Checkpoint B / Wave 19'a aktarılmış manuel QA kaydı
 - Wave 10'un başlatılmadığı açık durma kaydı
 
 ## 27. Durma kuralı

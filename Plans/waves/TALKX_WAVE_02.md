@@ -12,12 +12,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 01 `QA kapalı` ve kullanıcıdan açık “Wave 02'yi başlat” talimatı
-- **Mevcut blokaj:** Wave 01 henüz başlamadı/kapanmadı; Wave 02 uygulanamaz
+- **Giriş kapısı:** Wave 01 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 02'yi başlat” talimatı
+- **Mevcut blokaj:** Wave 01 henüz committed değil; Wave 02 uygulanamaz
 - **Önceki wave:** Wave 01 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 03 — ayrı kullanıcı talimatıyla planı hazırlandı; aktif değil ve uygulanmayacak
 
 Bu dosyanın hazırlanması Wave 02 aktivasyonu, kod değişikliği, test altyapısı kurulumu, migration, canlı config, admin credential değişimi, deploy veya Wave 03 aktivasyonu/uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** API/error response standardı, session/logout/password-change davranışı, socket identity/session sahipliği, rate-limit/abuse koruması, hassas log redaction ve admin brute-force/access sertleştirmesi.
+- **Post-acquisition Roadmap / Deferred:** Büyük backend refactor'ı, enterprise capability/pagination framework'ü ve satış riskini azaltmayan platformlaştırma.
+- **Kapanış:** Zorunlu backend testleri/syntax kontrolleri ve ilgili client build geçer, tek Wave 02 commit'i alınır ve **DUR**. Manuel QA Checkpoint A/Wave 19'a gider.
+- Canonical stable ID'ler korunur; bu override satış öncesi alt kapsamı belirler ve deferred kriterleri tamamlanmış saymaz.
 
 ## 2. Canonical referanslar
 
@@ -458,7 +465,7 @@ Muhtemel hedef yüzeyler:
 
 Focused backend testleri tekrar üretilebilir tek komuta bağlanır. Wave 17'nin bütünleşik CI zinciri bu wave içinde kurulmaz.
 
-## 10. Manuel QA planı
+## 10. Manuel QA havuzu — Checkpoint A / Wave 19 (commit kapısı değil)
 
 ### HTTP ve frontend compatibility
 
@@ -545,7 +552,7 @@ Aşağıdakiler Wave 02 planının veya başlangıç talimatının doğal uzant�
 
 Wave 02 uygulamasına geçmeden önce:
 
-- [ ] Wave 01 bütün canonical refs ile `QA kapalı` ve kullanıcı onaylı.
+- [ ] Wave 01 **AUTO-VERIFIED / COMMITTED**; açık canonical/manual maddeler Checkpoint A/Wave 19 havuzunda.
 - [ ] Kullanıcı açıkça “Wave 02'yi başlat” dedi.
 - [ ] Dirty repo başlangıç fotoğrafı hedef dosyalar için kaydedildi.
 - [ ] Wave 01'in auth/input/origin/payload sözleşmesi güncel kodda yeniden doğrulandı.
@@ -565,7 +572,7 @@ Bu kutular plan hazırlanırken işaretlenmez.
 - **Değişen dosyalar:** —
 - **Otomatik kanıt:** —
 - **İki-client kanıtı:** —
-- **Manuel QA:** —
+- **Manuel QA:** Checkpoint A / Wave 19'a ertelendi
 - **Canlı/staging kanıtı:** —
 - **Kullanıcı onayı:** —
 - **Wave durumu:** Bekliyor
@@ -573,7 +580,7 @@ Bu kutular plan hazırlanırken işaretlenmez.
 
 ## 16. Durma kuralı
 
-Bu belge hazırlandıktan sonra durulur. Wave 01 `QA kapalı` olmadan ve kullanıcı açıkça Wave 02'yi başlatmadan:
+Bu belge hazırlandıktan sonra durulur. Wave 01 **AUTO-VERIFIED / COMMITTED** olmadan ve kullanıcı açıkça Wave 02'yi başlatmadan:
 
 - Kod, dependency, test altyapısı veya config değiştirilmez.
 - Session revoke, admin credential veya production proxy işlemi yapılmaz.

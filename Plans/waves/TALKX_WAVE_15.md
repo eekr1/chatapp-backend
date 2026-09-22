@@ -15,12 +15,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 14 `QA kapalı` ve kullanıcıdan açık "Wave 15'i başlat" talimatı
-- **Mevcut blokaj:** Wave 01–14 uygulanıp kapanmadı; Wave 15 uygulanamaz
+- **Giriş kapısı:** Wave 14 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık "Wave 15'i başlat" talimatı
+- **Mevcut blokaj:** Wave 14 henüz committed değil; Wave 15 uygulanamaz
 - **Önceki wave:** Wave 14 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 16 — ayrı planı hazır; aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 15 aktivasyonu, kod/test/dependency değişikliği, migration, canlı DB/profile/report sorgusu, tam IP/device reveal, medya açma, ban/unban/friend/block/report mutation, archive/delete, feature flag, deploy veya Wave 16 aktivasyonu için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** User list/detail, reports, ban/block/moderation aksiyonları, loading/error/empty state'leri, makul hassas veri maskelemesi ve yönetilebilir ürün demosu.
+- **Post-acquisition Roadmap / Deferred:** Enterprise admin console, geniş bulk operations ve satış öncesi gerekmeyen yönetim modülleri.
+- **Canlı sınır:** Gerçek ban/silme/toplu destructive işlem ayrıca açık kullanıcı yetkisi ister.
+- **Kapanış:** Admin authorization/state/action otomatik testleri ve smoke/build geçer, tek Wave 15 commit'i alınır ve **DUR**. Operasyon ekranı QA'sı Checkpoint B/Wave 19'a gider.
 
 ## 2. Canonical referanslar ve otorite
 
@@ -706,7 +713,7 @@ Admin audit payload'ı secret/full content kopyası tutmaz; gerekli ID, decision
 - Existing auth/analytics/moderation/report submission regression
 - No Wave 16 code/test preparation
 
-## 15. Manuel QA matrisi
+## 15. Manuel QA havuzu — Checkpoint B / Wave 19 (commit kapısı değil)
 
 | Senaryo | Kurulum | Beklenen |
 |---|---|---|
@@ -876,15 +883,15 @@ Bu 19 madde yalnız otomatik kanıt, Master QA matrisi ve kullanıcı manuel QA 
 Wave 15 ancak bütün maddeler sağlandığında aktive edilir:
 
 - [ ] Kullanıcı açıkça "Wave 15'i başlat" dedi.
-- [ ] Wave 14 `QA kapalı` ve kullanıcı onaylı.
+- [ ] Wave 14 minimal scope'u **AUTO-VERIFIED / COMMITTED**; açık manuel maddeler checkpoint havuzunda.
 - [ ] Wave 01–14 kapanış belgeleri canonical dosyalarla senkron.
 - [ ] Root, backend ve frontend Git snapshotları kaydedildi.
 - [ ] Mevcut kullanıcı değişiklikleri ve exact Wave 15 kapsamı ayrıldı.
 - [ ] Master QA-007/008/009 güncel satırları yeniden okundu.
 - [ ] Profile/report current route/schema/UI envanteri kaydedildi.
-- [ ] Wave 02 admin auth/RBAC/re-auth/audit temeli QA kapalı.
-- [ ] Wave 05–12 presence/data/geo/trust/legal dependencies QA kapalı.
-- [ ] Wave 14 ortak admin state/source/freshness standardı QA kapalı.
+- [ ] Wave 02 admin auth/RBAC/re-auth/audit çekirdeği **AUTO-VERIFIED / COMMITTED**.
+- [ ] Wave 05–12 Sale Release presence/data/geo/trust/legal çekirdekleri **AUTO-VERIFIED / COMMITTED**.
+- [ ] Wave 14 minimal admin state/source/freshness standardı **AUTO-VERIFIED / COMMITTED**.
 - [ ] Sensitive classification/reveal/copy owner kararı onaylandı.
 - [ ] Profile mutation target/effect/reason/idempotency/audit policy onaylandı.
 - [ ] Report workflow/status/priority/owner/note transitionları onaylandı.
@@ -972,7 +979,7 @@ Wave 15 yürütüldüğünde en az:
 - archive/retention/hard-delete guard ve media security
 - focused/full test, syntax/lint/build/encoding exit code'ları
 - QA-007/008/009 desktop/mobile/a11y screenshots
-- canonical checkbox ve kullanıcı manuel QA onayı
+- canonical checkbox için gerçek kanıt; manuel QA Checkpoint B / Wave 19 havuzunda
 - production destructive işlemlerin yapılmadığı veya exact onayla yapıldığı kayıt
 - Wave 16'nın başlatılmadığı açık durma kaydı
 

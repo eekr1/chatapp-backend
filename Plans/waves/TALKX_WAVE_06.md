@@ -13,12 +13,19 @@
 - **Wave durumu:** Bekliyor
 - **Uygulama durumu:** Başlamadı
 - **Uygulama yetkisi:** Verilmedi
-- **Giriş kapısı:** Wave 05 `QA kapalı` ve kullanıcıdan açık “Wave 06'yı başlat” talimatı
-- **Mevcut blokaj:** Wave 01–05 uygulanıp kapanmadı; Wave 06 uygulanamaz
+- **Giriş kapısı:** Wave 05 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 06'yı başlat” talimatı
+- **Mevcut blokaj:** Wave 05 henüz committed değil; Wave 06 uygulanamaz
 - **Önceki wave:** Wave 05 — planı hazır, aktif değil
 - **Sonraki wave:** Wave 07 — planı hazır, aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 06 aktivasyonu, kod/test/dependency değişikliği, veri taraması, DB migrationı, retention job'ı, hesap silme, backup/restore, dış servis veya canlı sistem işlemi, deploy ya da Wave 07 uygulaması için yetki değildir.
+
+## 1.1 Sale Release override — TAM / ÇEKİRDEK
+
+- **Satış öncesi uygulanır:** Canonical country sahipliği, Global/Country veri zemini, account deletion, retention/anonymization davranışı ve privacy metni ile gerçek DB davranışının eşliği.
+- **Post-acquisition Roadmap / Deferred:** Geniş privacy automation, policy management veya enterprise data-governance platformu.
+- **Canlı sınır:** Gerçek kullanıcı silme, production retention çalıştırma veya DB migration/cutover ayrıca açık kullanıcı yetkisi ister.
+- **Kapanış:** Veri yaşam döngüsü ve migration testleri geçer, tek Wave 06 commit'i alınır ve **DUR**. Manuel/privacy owner kontrolleri Checkpoint A/Wave 19'a gider.
 
 ## 2. Canonical referanslar
 
@@ -36,9 +43,9 @@ Kilitli karar ve başlangıç kanıtı: `../TALKX_MASTER_BACKLOG.md` / §5, §6,
 
 Bağımlılık yorumu:
 
-- `B-DB-001`, `C-OPS-001` ve `C-OPS-002` Wave 04'te QA kapalı olmalıdır; schema, retention job, backup ve restore bunların migration/runbook kapılarını tüketir.
-- `B-WS-002` ve `B-PRES-001` Wave 05'te QA kapalı olmalıdır; hesap silme runtime socket/queue/room/presence lease temizliğini bunlardan ister.
-- `C-ADMIN-001` Wave 02'de QA kapalı olmalıdır; admin destructive action, re-auth, authorization ve audit sınırı yeniden icat edilmez.
+- Wave 04'ün migration/runbook çekirdeği otomatik doğrulanmış ve committed olmalıdır; schema, retention job, backup ve restore bu kapıları tüketir.
+- Wave 05'in recovery/presence çekirdeği otomatik doğrulanmış ve committed olmalıdır; hesap silme runtime socket/queue/room/presence temizliğini bundan ister.
+- Wave 02 admin authorization/re-auth/audit çekirdeği otomatik doğrulanmış ve committed olmalıdır; destructive action sınırı yeniden icat edilmez.
 - `B-MM-002`, `A-MATCH-003` ve `C-ANL-002` Wave 08'in otoritesidir. Wave 06 yalnız canonical country kaynağını ve privacy sınırını hazırlar; queue partition, fallback, scope telemetry veya selector kurmaz.
 - Retention süreleri yasal/ürün owner onayı olmadan AI agent tarafından uydurulmaz. Wave kapanışında hiçbir veri sınıfı `TBD`, belirsiz veya ownersız bırakılamaz.
 
