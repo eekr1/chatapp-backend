@@ -631,7 +631,7 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] Her tablo/veri sınıfı amaç ve retention sahibi.
-- [ ] Anonymous/friend mesaj farkı açık.
+- [x] Anonymous/friend mesaj farkı açık.
 - [ ] Moderasyon kanıtı ile kullanıcı gizliliği dengeli.
 - [ ] Backup retention canlı silme politikasını boşa çıkarmıyor.
 - [ ] Admin maskeleme/erişim Plan C ile uyumlu.
@@ -659,13 +659,13 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] `legal_acceptances.location_country` doğrudan queue key değil.
-- [ ] Serbest metin ülke normalize edilmeden taşınmıyor.
-- [ ] Client başka ülke seçemiyor.
-- [ ] Stale/unavailable açık status.
+- [x] `legal_acceptances.location_country` doğrudan queue key değil.
+- [x] Serbest metin ülke normalize edilmeden taşınmıyor.
+- [x] Client başka ülke seçemiyor.
+- [x] Stale/unavailable açık status.
 - [ ] Aktif search ülke refresh'iyle sessiz değişmiyor.
-- [ ] ISO/display name ayrımı korunuyor.
-- [ ] Tam IP/GPS queue/telemetry'ye kopyalanmıyor.
+- [x] ISO/display name ayrımı korunuyor.
+- [x] Tam IP/GPS queue/telemetry'ye kopyalanmıyor.
 - [ ] Düşük cohort admin gizliliği C-ANL-002 ile uyumlu.
 
 ## 25. B-DATA-003 — Hesap silme ve anonimleştirme
@@ -687,12 +687,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Silinen hesap yeniden aktif socket/queue bırakmıyor.
-- [ ] Hangi veri silindi/anonimleştirildi/tutuldu belirli.
-- [ ] FK/orphan kontrolü var.
+- [x] Silinen hesap yeniden aktif socket/queue bırakmıyor.
+- [x] Hangi veri silindi/anonimleştirildi/tutuldu belirli.
+- [x] FK/orphan kontrolü var.
 - [ ] Tutulan kanıt yasal amaç/süreyle sınırlı.
-- [ ] Client completion state'i doğru.
-- [ ] Silme tekrar çağrısı idempotent.
+- [x] Client completion state'i doğru.
+- [x] Silme tekrar çağrısı idempotent.
 
 ## 26. B-ANL-001 — Davranış analitiği veri sözleşmesi
 

@@ -7,6 +7,7 @@ const { pool } = require('./db');
 const { createAdminGuard } = require('./utils/adminSecurity');
 const { buildPerformanceOverview, resolvePerformancePolicy } = require('./utils/performanceContract');
 const { getPushDiagnostics } = require('./utils/push');
+const { canRejectDeletion, executeAccountDeletion, POLICY_VERSION: DATA_POLICY_VERSION } = require('./utils/accountDeletion');
 const {
     fetchLegalSettings,
     validateLegalContentPayload,
@@ -42,7 +43,7 @@ router.use((req, res, next) => {
 });
 router.use('/assets', express.static(path.join(__dirname, 'public', 'admin')));
 
-const ALLOWED_DELETION_REQUEST_STATUS = new Set(['requested', 'completed', 'rejected']);
+const ALLOWED_DELETION_REQUEST_STATUS = new Set(['requested', 'reviewing', 'approved', 'processing', 'failed_retryable', 'completed', 'rejected']);
 const normalizeDeletionStatus = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     if (!normalized) return 'requested';
@@ -2404,7 +2405,7 @@ router.get('/analytics/recent', async (req, res) => {
 router.get('/deletion-requests', async (req, res) => {
     const status = normalizeDeletionStatus(req.query.status);
     if (!status) {
-        return res.status(400).json({ error: 'Gecersiz status. requested|completed|rejected beklenir.' });
+        return res.status(400).json({ error: 'Gecersiz deletion status.' });
     }
 
     try {
@@ -2418,6 +2419,14 @@ router.get('/deletion-requests', async (req, res) => {
                 r.reviewed_at,
                 r.reviewed_by,
                 r.note,
+                r.policy_version,
+                r.processing_started_at,
+                r.completed_at,
+                r.failure_code,
+                r.runtime_ack,
+                r.receipt,
+                (SELECT jsonb_build_object('step_key', s.step_key, 'status', s.status, 'updated_at', s.updated_at)
+                   FROM account_deletion_steps s WHERE s.request_id=r.id ORDER BY s.updated_at DESC LIMIT 1) AS last_step,
                 u.username AS current_username,
                 u.status AS user_status,
                 p.display_name
@@ -2439,9 +2448,9 @@ router.get('/deletion-requests/metrics', async (req, res) => {
     try {
         const pendingRes = await pool.query(
             `SELECT
-                COUNT(*) FILTER (WHERE status = 'requested')::int AS pending_count,
+                COUNT(*) FILTER (WHERE status IN ('requested','reviewing','approved','processing','failed_retryable'))::int AS pending_count,
                 COUNT(*) FILTER (
-                    WHERE status = 'requested'
+                    WHERE status IN ('requested','reviewing','approved','processing','failed_retryable')
                       AND requested_at < NOW() - INTERVAL '72 hours'
                 )::int AS overdue_count
              FROM account_deletion_requests`
@@ -2530,68 +2539,23 @@ router.post('/deletion-requests/:id/approve-delete', async (req, res) => {
     const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
     if (!requestId) return res.status(400).json({ error: 'Talep kimligi gerekli.' });
 
-    const db = await pool.connect();
+    if (String(req.body?.confirm_text || '') !== 'DELETE ACCOUNT' || req.body?.policy_version !== DATA_POLICY_VERSION) {
+        return res.status(400).json({ error: 'Silme onayi ve guncel policy version gerekli.' });
+    }
+    if (!process.env.ERASURE_HMAC_KEY) {
+        return res.status(503).json({ error: 'Erasure journal key yapilandirilmamis; islem fail-closed durduruldu.' });
+    }
     try {
-        await db.query('BEGIN');
-
-        const requestRes = await db.query(
-            `SELECT id, user_id, username_snapshot, status
-             FROM account_deletion_requests
-             WHERE id = $1
-             FOR UPDATE`,
-            [requestId]
-        );
-        if (!requestRes.rows.length) {
-            await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Silme talebi bulunamadi.' });
-        }
-
-        const deletionRequest = requestRes.rows[0];
-        if (deletionRequest.status !== 'requested') {
-            await db.query('ROLLBACK');
-            return res.status(400).json({ error: 'Sadece requested durumundaki talepler silinebilir.' });
-        }
-
-        const userId = deletionRequest.user_id;
-
-        await db.query('DELETE FROM friendships WHERE user_id = $1 OR friend_user_id = $1', [userId]);
-        await db.query('DELETE FROM blocks WHERE blocker_id = $1 OR blocked_id = $1', [userId]);
-        await db.query('DELETE FROM messages WHERE sender_id = $1', [userId]);
-        await db.query('DELETE FROM conversations WHERE user_a_id = $1 OR user_b_id = $1', [userId]);
-        await db.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
-
-        await db.query(
-            `UPDATE account_deletion_requests
-             SET status = 'completed', reviewed_at = NOW(), reviewed_by = $1, note = $2
-             WHERE id = $3`,
-            [adminUser, note, requestId]
-        );
-
-        await logAdminAudit(db, {
-            actorAdmin: adminUser,
-            actionType: 'DELETION_APPROVE',
-            entityType: 'account_deletion_request',
-            entityId: requestId,
-            payload: {
-                userId,
-                note
-            }
+        const result = await executeAccountDeletion({
+            pool, requestId, actorAdmin: adminUser, note,
+            hmacKey: process.env.ERASURE_HMAC_KEY,
+            keyVersion: process.env.ERASURE_HMAC_KEY_VERSION || 'v1'
         });
-
-        await db.query('DELETE FROM users WHERE id = $1', [userId]);
-
-        await db.query('COMMIT');
-        return res.json({ success: true });
+        return res.json({ success: true, ...result });
     } catch (e) {
-        try {
-            await db.query('ROLLBACK');
-        } catch {
-            // ignore rollback errors
-        }
         console.error('deletion approve failed', { requestId, adminUser, message: e?.message || e });
-        return res.status(500).json({ error: 'Kalici silme tamamlanamadi.' });
-    } finally {
-        db.release();
+        const status = e?.code === 'DELETION_NOT_FOUND' ? 404 : e?.code === 'DELETION_STATE_INVALID' ? 409 : 500;
+        return res.status(status).json({ error: 'Kalici silme tamamlanamadi.', code: e?.code || 'DELETION_FAILED' });
     }
 });
 
@@ -2606,7 +2570,7 @@ router.post('/deletion-requests/:id/reject', async (req, res) => {
         await db.query('BEGIN');
 
         const requestRes = await db.query(
-            `SELECT id, user_id
+            `SELECT id, user_id, status
              FROM account_deletion_requests
              WHERE id = $1
              FOR UPDATE`,
@@ -2617,7 +2581,12 @@ router.post('/deletion-requests/:id/reject', async (req, res) => {
             return res.status(404).json({ error: 'Silme talebi bulunamadi.' });
         }
 
-        const userId = requestRes.rows[0].user_id;
+        const current = requestRes.rows[0];
+        if (!canRejectDeletion(current.status || 'requested')) {
+            await db.query('ROLLBACK');
+            return res.status(409).json({ error: 'Processing basladiktan sonra talep reddedilemez.' });
+        }
+        const userId = current.user_id;
 
         await db.query(
             `UPDATE account_deletion_requests
@@ -2663,7 +2632,7 @@ router.post('/deletion-requests/:id/reactivate', async (req, res) => {
         await db.query('BEGIN');
 
         const requestRes = await db.query(
-            `SELECT id, user_id
+            `SELECT id, user_id, status
              FROM account_deletion_requests
              WHERE id = $1
              FOR UPDATE`,
@@ -2674,7 +2643,12 @@ router.post('/deletion-requests/:id/reactivate', async (req, res) => {
             return res.status(404).json({ error: 'Silme talebi bulunamadi.' });
         }
 
-        const userId = requestRes.rows[0].user_id;
+        const current = requestRes.rows[0];
+        if (!canRejectDeletion(current.status || 'requested')) {
+            await db.query('ROLLBACK');
+            return res.status(409).json({ error: 'Processing basladiktan sonra hesap yeniden etkinlestirilemez.' });
+        }
+        const userId = current.user_id;
 
         await db.query('UPDATE users SET status = \'active\' WHERE id = $1', [userId]);
         await db.query(

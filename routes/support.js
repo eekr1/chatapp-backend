@@ -30,6 +30,7 @@ const MAX_MULTIPART_FIELD_SIZE = 64 * 1024; // 64 KB per text field
 const MAX_MULTIPART_FIELDS = 12;
 const DEFAULT_SUPPORT_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const DEFAULT_SUPPORT_RATE_LIMIT_MAX = 10;
+const SUBMISSION_ID_RE = /^[A-Za-z0-9_-]{8,120}$/;
 
 const cleanText = (value, max = 1000) => {
     if (typeof value !== 'string') return '';
@@ -325,11 +326,16 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
     const clientTimestamp = parseTimestamp(metadata.timestamp);
     const networkType = cleanText(metadata.networkType, 30) || null;
     const lastErrorCode = cleanText(metadata.lastErrorCode, 120) || null;
+    const submissionId = cleanText(req.body?.submissionId || metadata.submissionId, 120) || null;
+    if (submissionId && !SUBMISSION_ID_RE.test(submissionId)) {
+        return sendApiError(req, res, 400, 'INVALID_INPUT');
+    }
     const userAgent = cleanText(req.headers['user-agent'], 400) || null;
     const ip = getClientIp(req);
     const contactEmail = email || null;
     const userId = req.authUser?.user_id || null;
     const usernameSnapshot = req.authUser?.username || null;
+    const submissionScopeHash = getRateLimitKey(req);
 
     let reportId = null;
     let createdAt = null;
@@ -339,9 +345,10 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
         await dbClient.query('BEGIN');
         const insertResult = await dbClient.query(
             `INSERT INTO support_reports
-              (subject, description, contact_email, user_id, username_snapshot, app_version, platform, device_model, client_timestamp, network_type, last_error_code, ip, user_agent, brevo_status, updated_at)
+              (subject, description, contact_email, user_id, username_snapshot, app_version, platform, device_model, client_timestamp, network_type, last_error_code, ip, user_agent, brevo_status, submission_id, submission_scope_hash, record_status, delivery_status, updated_at)
              VALUES
-              ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', NOW())
+              ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', $14, $15, 'received', 'pending', NOW())
+             ON CONFLICT (submission_scope_hash, submission_id) WHERE submission_id IS NOT NULL AND submission_scope_hash IS NOT NULL DO NOTHING
              RETURNING id, created_at`,
             [
                 subject,
@@ -356,9 +363,27 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
                 networkType,
                 lastErrorCode,
                 ip,
-                userAgent
+                userAgent,
+                submissionId,
+                submissionScopeHash
             ]
         );
+
+        if (!insertResult.rows.length && submissionId) {
+            const duplicate = await dbClient.query(
+                `SELECT id, created_at, record_status, delivery_status
+                 FROM support_reports WHERE submission_id = $1 AND submission_scope_hash = $2`, [submissionId, submissionScopeHash]
+            );
+            await dbClient.query('COMMIT');
+            const existing = duplicate.rows[0];
+            return res.status(200).json({
+                success: true,
+                reportId: existing.id,
+                recordStatus: existing.record_status,
+                deliveryStatus: existing.delivery_status,
+                duplicate: true
+            });
+        }
 
         reportId = insertResult.rows[0].id;
         createdAt = insertResult.rows[0].created_at;
@@ -411,7 +436,7 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
 
         await pool.query(
             `UPDATE support_reports
-             SET brevo_status = 'sent', brevo_message_id = $2, brevo_error = NULL, updated_at = NOW()
+             SET brevo_status = 'sent', delivery_status = 'sent', brevo_message_id = $2, brevo_error = NULL, updated_at = NOW()
              WHERE id = $1`,
             [reportId, cleanText(mailResult?.messageId, 180) || null]
         );
@@ -419,7 +444,10 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
         return res.status(201).json({
             success: true,
             reportId,
-            delivered: true
+            recordStatus: 'received',
+            deliveryStatus: 'sent',
+            delivered: true,
+            duplicate: false
         });
     } catch (mailError) {
         const brevoError = cleanText(mailError?.message || 'Brevo send failed', 500);
@@ -427,7 +455,7 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
 
         await pool.query(
             `UPDATE support_reports
-             SET brevo_status = 'failed', brevo_error = $2, updated_at = NOW()
+             SET brevo_status = 'failed', delivery_status = 'failed', brevo_error = $2, updated_at = NOW()
              WHERE id = $1`,
             [reportId, brevoError]
         );
@@ -435,7 +463,10 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
         return res.status(202).json({
             success: true,
             reportId,
-            delivered: false
+            recordStatus: 'received',
+            deliveryStatus: 'failed',
+            delivered: false,
+            duplicate: false
         });
     }
 });

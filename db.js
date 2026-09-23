@@ -668,6 +668,90 @@ const migrations = Object.freeze([
       CREATE INDEX IF NOT EXISTS idx_connection_leases_instance
         ON connection_leases(instance_id, expires_at DESC);
     `
+  }),
+  Object.freeze({
+    version: '003',
+    name: 'wave06_data_lifecycle',
+    sql: `
+      CREATE TABLE IF NOT EXISTS user_match_country (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        country_code CHAR(2),
+        source TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('eligible', 'stale', 'unavailable', 'disputed')),
+        confidence TEXT NOT NULL CHECK (confidence IN ('policy_verified', 'inferred', 'unknown')),
+        source_observed_at TIMESTAMPTZ,
+        resolved_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        policy_version TEXT NOT NULL,
+        CHECK (country_code IS NULL OR country_code ~ '^[A-Z]{2}$'),
+        CHECK (status <> 'eligible' OR (country_code IS NOT NULL AND confidence = 'policy_verified'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_match_country_status_updated
+        ON user_match_country(status, updated_at DESC);
+
+      ALTER TABLE account_deletion_requests
+        ALTER COLUMN user_id DROP NOT NULL,
+        ALTER COLUMN username_snapshot DROP NOT NULL,
+        ADD COLUMN IF NOT EXISTS idempotency_key TEXT,
+        ADD COLUMN IF NOT EXISTS policy_version TEXT NOT NULL DEFAULT 'talkx-data-policy-v1',
+        ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS failure_code TEXT,
+        ADD COLUMN IF NOT EXISTS receipt JSONB,
+        ADD COLUMN IF NOT EXISTS runtime_ack JSONB;
+      DROP INDEX IF EXISTS idx_account_deletion_requests_user_requested;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_account_deletion_requests_user_open
+        ON account_deletion_requests(user_id)
+        WHERE status IN ('requested', 'reviewing', 'approved', 'processing', 'failed_retryable');
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_account_deletion_requests_idempotency
+        ON account_deletion_requests(user_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS account_deletion_steps (
+        request_id UUID NOT NULL REFERENCES account_deletion_requests(id) ON DELETE CASCADE,
+        step_key TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed_retryable', 'blocked')),
+        cursor JSONB,
+        affected_count INTEGER NOT NULL DEFAULT 0 CHECK (affected_count >= 0),
+        result JSONB NOT NULL DEFAULT '{}'::jsonb,
+        started_at TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (request_id, step_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS erasure_journal (
+        erasure_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        request_id UUID NOT NULL UNIQUE REFERENCES account_deletion_requests(id) ON DELETE RESTRICT,
+        subject_ref TEXT NOT NULL,
+        key_version TEXT NOT NULL,
+        policy_version TEXT NOT NULL,
+        step_checksum TEXT NOT NULL,
+        completed_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      ALTER TABLE support_reports
+        ADD COLUMN IF NOT EXISTS submission_id TEXT,
+        ADD COLUMN IF NOT EXISTS submission_scope_hash TEXT,
+        ADD COLUMN IF NOT EXISTS record_status TEXT NOT NULL DEFAULT 'received',
+        ADD COLUMN IF NOT EXISTS delivery_status TEXT NOT NULL DEFAULT 'pending',
+        ADD COLUMN IF NOT EXISTS owner_admin TEXT,
+        ADD COLUMN IF NOT EXISTS duplicate_group_ref TEXT,
+        ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+      UPDATE support_reports
+      SET delivery_status = CASE
+        WHEN brevo_status IN ('sent', 'failed', 'pending') THEN brevo_status
+        ELSE 'unknown'
+      END
+      WHERE delivery_status = 'pending';
+      DROP INDEX IF EXISTS idx_support_reports_submission_id;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_support_reports_submission_scope
+        ON support_reports(submission_scope_hash, submission_id)
+        WHERE submission_id IS NOT NULL AND submission_scope_hash IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_support_reports_record_status_updated
+        ON support_reports(record_status, updated_at DESC);
+    `
   })
 ]);
 

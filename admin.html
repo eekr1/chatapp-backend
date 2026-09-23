@@ -2354,7 +2354,7 @@
       await openProfileDetails(userId,username||'-');
     }
     async function actionRemoveFriend(userId,friendId){ if(!confirm('Arkadasligi silmek istiyor musunuz?')) return; await apiPost('/admin/remove-friend',{userId,friendId}); closeModal(); }
-    async function actionApproveDeletion(requestId){ if(!confirm('Bu hesabi kalici olarak silmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/approve-delete`,{}); }
+    async function actionApproveDeletion(requestId){ if(!confirm('Bu hesabi kalici olarak silmek istiyor musunuz?')) return; const confirmation=prompt('Onaylamak icin DELETE ACCOUNT yazin:'); if(confirmation!=='DELETE ACCOUNT') return; await apiPost(`/admin/deletion-requests/${requestId}/approve-delete`,{confirm_text:confirmation,policy_version:'talkx-data-policy-v1'}); }
     async function actionRejectDeletion(requestId){ if(!confirm('Silme talebini reddetmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reject`,{}); }
     async function actionReactivateDeletion(requestId){ if(!confirm('Bu kullaniciyi yeniden aktif etmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reactivate`,{}); }
 

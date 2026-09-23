@@ -33,6 +33,7 @@ const { resolveReleaseIdentity, resolveRealtimeRuntimeConfig } = require('./util
 const { createHealthState, createLivenessPayload, createReadinessPayload } = require('./utils/health');
 const { RecoveryRegistry, buildRecoverySnapshot } = require('./utils/recoveryState');
 const { createPresenceService } = require('./utils/presenceService');
+const { onUserRuntimeTermination } = require('./utils/userRuntimeTermination');
 const { rebindTransientParticipant, resolveTransientSnapshot } = require('./utils/transientRecovery');
 logger.installSafeConsole();
 
@@ -1767,6 +1768,28 @@ const rebindTransientState = (previousConnectionId, connectionId, ws) => {
     });
     activeClients.delete(previousConnectionId);
 };
+
+onUserRuntimeTermination(async ({ userId, reason }) => {
+    const targets = [...activeClients.entries()]
+        .filter(([, client]) => String(client?.dbUserId) === String(userId));
+    for (const [clientId, client] of targets) {
+        cancelPendingMatchForClient(clientId, {
+            actorReason: null,
+            peerReason: 'peer_unavailable',
+            requeueActor: false,
+            requeuePeers: true
+        });
+        removeFromQueue(clientId);
+        leaveRoom(clientId, reason);
+        const lease = recoveryRegistry.getByConnection(clientId);
+        if (lease) recoveryRegistry.expire(lease.token, reason);
+        await presenceService.closeFinal(clientId).catch(() => null);
+        activeClients.delete(clientId);
+        if (client?.ws?.readyState === WebSocket.OPEN) client.ws.close(1008, reason);
+    }
+    broadcastOnlineCount();
+    return { userId, terminatedConnections: targets.length };
+});
 
 const buildActiveRecoveryState = (connectionId) => resolveTransientSnapshot({
     connectionId, waitingQueue, pendingMatches, userPendingMatchMap,

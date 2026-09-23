@@ -167,13 +167,13 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Her store/privacy beyanının kod/DB kaynağı var.
-- [ ] Anonimlik iddiası servis verisini gizlemiyor.
+- [x] Her store/privacy beyanının kod/DB kaynağı var.
+- [x] Anonimlik iddiası servis verisini gizlemiyor.
 - [ ] B-DATA-001 retention matrisiyle çelişki yok.
-- [ ] Reklam açılmadan gereksiz consent mimarisi eklenmiyor.
+- [x] Reklam açılmadan gereksiz consent mimarisi eklenmiyor.
 - [ ] Reklam açılırsa privacy/Data Safety birlikte güncelleniyor.
 - [ ] Üçüncü taraf servisler ve veri bölgesi kayıtlı.
-- [ ] Kullanıcı silme sonucu doğru anlatılıyor.
+- [x] Kullanıcı silme sonucu doğru anlatılıyor.
 
 ## 8. C-TRUST-001 — Moderasyon, rapor ve engel kanıt zinciri
 
@@ -222,12 +222,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Support API başarısı email teslimiyle karışmıyor.
-- [ ] Duplicate submit gruplanabilir.
+- [x] Support API başarısı email teslimiyle karışmıyor.
+- [x] Duplicate submit gruplanabilir.
 - [ ] Hassas medya yetki altında.
-- [ ] Hesap silme sonucu backend doğrulaması olmadan tamamlandı görünmüyor.
+- [x] Hesap silme sonucu backend doğrulaması olmadan tamamlandı görünmüyor.
 - [ ] Retained/anonimized veri gerekçesi kayıtlı.
-- [ ] Admin destructive action yeniden doğrulama/onay kullanıyor.
+- [x] Admin destructive action yeniden doğrulama/onay kullanıyor.
 
 ## 10. C-ADMIN-001 — Admin auth, yetki ve ortak bilgi kabuğu
 

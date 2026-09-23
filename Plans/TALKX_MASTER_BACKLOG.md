@@ -80,7 +80,7 @@ Her yuzey once su sorulari cevaplar:
 
 ## Plan belge yönlendirmesi
 
-> 2026-09-23 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–05 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 06–19 başlatılmamıştır.
+> 2026-09-24 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–06 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 07–19 başlatılmamıştır.
 
 | Plan | Canonical dosya | Birincil sahiplik |
 |---|---|---|
@@ -94,7 +94,7 @@ Her yuzey once su sorulari cevaplar:
 | Wave 03 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_03.md`](waves/TALKX_WAVE_03.md) | Yalnız Wave 03 client foundation, accessibility/auth UX, otomatik kanıt ve checkpoint havuzu |
 | Wave 04 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_04.md`](waves/TALKX_WAVE_04.md) | Health, migration/runtime, performans sözleşmesi, runbook ve checkpoint kanıtı |
 | Wave 05 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_05.md`](waves/TALKX_WAVE_05.md) | Reconnect, active state, gerçek presence, client recovery ve Checkpoint A kanıtı |
-| Wave 06 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_06.md`](waves/TALKX_WAVE_06.md) | Yalnız Wave 06 veri sahipliği, canonical ülke, privacy ve hesap silme; kanıt planı ve durma noktası |
+| Wave 06 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_06.md`](waves/TALKX_WAVE_06.md) | Veri registry, canonical ülke, fail-closed privacy/retention, hesap silme ve support operasyon kanıtı |
 | Wave 07 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_07.md`](waves/TALKX_WAVE_07.md) | Yalnız Wave 07 QA-014 server-otoriteli arama yaşam döngüsü, UI/UX, kanıt planı ve durma noktası |
 | Wave 08 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_08.md`](waves/TALKX_WAVE_08.md) | Yalnız Wave 08 QA-017 Global/Kendi Ülkem queue, UI, analytics ve Home dilimi; kanıt planı ve durma noktası |
 | Wave 09 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_09.md`](waves/TALKX_WAVE_09.md) | Yalnız Wave 09 QA-003 pending-match protokolü, teklif/kabul UI'si, kanıt planı ve durma noktası |

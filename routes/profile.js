@@ -5,6 +5,8 @@ const { comparePassword, hashPassword } = require('../utils/security');
 const { authenticate, revokeAllForUser } = require('../utils/sessionService');
 const { calculateLegalStatus, getRequiredLegalVersions } = require('../utils/legalAcceptance');
 const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
+const { displayCountry } = require('../utils/countryPolicy');
+const { requestUserRuntimeTermination } = require('../utils/userRuntimeTermination');
 
 const DELETE_CONFIRM_TEXT = 'HESABIMI SIL';
 
@@ -71,6 +73,32 @@ router.get('/me/legal-status', authenticate, async (req, res) => {
         });
     } catch (e) {
         console.error('GET /me/legal-status error:', e);
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
+    }
+});
+
+// GET /me/match-country - Server-owned country record. This is not a country selector.
+router.get('/me/match-country', authenticate, async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT country_code, status, confidence, updated_at, policy_version
+             FROM user_match_country WHERE user_id = $1`,
+            [req.user.user_id]
+        );
+        const row = result.rows[0] || null;
+        const eligible = row?.status === 'eligible';
+        const code = eligible ? row.country_code : null;
+        return res.json({
+            success: true,
+            capability: 'country-data-v1',
+            country: code ? { code, display_name: displayCountry(code, req.user.locale) } : null,
+            status: row?.status || 'unavailable',
+            confidence: row?.confidence || 'unknown',
+            updated_at: row?.updated_at || null,
+            policy_version: row?.policy_version || 'match-country-v1'
+        });
+    } catch (e) {
+        console.error('GET /me/match-country error:', e);
         return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });
@@ -260,21 +288,26 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
             return sendApiError(req, res, 401, 'BAD_CREDENTIALS');
         }
 
+        const idempotencyKey = String(req.get('Idempotency-Key') || '').trim().slice(0, 120) || null;
         const existingRequested = await db.query(
-            `SELECT id
+            `SELECT id, status, requested_at, policy_version
              FROM account_deletion_requests
-             WHERE user_id = $1 AND status = 'requested'
+             WHERE user_id = $1
+               AND status IN ('requested', 'reviewing', 'approved', 'processing', 'failed_retryable')
              LIMIT 1`,
             [dbUser.id]
         );
 
+        let deletionRequest = existingRequested.rows[0] || null;
         if (!existingRequested.rows.length) {
-            await db.query(
+            const inserted = await db.query(
                 `INSERT INTO account_deletion_requests
-                  (user_id, username_snapshot, status, requested_at)
-                 VALUES ($1, $2, 'requested', NOW())`,
-                [dbUser.id, dbUser.username]
+                  (user_id, username_snapshot, status, requested_at, idempotency_key, policy_version)
+                 VALUES ($1, $2, 'requested', NOW(), $3, 'talkx-data-policy-v1')
+                 RETURNING id, status, requested_at, policy_version`,
+                [dbUser.id, dbUser.username, idempotencyKey]
             );
+            deletionRequest = inserted.rows[0];
         }
 
         await db.query(
@@ -286,8 +319,27 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
         await revokeAllForUser(dbUser.id, 'account_deletion_requested', db);
 
         await db.query('COMMIT');
+        let runtimeAck = { listenerCount: 0, acknowledged: 0, failed: 1, retryRequired: true };
+        try {
+            runtimeAck = await requestUserRuntimeTermination({
+                userId: dbUser.id,
+                requestId: deletionRequest.id,
+                reason: 'account_deletion_requested'
+            });
+            await pool.query(
+                'UPDATE account_deletion_requests SET runtime_ack = $2::jsonb WHERE id = $1',
+                [deletionRequest.id, JSON.stringify(runtimeAck)]
+            );
+        } catch (runtimeError) {
+            console.warn('Deletion runtime termination requires retry.', { requestId: deletionRequest.id, code: runtimeError?.code || 'RUNTIME_ACK_FAILED' });
+        }
         return res.json({
             success: true,
+            request_id: deletionRequest.id,
+            status: deletionRequest.status,
+            requested_at: deletionRequest.requested_at,
+            policy_version: deletionRequest.policy_version,
+            runtime_ack: runtimeAck,
             message: t(resolveRequestLang(req), 'profile.DELETE_REQUEST_RECEIVED', {}, 'Deletion request received.')
         });
     } catch (e) {

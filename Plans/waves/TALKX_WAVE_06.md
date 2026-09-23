@@ -2,20 +2,20 @@
 
 > Bu belge yalnız Wave 06 için hazırlanmış uygulama planıdır.
 > Canonical ayrıntı Plan B ve Plan C stable ID maddelerindedir; burada Wave 07 search lifecycle veya Wave 08 Global/Country queue ve selector uygulaması üretilmez.
-> Plan hazırdır. Wave 06 aktif değildir, Wave 01–05 kapanmamıştır ve uygulama başlamamıştır.
+> Wave 06 Sale Release kapsamı 2026-09-24 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 07 başlatılmadı.
 
 ## 1. Durum ve yürütme sınırı
 
 - **Wave:** 06
 - **Wave adı:** Veri sahipliği, canonical ülke, privacy ve hesap silme
 - **Plan katılımı:** Plan B + Plan C
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Uygulandı
+- **Wave durumu:** Auto-verified / committed / manual-QA-deferred
+- **Uygulama durumu:** Sale Release mühendislik çekirdeği tamamlandı; owner/legal/staging/manual QA ertelendi
+- **Uygulama yetkisi:** 2026-09-24 tarihinde açıkça verildi
 - **Giriş kapısı:** Wave 05 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 06'yı başlat” talimatı
-- **Mevcut blokaj:** Wave 05 henüz committed değil; Wave 06 uygulanamaz
-- **Önceki wave:** Wave 05 — planı hazır, aktif değil
+- **Mevcut blokaj:** Yok; production migration/execute/delete/restore/deploy ve legal yayın ayrıca açık onay ister
+- **Önceki wave:** Wave 05 — auto-verified / committed / manual-QA-deferred
 - **Sonraki wave:** Wave 07 — planı hazır, aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 06 aktivasyonu, kod/test/dependency değişikliği, veri taraması, DB migrationı, retention job'ı, hesap silme, backup/restore, dış servis veya canlı sistem işlemi, deploy ya da Wave 07 uygulaması için yetki değildir.
@@ -806,11 +806,11 @@ Canlı destructive rollback fiziksel silinen veriyi geri getirmeye dayanmaz. Kor
 
 Bu kutular plan hazırlanırken işaretlenmez; yalnız Wave 06 gerçekten başlatılırken güncel kanıtla kapatılır:
 
-- [ ] Wave 01–05 QA kapanışları ve kullanıcı onayı doğrulandı.
-- [ ] Kullanıcı açıkça “Wave 06'yı başlat” talimatı verdi.
-- [ ] Root, backend ve frontend Git status/remote/branch/commit snapshot'ı alındı.
-- [ ] Wave 04 migration/backup/restore/runbook kapıları güncel repoda doğrulandı.
-- [ ] Wave 05 runtime cleanup/presence lease kapıları güncel repoda doğrulandı.
+- [x] Wave 01–05 QA kapanışları ve kullanıcı onayı doğrulandı.
+- [x] Kullanıcı açıkça “Wave 06'yı başlat” talimatı verdi.
+- [x] Backend ve frontend Git status/remote/branch/commit snapshot'ı alındı; workspace root yalnız orchestration root olarak tutuldu.
+- [x] Wave 04 migration/backup/restore/runbook kapıları güncel repoda doğrulandı.
+- [x] Wave 05 runtime cleanup/presence lease kapıları güncel repoda doğrulandı.
 - [ ] Gerçek schema/FK/JSON/log/process-memory/backup/processor envanteri read-only çıkarıldı.
 - [ ] Privacy/legal/product/technical owner listesi ve karar yetkisi belirlendi.
 - [ ] Retention süre/action/hold/backup kararlarının hiçbiri agent varsayımına bırakılmadı.
@@ -818,33 +818,30 @@ Bu kutular plan hazırlanırken işaretlenmez; yalnız Wave 06 gerçekten başla
 - [ ] Canonical country source/status/freshness ve legacy backfill policy'si owner tarafından onaylandı.
 - [ ] Deletion state machine, point-of-no-return, retained evidence ve user messaging kararı kilitlendi.
 - [ ] Sentetik staging DB/user graph ve izole restore hedefi hazırlandı.
-- [ ] Production query/migration/backfill/execute/delete/publish işlemleri ayrı onay kapısına bağlandı.
-- [ ] Wave 07 ve Wave 08 kapsamlarına taşma olmadığı doğrulandı.
+- [x] Production query/migration/backfill/execute/delete/publish işlemleri ayrı onay kapısına bağlandı.
+- [x] Wave 07 ve Wave 08 kapsamlarına taşma olmadığı doğrulandı.
 
 ## 15. Sonuç alanı
 
-Wave 06 yürütülürse kapanış kaydı en az şunları içerir:
-
-- Başlangıç/bitiş zamanı, Plan refs ve gerçek değişen dosyalar
-- Üç Git bağlamının önce/sonra status/commit farkı
-- Data-class registry versionı, schema coverage ve owner approval kaydı
-- Her retention policy için dry-run/fixture execute/count/orphan/hold sonuçları
-- Canonical country migration, ISO resolver, backfill aggregate/parity ve own-country contract kanıtı
-- Privacy/Data Safety claim-code-policy-processor matrisi ve insan review sonucu
-- Deletion state/step/idempotency/runtime revoke/delete-anonymize-retain/orphan kanıtı
-- Minimum completed receipt ve processing/reject/reactivate transition sonuçları
-- Support record/delivery/duplicate/media/owner/audit sonuçları
-- Erasure journal export/hash ve eski backup staging replay sonucu
-- Syntax/lint/build/encoding/focused/full test komutları ve exit code'ları
-- Varsa ayrıca onaylanmış production işlemin exact target/impact/result/rollback kaydı
-- Canonical checkbox ve durum değişiklikleri ile kullanıcı QA onayı
-- Wave 07'nin başlatılmadığına dair açık durma kaydı
+- **Başlangıç/bitiş tarihi:** 2026-09-24
+- **Plan refs:** B-DATA-001, B-DATA-002, C-COMP-002, B-DATA-003 ve C-TRUST-002 Sale Release mühendislik çekirdeği uygulandı.
+- **Registry/retention:** `talkx-data-policy-v1`, 20 data class ve 27 schema store coverage kapısı kuruldu. Default dry-run/advisory lock ile production execute ayrı onay ve tamamlanmış owner policy olmadan fail-closed kaldı.
+- **Canonical country:** Migration `003`, tam ISO alpha-2 allowlist, strict alias/unavailable/stale/disputed/newer-record guard, privacy-safe own-country response ve Wave 08 capability-off sınırı kuruldu.
+- **Privacy/Data Safety:** Dokuz claim code/DB evidence kaynağına bağlandı. Processor region ve human owner review `verification_required` olarak bırakıldı; legal/store publish yapılmadı.
+- **Deletion:** Stable receipt/idempotency, session revoke, Wave 05 runtime termination, step ledger, delete/anonymize/retain işlemleri, semantic orphan gate, minimum HMAC subject ref, erasure journal ve processing sonrası reject/reactivate yasağı kuruldu.
+- **Support/trust:** `submissionId` duplicate koruması, bağımsız record/delivery status ve destructive exact-confirmation/current-policy/HMAC fail-closed kapısı uygulandı.
+- **Otomatik kanıt:** Backend 45/45 ve frontend 13/13 test geçti; değişen backend syntax kontrolleri, frontend lint ve production build, repository text-encoding ve iki repo `diff --check` temiz. Frontend audit 0 bulgu; backend audit high kapısı exit 0, Firebase transitif zincirinde 8 moderate bulgu (breaking `--force` fix önerisi) kaydetti.
+- **Canonical checkbox:** B-DATA-001 1/6; B-DATA-002 6/8; C-COMP-002 4/7; B-DATA-003 5/6; C-TRUST-002 4/6 otomatik kanıtla kapandı. Owner süreleri, region, low-cohort, sensitive-media erişimi ve retained-evidence süresi açık kaldı.
+- **Canlı/staging işlemler:** Production DB query/migration/backfill/retention/deletion, gerçek kullanıcı verisi, backup/restore, erasure export/replay, secret/config, Render/Neon restart/deploy ve legal/store publish yapılmadı.
+- **Manuel QA:** Policy/privacy/legal owner review, processor region/config, sentetik tam user graph, iki-client runtime, admin masking/a11y, Android/web copy ve izole restore replay Checkpoint A / Wave 19'a ertelendi.
+- **Wave durumu:** AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED.
+- **Sonraki wave:** Wave 07 başlatılmadı.
 
 ## 16. Durma kuralı
 
-Wave 05 QA kapanışı ve kullanıcının açık Wave 06 başlatma talimatı birlikte gelene kadar:
+Wave 06 auto-verified/committed kapanışından sonra durulur. Kullanıcı Wave 07'yi ayrıca açıkça başlatana kadar:
 
-- Wave 06 için kod, test, dependency, migration, data scan, backfill, retention, deletion, backup, config veya deploy değişikliği yapılmaz.
+- Wave 07 için kod, test, dependency, migration, refactor veya hazırlık yapılmaz.
 - Render/Neon/Firebase/Brevo/geo provider/store veya canlı kullanıcı verisi üzerinde hiçbir state değişikliği yapılmaz.
-- Wave 06 `Aktif` işaretlenmez; bu belge yalnız `Hazır — aktif değil` durumunda kalır.
+- Wave 06'nın owner/legal/staging/manual maddeleri Checkpoint A / Wave 19 havuzunda kalır.
 - Wave 07 uygulanmaz; hazırlanmış plan aktif edilmez.

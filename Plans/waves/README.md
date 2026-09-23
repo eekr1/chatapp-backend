@@ -29,7 +29,7 @@
 | 03 | `TALKX_WAVE_03.md` | Plan A | Hazır | Aktif değil |
 | 04 | `TALKX_WAVE_04.md` | Plan B + Plan C | Hazır | Aktif değil |
 | 05 | `TALKX_WAVE_05.md` | Plan B + Plan A | Hazır | Aktif değil |
-| 06 | `TALKX_WAVE_06.md` | Plan B + Plan C | Hazır | Aktif değil |
+| 06 | `TALKX_WAVE_06.md` | Plan B + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
 | 07 | `TALKX_WAVE_07.md` | Plan B + Plan A | Hazır | Aktif değil |
 | 08 | `TALKX_WAVE_08.md` | Plan B + Plan A + Plan C | Hazır | Aktif değil |
 | 09 | `TALKX_WAVE_09.md` | Plan B + Plan A | Hazır | Aktif değil |
@@ -75,4 +75,4 @@ Boş şablon veya placeholder wave dosyaları oluşturulmaz. Her wave dosyası, 
 
 ## Mevcut durma noktası
 
-Wave 01–19 Sale Release planları hazır fakat aktif değildir. Planlama envanteri 19/19 tamamdır; hiçbir wave aktif değildir. İlk uygulama adımı yalnız açık **“Wave 01'i başlat”** talimatıdır.
+Wave 01–06 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır. Wave 07–19 hazır fakat aktif değildir; hiçbir wave aktif değildir. Sonraki uygulama adımı yalnız açık **“Wave 07'yi başlat”** talimatıdır.
