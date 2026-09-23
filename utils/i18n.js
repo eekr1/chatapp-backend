@@ -1,5 +1,6 @@
 const messagesTr = require('../i18n/messages.tr');
 const messagesEn = require('../i18n/messages.en');
+const { buildErrorEnvelope } = require('./contracts');
 
 const SUPPORTED = new Set(['tr', 'en']);
 const DEFAULT_LANG = 'en';
@@ -49,11 +50,19 @@ const t = (lang, key, params = {}, fallback = null) => {
     return interpolate(resolved, params);
 };
 
-const sendApiError = (req, res, status, code, params = {}, fallbackKey = 'errors.SERVER_ERROR') => {
+const sendApiError = (req, res, status, code, params = {}, fallbackKey = 'errors.SERVER_ERROR', options = {}) => {
     const lang = resolveRequestLang(req);
     const key = `errors.${code || 'SERVER_ERROR'}`;
     const error = t(lang, key, params, t(lang, fallbackKey, {}, 'Server error.'));
-    return res.status(status).json({ error, code: code || 'SERVER_ERROR' });
+    const errorCode = code || 'SERVER_ERROR';
+    return res.status(status).json(buildErrorEnvelope({
+        errorCode,
+        message: error,
+        requestId: req?.requestId,
+        retryable: options.retryable ?? (status === 429 || status >= 500),
+        retryAfterMs: options.retryAfterMs,
+        metadata: options.metadata
+    }));
 };
 
 module.exports = {

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
-const { hashToken, comparePassword, hashPassword } = require('../utils/security');
+const { comparePassword, hashPassword } = require('../utils/security');
+const { authenticate, revokeAllForUser } = require('../utils/sessionService');
 const { calculateLegalStatus, getRequiredLegalVersions } = require('../utils/legalAcceptance');
 const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
 
@@ -21,39 +22,6 @@ const sendLegalReacceptRequired = (req, res, legalStatus) => res.status(428).jso
     required_versions: legalStatus?.required || null,
     accepted_versions: legalStatus?.accepted || null
 });
-
-const authenticate = async (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return sendApiError(req, res, 401, 'AUTH_REQUIRED');
-
-    const token = authHeader.replace('Bearer ', '');
-    const tokenHash = hashToken(token);
-
-    try {
-        const result = await pool.query(
-            `SELECT s.*, u.username, u.status
-             FROM sessions s
-             JOIN users u ON s.user_id = u.id
-             WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
-            [tokenHash]
-        );
-
-        if (result.rows.length === 0) {
-            return sendApiError(req, res, 401, 'AUTH_INVALID');
-        }
-
-        const sessionUser = result.rows[0];
-        if (sessionUser.status !== 'active') {
-            return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
-        }
-
-        req.user = sessionUser;
-        return next();
-    } catch (e) {
-        console.error('Auth Middleware Error:', e);
-        return sendApiError(req, res, 500, 'SERVER_ERROR');
-    }
-};
 
 const requireLegalAcceptance = async (req, res, next) => {
     try {
@@ -239,6 +207,7 @@ router.put('/me/password', authenticate, requireLegalAcceptance, async (req, res
             'UPDATE users SET password_hash = $1, last_seen_at = NOW() WHERE id = $2',
             [newHash, req.user.user_id]
         );
+        await revokeAllForUser(req.user.user_id, 'password_changed');
 
         return res.json({
             success: true,
@@ -314,7 +283,7 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
              WHERE id = $1`,
             [dbUser.id]
         );
-        await db.query('DELETE FROM sessions WHERE user_id = $1', [dbUser.id]);
+        await revokeAllForUser(dbUser.id, 'account_deletion_requested', db);
 
         await db.query('COMMIT');
         return res.json({

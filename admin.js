@@ -4,6 +4,7 @@ const https = require('https');
 const http = require('http');
 const path = require('path');
 const { pool } = require('./db');
+const { createAdminGuard } = require('./utils/adminSecurity');
 const { getPushDiagnostics } = require('./utils/push');
 const {
     fetchLegalSettings,
@@ -27,22 +28,17 @@ router.use((req, res, next) => {
     next();
 });
 
-// Basic Auth Middleware
-const basicAuth = (req, res, next) => {
-    const auth = { login: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'admin123' };
-    const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
-    const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
-
-    if (login && password && login === auth.login && password === auth.password) {
-        req.adminUser = login;
-        return next();
-    }
-
-    res.set('WWW-Authenticate', 'Basic realm="401"');
-    res.status(401).send('Authentication required.');
-};
-
-router.use(basicAuth);
+// Basic Auth remains the explicit transport for this sale release. Every request
+// is re-authenticated, mutation capabilities are classified server-side, and
+// failed credentials have an admin-only bounded brute-force policy.
+router.use(createAdminGuard({
+    windowMs: Number(process.env.ADMIN_AUTH_RATE_WINDOW_MS) || 10 * 60 * 1000,
+    maxAttempts: Number(process.env.ADMIN_AUTH_RATE_MAX) || 10
+}));
+router.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+});
 router.use('/assets', express.static(path.join(__dirname, 'public', 'admin')));
 
 const ALLOWED_DELETION_REQUEST_STATUS = new Set(['requested', 'completed', 'rejected']);

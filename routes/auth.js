@@ -1,7 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
-const { hashPassword, comparePassword, generateSessionToken, hashToken } = require('../utils/security');
+const { hashPassword, comparePassword } = require('../utils/security');
+const {
+    authenticate,
+    createSession,
+    parseBearerToken,
+    revokeAllForUser,
+    revokeCurrent
+} = require('../utils/sessionService');
+const { buildSuccessMeta } = require('../utils/contracts');
 const { fetchLegalSettings } = require('../utils/legalContent');
 const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
 
@@ -153,21 +161,16 @@ router.post('/login', async (req, res) => {
         const requestedLocale = normalizeLang(req.body?.locale || req.headers['x-talkx-lang'] || user.locale || lang, 'en');
         await pool.query('UPDATE profiles SET locale = $1, updated_at = NOW() WHERE user_id = $2', [requestedLocale, user.id]);
 
-        const token = generateSessionToken();
-        const tokenHash = hashToken(token);
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-        await pool.query(
-            'INSERT INTO sessions (token_hash, user_id, device_id, expires_at) VALUES ($1, $2, $3, $4)',
-            [tokenHash, user.id, device_id || 'unknown', expiresAt]
-        );
+        const session = await createSession({ userId: user.id, deviceId: device_id });
 
         await pool.query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [user.id]);
 
         return res.json({
             success: true,
-            token,
-            user: { id: user.id, username: user.username, locale: requestedLocale }
+            token: session.token,
+            expiresAt: session.expiresAt.toISOString(),
+            user: { id: user.id, username: user.username, locale: requestedLocale },
+            meta: buildSuccessMeta(req.requestId)
         });
     } catch (e) {
         console.error('Login Error:', e);
@@ -177,17 +180,24 @@ router.post('/login', async (req, res) => {
 
 // Logout
 router.post('/logout', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.json({ success: true });
-
-    const token = authHeader.replace('Bearer ', '');
-    const tokenHash = hashToken(token);
+    const token = parseBearerToken(req.headers.authorization);
+    if (!token) return res.json({ success: true, meta: buildSuccessMeta(req.requestId) });
 
     try {
-        await pool.query('DELETE FROM sessions WHERE token_hash = $1', [tokenHash]);
-        return res.json({ success: true });
+        await revokeCurrent(token, 'logout');
+        return res.json({ success: true, scope: 'current', meta: buildSuccessMeta(req.requestId) });
     } catch (e) {
         console.error('Logout Error:', e);
+        return sendApiError(req, res, 500, 'SERVER_ERROR');
+    }
+});
+
+router.post('/logout-all', authenticate, async (req, res) => {
+    try {
+        await revokeAllForUser(req.user.user_id, 'logout_all');
+        return res.json({ success: true, scope: 'all', meta: buildSuccessMeta(req.requestId) });
+    } catch (e) {
+        console.error('Logout all error:', e?.message || e);
         return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
 });

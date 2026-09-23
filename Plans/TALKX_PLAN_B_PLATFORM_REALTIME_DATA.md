@@ -160,12 +160,14 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] NAT altındaki tüm kullanıcılar tek kişi gibi engellenmiyor.
-- [ ] IP değiştirmek kullanıcı/device limitini tamamen aşmıyor.
-- [ ] Limit sonucu kararlı error code ve retry zamanı veriyor.
-- [ ] Scope tıklama spam'i birden fazla queue entry üretmiyor.
-- [ ] Rate-limit log'u tam hassas IP'yi gereksiz saklamıyor.
-- [ ] Admin ve public limitleri ayrı policy.
+- [x] NAT altındaki tüm kullanıcılar tek kişi gibi engellenmiyor.
+- [x] IP değiştirmek kullanıcı/device limitini tamamen aşmıyor.
+- [x] Limit sonucu kararlı error code ve retry zamanı veriyor.
+- [x] Scope tıklama spam'i birden fazla queue entry üretmiyor.
+- [x] Rate-limit log'u tam hassas IP'yi gereksiz saklamıyor.
+- [x] Admin ve public limitleri ayrı policy.
+
+> **Wave 02 kanıtı (2026-09-23):** Auth/public/support/admin/WS ayrı policy ve pseudonymous key kullanıyor; user/device/session/connection boyutları, event-cost, side-effect öncesi kontrol, TTL/eviction/max-key ve `RATE_LIMITED + retryAfterMs` odaklı testlerle doğrulandı. Render gerçek header zinciri canlı değişiklik yapılmadan Wave 19 staging QA'ya ertelendi.
 
 ## 8. B-API-001 — API/event schema ve hata sözleşmesi
 
@@ -188,12 +190,14 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] Kritik endpoint/eventler sürümlü schema'ya sahip.
-- [ ] Client metni backend İngilizce error string'ine bağlı değil.
+- [x] Client metni backend İngilizce error string'ine bağlı değil.
 - [ ] Stale ve not-found ayrılıyor.
-- [ ] Retry edilebilir hata açık.
+- [x] Retry edilebilir hata açık.
 - [ ] Pagination stable ordering kullanıyor.
-- [ ] Eski client capability yokken temel akışını koruyor.
-- [ ] Büyük modül ayrımı test olmadan yapılmıyor.
+- [x] Eski client capability yokken temel akışını koruyor.
+- [x] Büyük modül ayrımı test olmadan yapılmıyor.
+
+> **Wave 02 Sale Release kanıtı (2026-09-23):** HTTP hata envelope'u `schemaVersion/errorCode/message/retryable/requestId/serverTime` ve legacy `code/error` alias'larıyla; WS envelope'u event kimliği ve capability handshake'iyle uygulandı. Client `errorCode` + locale kataloğunu tüketiyor. Enterprise pagination/cursor ve geniş success-schema framework'ü roadmap olarak açık bırakıldı.
 
 ## 9. B-API-002 — Health, readiness ve release kimliği
 
@@ -234,12 +238,14 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Expired/revoked session WebSocket yetkisi taşımıyor.
-- [ ] Logout policy client ve backend'de aynı.
-- [ ] Şifre değişimi sonucu belgeli.
-- [ ] Aynı cihaz retry duplicate session üretmiyor.
-- [ ] Hesap silme tüm aktif bağlantıları kapatıyor.
-- [ ] Session tablosu retention planıyla uyumlu.
+- [x] Expired/revoked session WebSocket yetkisi taşımıyor.
+- [x] Logout policy client ve backend'de aynı.
+- [x] Şifre değişimi sonucu belgeli.
+- [x] Aynı cihaz retry duplicate session üretmiyor.
+- [x] Hesap silme tüm aktif bağlantıları kapatıyor.
+- [x] Session tablosu retention planıyla uyumlu.
+
+> **Wave 02 kanıtı (2026-09-23):** Ortak session servisi 30 günlük TTL, current/all-device revoke, password-change/account-deletion revoke hook'u ve aynı user/device için replace semantiği sağlıyor; session'a bağlı tüm socketler kontrollü kapanıyor.
 
 ## 11. B-AUTH-002 — Legal reaccept backend sözleşmesi
 
@@ -282,12 +288,14 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Auth tamamlanmadan protected event işlenmiyor.
-- [ ] Aynı socket farklı kullanıcıya dönüşmüyor.
-- [ ] Stale socket queue/room/presence bırakmıyor.
-- [ ] Platform/locale client'ın keyfi hassas alan yazmasına izin vermiyor.
-- [ ] Çoklu cihaz policy'si açık.
-- [ ] Backpressure servisi çökertmiyor.
+- [x] Auth tamamlanmadan protected event işlenmiyor.
+- [x] Aynı socket farklı kullanıcıya dönüşmüyor.
+- [x] Stale socket queue/room/presence bırakmıyor.
+- [x] Platform/locale client'ın keyfi hassas alan yazmasına izin vermiyor.
+- [x] Çoklu cihaz policy'si açık.
+- [x] Backpressure servisi çökertmiyor.
+
+> **Wave 02 kanıtı (2026-09-23):** Beş fazlı connection registry, immutable tek handshake, session/user/device indeksleri, expiry/revoke kapanışı, allowlist client context ve 512 KiB bufferedAmount kapısı focused iki-socket testleriyle doğrulandı; reconnect recovery Wave 05'te kaldı.
 
 ## 13. B-WS-002 — Reconnect ve active-state recovery
 
@@ -766,11 +774,13 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Kritik yolculuk search/match/conversation ID ile izlenebilir.
-- [ ] İçerik loglanmadan sonuç teşhis edilebilir.
-- [ ] Redaction testleri var.
-- [ ] Log hacmi sınırlı.
-- [ ] Staging/production ayrık.
+- [x] Kritik yolculuk search/match/conversation ID ile izlenebilir.
+- [x] İçerik loglanmadan sonuç teşhis edilebilir.
+- [x] Redaction testleri var.
+- [x] Log hacmi sınırlı.
+- [x] Staging/production ayrık.
+
+> **Wave 02 kanıtı (2026-09-23):** Allowlist structured logger, pseudonymous actor, fail-closed legacy console redaction, request/connection/event correlation ve bounded/sampled mevcut telemetry birlikte test edildi; environment/release alanları ayrık tutuldu.
 
 ## 29. B-OBS-002 — Release Health ingestion/adaptör
 

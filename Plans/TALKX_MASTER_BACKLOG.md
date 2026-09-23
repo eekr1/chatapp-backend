@@ -80,7 +80,7 @@ Her yuzey once su sorulari cevaplar:
 
 ## Plan belge yönlendirmesi
 
-> 2026-09-23 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01 Sale Release kapsamı auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 02–19 başlatılmamıştır.
+> 2026-09-23 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01 ve Wave 02 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 03–19 başlatılmamıştır.
 
 | Plan | Canonical dosya | Birincil sahiplik |
 |---|---|---|
@@ -90,7 +90,7 @@ Her yuzey once su sorulari cevaplar:
 | Wave Map — Yürütme sırası | [`TALKX_WAVE_MAP.md`](TALKX_WAVE_MAP.md) | 19 wave'in sırası, stable ID sahipliği, durum ve giriş/çıkış sınırları |
 | Wave planları — klasör ve sözleşme | [`waves/README.md`](waves/README.md) | 19 wave için dosya adı, hazırlık/aktivasyon ayrımı ve agent okuma sırası |
 | Wave 01 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_01.md`](waves/TALKX_WAVE_01.md) | Yalnız Wave 01 kapsamı, kanıt, checkpoint havuzu ve durma noktası |
-| Wave 02 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_02.md`](waves/TALKX_WAVE_02.md) | Yalnız Wave 02 platform/admin temeli, kanıt planı, riskler ve durma noktası |
+| Wave 02 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_02.md`](waves/TALKX_WAVE_02.md) | Platform/admin erişim temeli, otomatik kanıt ve checkpoint havuzu |
 | Wave 03 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_03.md`](waves/TALKX_WAVE_03.md) | Yalnız Wave 03 client foundation, accessibility/auth UX, kanıt planı ve durma noktası |
 | Wave 04 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_04.md`](waves/TALKX_WAVE_04.md) | Yalnız Wave 04 health, DB runtime, performans ve operasyon güvenliği; kanıt planı ve durma noktası |
 | Wave 05 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_05.md`](waves/TALKX_WAVE_05.md) | Yalnız Wave 05 reconnect, active state, gerçek presence ve client recovery; kanıt planı ve durma noktası |

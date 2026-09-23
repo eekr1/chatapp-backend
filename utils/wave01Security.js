@@ -27,7 +27,10 @@ const EVENT_SCHEMAS = {
         platform: field((value) => value === 'web' || value === 'android'),
         lang: optional((value) => value === 'tr' || value === 'en'),
         appVersion: optional((value) => isString(value, { max: 60, trim: true })),
-        version: optional((value) => isString(value, { max: 60, trim: true }))
+        version: optional((value) => isString(value, { max: 60, trim: true })),
+        capabilities: optional((value) => Array.isArray(value)
+            && value.length <= 30
+            && value.every((item) => isString(item, { min: 1, max: 60, trim: true })))
     },
     setNickname: { nickname: field((value) => isString(value, { min: 3, max: 40, trim: true })) },
     joinQueue: noFields,

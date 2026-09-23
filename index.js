@@ -23,10 +23,19 @@ const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 const { shouldDebouncePush } = require('./utils/pushDebounce');
 const { fetchLegalSettings } = require('./utils/legalContent');
 const { normalizeLang, resolveRequestLang, resolveLangFromHeaders, t } = require('./utils/i18n');
+const { sendApiError } = require('./utils/i18n');
+const { requestContext } = require('./utils/contracts');
+const { BoundedRateLimiter, hashKey, resolvePeerAddress } = require('./utils/abuseProtection');
+const { ConnectionRegistry, normalizeClientContext, safeSend } = require('./utils/socketSecurity');
+const { findValidSessionByToken, onSessionsRevoked } = require('./utils/sessionService');
+const logger = require('./utils/logger');
+logger.installSafeConsole();
 
 // Global State (Only Transients)
 // Connected clients mapping: clientId -> { ws, dbUserId, deviceId, isShadowBanned, nickname }
 const activeClients = new Map();
+const connectionRegistry = new ConnectionRegistry();
+onSessionsRevoked((sessions, reason) => connectionRegistry.closeSessions(sessions, reason));
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -332,13 +341,14 @@ app.use((req, res, next) => {
     }
     next();
 });
+app.use(requestContext);
 app.use(express.json({ limit: '128kb', strict: true }));
 app.use((err, req, res, next) => {
     if (err?.type === 'entity.too.large') {
-        return res.status(413).json({ error: 'Request payload is too large.', code: 'PAYLOAD_TOO_LARGE' });
+        return sendApiError(req, res, 413, 'PAYLOAD_TOO_LARGE');
     }
     if (err instanceof SyntaxError && err.status === 400 && Object.prototype.hasOwnProperty.call(err, 'body')) {
-        return res.status(400).json({ error: 'Invalid JSON payload.', code: 'INVALID_JSON' });
+        return sendApiError(req, res, 400, 'INVALID_JSON');
     }
     return next(err);
 });
@@ -445,11 +455,17 @@ const rateLimit = require('express-rate-limit');
 const authLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
     max: 50, // 50 requests per IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => [
+        hashKey('auth-peer', resolvePeerAddress(req)),
+        hashKey('auth-user', String(req.body?.username || '').trim().toLowerCase()),
+        hashKey('auth-device', req.body?.device_id || 'unknown')
+    ].join(':'),
     handler: (req, res) => {
-        const lang = resolveRequestLang(req);
-        return res.status(429).json({
-            error: t(lang, 'errors.RATE_LIMIT', {}, 'Too many attempts. Please wait.'),
-            code: 'RATE_LIMIT'
+        const retryAfterMs = Math.max(0, Number(req.rateLimit?.resetTime || 0) - Date.now());
+        return sendApiError(req, res, 429, 'RATE_LIMITED', {}, 'errors.RATE_LIMIT', {
+            retryable: true, retryAfterMs, metadata: { policy: 'auth' }
         });
     }
 });
@@ -457,11 +473,18 @@ const authLimiter = rateLimit({
 const apiLimiter = rateLimit({
     windowMs: 10 * 60 * 1000,
     max: 300, // 300 requests per IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+        const authorization = String(req.headers.authorization || '').trim();
+        return authorization
+            ? `session:${hashKey('api-session', authorization)}`
+            : `peer:${hashKey('api-peer', resolvePeerAddress(req))}`;
+    },
     handler: (req, res) => {
-        const lang = resolveRequestLang(req);
-        return res.status(429).json({
-            error: t(lang, 'errors.RATE_LIMIT', {}, 'Too many attempts. Please wait.'),
-            code: 'RATE_LIMIT'
+        const retryAfterMs = Math.max(0, Number(req.rateLimit?.resetTime || 0) - Date.now());
+        return sendApiError(req, res, 429, 'RATE_LIMITED', {}, 'errors.RATE_LIMIT', {
+            retryable: true, retryAfterMs, metadata: { policy: 'public-api' }
         });
     }
 });
@@ -540,14 +563,12 @@ const PUSH_CHANNEL_IDS = {
 };
 
 // Rate Limit Map (Memory is fine for rate limit)
-const rateLimitMap = new Map();
-
 // Recent Rooms for Report fallback (Memory cache)
 const recentRooms = new Map();
 
 // Helpers
 const sendJson = (ws, data) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+    return safeSend(ws, data);
 };
 
 const resolveWsLang = (ws) => {
@@ -577,7 +598,14 @@ const sendError = (ws, code, message = null, extra = {}) => {
     const lang = resolveWsLang(ws);
     const fallback = t(lang, 'ws.SERVER_ERROR', {}, 'Server error.');
     const resolvedMessage = message || t(lang, `ws.${code}`, {}, fallback);
-    sendJson(ws, { type: 'error', code, message: resolvedMessage, ...extra });
+    sendJson(ws, {
+        type: 'error',
+        errorCode: code,
+        code,
+        message: resolvedMessage,
+        retryable: code === 'RATE_LIMITED' || code === 'SERVER_ERROR',
+        ...extra
+    });
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -999,14 +1027,8 @@ const validateImageDataUrl = (dataUrl) => {
     return { ok: true };
 };
 
-const checkRateLimit = (clientId) => {
-    const now = Date.now();
-    let record = rateLimitMap.get(clientId);
-    if (!record || now - record.lastReset > RATE_LIMIT_WINDOW) record = { count: 0, lastReset: now };
-    record.count++;
-    rateLimitMap.set(clientId, record);
-    return record.count <= RATE_LIMIT_MAX;
-};
+const WS_EVENT_COST = Object.freeze({ message: 2, direct_message: 2, image_send: 5, direct_image_send: 5, report: 5, joinQueue: 2 });
+const wsAbuseLimiter = new BoundedRateLimiter({ windowMs: RATE_LIMIT_WINDOW, max: RATE_LIMIT_MAX * 4, maxKeys: 20000 });
 
 function heartbeat() { this.isAlive = true; }
 
@@ -1692,8 +1714,9 @@ const leaveRoom = (clientId, reason = 'leave') => {
 wss.on('connection', (ws, req) => {
     ws.clientId = uuidv4();
     ws.isAlive = true;
-    ws.limiter = { count: 0, lastReset: Date.now() }; // Security: Rate Limiter Init
+    ws.limiter = new BoundedRateLimiter({ windowMs: RATE_LIMIT_WINDOW, max: RATE_LIMIT_MAX * 2, maxKeys: 2 });
     ws.prefLang = resolveLangFromHeaders(req.headers || {});
+    connectionRegistry.connect(ws, ws.clientId);
     ws.on('pong', heartbeat);
 
     broadcastOnlineCount();
@@ -1716,44 +1739,41 @@ wss.on('connection', (ws, req) => {
             return;
         }
 
-        // Security: WebSocket Rate Limiting
-        const now = Date.now();
-        if (now - ws.limiter.lastReset > 1000) {
-            ws.limiter.count = 0;
-            ws.limiter.lastReset = now;
-        }
-        ws.limiter.count++;
-
-        if (ws.limiter.count > 5) {
-            if (ws.limiter.count > 10) return ws.close(); // Hard Limit
-            sendError(ws, 'RATE_LIMIT');
+        const eventCost = WS_EVENT_COST[data.type] || 1;
+        const localRate = ws.limiter.consume('events', eventCost);
+        const currentClient = activeClients.get(ws.clientId);
+        const actorKey = currentClient
+            ? `actor:${hashKey('ws-actor', `${currentClient.dbUserId}:${currentClient.deviceId}`)}`
+            : `peer:${hashKey('ws-peer', resolvePeerAddress(req))}`;
+        const actorRate = wsAbuseLimiter.consume(actorKey, eventCost);
+        if (!localRate.allowed || !actorRate.allowed) {
+            const retryAfterMs = Math.max(localRate.retryAfterMs, actorRate.retryAfterMs);
+            sendError(ws, 'RATE_LIMITED', null, { retryAfterMs, policy: 'ws-event' });
             return;
         }
 
         if (data.type === 'hello_ack') {
-            const deviceId = data.deviceId;
-            const requestedLang = normalizeLang(data.lang || ws.prefLang, 'en');
+            if (!connectionRegistry.beginAuthentication(ws.clientId)) {
+                sendError(ws, 'AUTH_ALREADY_COMPLETED');
+                ws.close(1008, 'Handshake already completed');
+                return;
+            }
+            const context = normalizeClientContext(data);
+            const deviceId = context.deviceId;
+            const requestedLang = normalizeLang(context.locale || ws.prefLang, 'en');
             let dbUser = null;
 
             // Token authentication is mandatory. Guest/legacy fallback is intentionally unsupported.
-            const { hashToken } = require('./utils/security');
-            const tokenHash = hashToken(data.token);
             try {
-                const sessionRes = await pool.query(`
-                        SELECT s.*, u.id as user_id, u.username, u.status, p.display_name
-                        FROM sessions s
-                        JOIN users u ON s.user_id = u.id
-                        LEFT JOIN profiles p ON u.id = p.user_id
-                        WHERE s.token_hash = $1 AND s.expires_at > NOW()
-                     `, [tokenHash]);
-
-                if (sessionRes.rows.length > 0) {
-                    const session = sessionRes.rows[0];
+                const session = await findValidSessionByToken(data.token);
+                if (session) {
                     dbUser = {
                         id: session.user_id,
                         username: session.username,
                         nickname: session.display_name || session.username,
-                        status: session.status
+                        status: session.status,
+                        sessionId: session.token_hash,
+                        sessionExpiresAt: session.expires_at
                     };
                 }
             } catch (e) {
@@ -1795,9 +1815,22 @@ wss.on('connection', (ws, req) => {
                 isShadowBanned: isShadow,
                 nickname: dbUser.nickname, // Display Name
                 username: dbUser.username,  // V13: Store unique username
-                platform: data.platform === 'android' ? 'android' : 'web',
+                sessionId: dbUser.sessionId,
+                platform: context.platform,
                 lang: requestedLang,
+                release: context.release,
+                capabilities: context.capabilities,
                 connectedAt: new Date().toISOString()
+            });
+            connectionRegistry.authenticate(ws.clientId, {
+                sessionId: dbUser.sessionId,
+                userId: dbUser.id,
+                deviceId,
+                platform: context.platform,
+                locale: requestedLang,
+                release: context.release,
+                capabilities: context.capabilities,
+                expiresAt: new Date(dbUser.sessionExpiresAt).getTime()
             });
 
             trackBehaviorEvent({
@@ -1805,20 +1838,26 @@ wss.on('connection', (ws, req) => {
                 userId: dbUser.id,
                 clientId: ws.clientId,
                 deviceId: deviceId || 'unknown',
-                platform: data.platform === 'android' ? 'android' : 'web',
+                platform: context.platform,
                 metadata: {
                     lang: requestedLang,
                     is_anon: false,
-                    app_version: toText(data.appVersion || data.version || '', '').trim().slice(0, 60) || null
+                    app_version: context.release
                 }
             });
 
-            sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang });
+            sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang, capabilities: ['error-envelope-v1', 'session-revoke-v1'] });
             return;
         }
 
         const clientData = activeClients.get(ws.clientId);
-        if (!clientData && data.type !== 'hello_ack') return;
+        const registryEntry = connectionRegistry.get(ws.clientId);
+        if (!clientData || !connectionRegistry.isAuthenticated(ws.clientId)
+            || (Number.isFinite(registryEntry?.expiresAt) && registryEntry.expiresAt <= Date.now())) {
+            sendError(ws, 'AUTH_ERROR');
+            if (registryEntry?.expiresAt <= Date.now()) ws.close(1008, 'Session expired');
+            return;
+        }
 
         switch (data.type) {
             case 'setNickname':
@@ -2492,6 +2531,7 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('close', () => {
+        connectionRegistry.close(ws.clientId);
         const clientData = activeClients.get(ws.clientId) || null;
         trackBehaviorEvent({
             eventName: 'user_disconnected',

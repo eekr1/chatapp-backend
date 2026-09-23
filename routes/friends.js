@@ -1,44 +1,22 @@
 ﻿const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
-const { hashToken } = require('../utils/security');
 const { calculateLegalStatus } = require('../utils/legalAcceptance');
-const { sendApiError, t, resolveRequestLang } = require('../utils/i18n');
+const { sendApiError } = require('../utils/i18n');
+const { authenticate: authenticateSession } = require('../utils/sessionService');
 
 const authenticate = async (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return sendApiError(req, res, 401, 'AUTH_REQUIRED');
-
-    const token = authHeader.replace('Bearer ', '');
-    const tokenHash = hashToken(token);
-
-    try {
-        const result = await pool.query(`
-            SELECT s.*, u.username, u.status
-            FROM sessions s
-            JOIN users u ON s.user_id = u.id
-            WHERE s.token_hash = $1 AND s.expires_at > NOW()
-        `, [tokenHash]);
-
-        if (result.rows.length === 0) return sendApiError(req, res, 401, 'AUTH_INVALID');
-        if (result.rows[0].status !== 'active') {
-            return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
-        }
-        const sessionUser = result.rows[0];
-        const legalStatus = await calculateLegalStatus(pool, sessionUser.user_id);
-        if (legalStatus.requiresReaccept) {
-            return res.status(428).json({
-                error: t(resolveRequestLang(req), 'errors.LEGAL_REACCEPT_REQUIRED', {}, 'Legal reaccept required.'),
-                code: 'LEGAL_REACCEPT_REQUIRED',
-                required_versions: legalStatus.required,
-                accepted_versions: legalStatus.accepted
-            });
-        }
-        req.user = sessionUser;
-        next();
-    } catch (e) {
-        return sendApiError(req, res, 500, 'SERVER_ERROR');
-    }
+    return authenticateSession(req, res, async () => {
+        try {
+            const legalStatus = await calculateLegalStatus(pool, req.user.user_id);
+            if (legalStatus.requiresReaccept) {
+                return sendApiError(req, res, 428, 'LEGAL_REACCEPT_REQUIRED', {}, 'errors.LEGAL_REACCEPT_REQUIRED', {
+                    metadata: { required_versions: legalStatus.required, accepted_versions: legalStatus.accepted }
+                });
+            }
+            return next();
+        } catch { return sendApiError(req, res, 500, 'SERVER_ERROR'); }
+    });
 };
 
 router.use(authenticate);

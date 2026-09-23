@@ -2,10 +2,12 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const { pool } = require('../db');
-const { hashToken } = require('../utils/security');
 const { sendSupportReportEmail } = require('../utils/brevoSupport');
 const { calculateLegalStatus } = require('../utils/legalAcceptance');
 const { sendApiError, t, resolveRequestLang } = require('../utils/i18n');
+const { findValidSessionByToken, parseBearerToken } = require('../utils/sessionService');
+const { hashKey, resolvePeerAddress } = require('../utils/abuseProtection');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -80,9 +82,8 @@ const getClientIp = (req) => {
 };
 
 const getRateLimitKey = (req) => {
-    if (req.authUser?.user_id) return `user:${req.authUser.user_id}`;
-    const ip = getClientIp(req) || 'unknown';
-    return `ip:${ip}`;
+    if (req.authUser?.user_id) return `user:${hashKey('support-user', req.authUser.user_id)}`;
+    return `ip:${hashKey('support-ip', resolvePeerAddress(req))}`;
 };
 
 const supportLimiter = rateLimit({
@@ -99,14 +100,16 @@ const supportLimiter = rateLimit({
     handler: (req, res) => {
         const rl = req.rateLimit || {};
         const resetDate = rl.resetTime ? new Date(rl.resetTime) : null;
-        const resetIso = resetDate && !Number.isNaN(resetDate.getTime()) ? resetDate.toISOString() : null;
-        console.warn('[support] rate_limited', {
-            limitKey: req.supportRateLimitKey || getRateLimitKey(req),
-            remaining: Number.isFinite(rl.remaining) ? rl.remaining : null,
-            reset: resetIso,
-            authUserPresent: Boolean(req.authUser)
+        const retryAfterMs = resetDate ? Math.max(0, resetDate.getTime() - Date.now()) : SUPPORT_RATE_LIMIT_WINDOW_MS;
+        logger.warn('support', 'rate_limited', {
+            requestId: req.requestId,
+            result: 'denied',
+            policy: 'support',
+            retryAfterMs
         });
-        return sendApiError(req, res, 429, 'RATE_LIMIT');
+        return sendApiError(req, res, 429, 'RATE_LIMITED', {}, 'errors.RATE_LIMIT', {
+            retryable: true, retryAfterMs, metadata: { policy: 'support' }
+        });
     }
 });
 
@@ -120,29 +123,18 @@ const normalizeFileName = (value, fallback = 'attachment.bin') => {
 };
 
 const authenticateOptional = async (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
+    const token = parseBearerToken(req.headers.authorization);
+    if (!req.headers.authorization) {
         req.authUser = null;
         return next();
     }
-
-    const token = authHeader.replace('Bearer ', '').trim();
     if (!token) return sendApiError(req, res, 401, 'AUTH_INVALID');
 
     try {
-        const tokenHash = hashToken(token);
-        const result = await pool.query(
-            `SELECT s.user_id, u.username, u.status
-             FROM sessions s
-             JOIN users u ON u.id = s.user_id
-             WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
-            [tokenHash]
-        );
-
-        if (result.rows.length === 0) {
+        const sessionUser = await findValidSessionByToken(token);
+        if (!sessionUser) {
             return sendApiError(req, res, 401, 'AUTH_INVALID');
         }
-        const sessionUser = result.rows[0];
         if (sessionUser.status !== 'active') {
             return sendApiError(req, res, 403, 'ACCOUNT_INACTIVE');
         }

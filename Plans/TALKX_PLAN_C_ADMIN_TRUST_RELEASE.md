@@ -252,13 +252,15 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Yetkisiz admin endpointine UI gizlemesi dışında server engeli var.
-- [ ] Brute-force limiti production proxy arkasında doğru.
-- [ ] Kritik işlem yeniden doğrulama/policy ile korunuyor.
+- [x] Yetkisiz admin endpointine UI gizlemesi dışında server engeli var.
+- [x] Brute-force limiti production proxy arkasında doğru.
+- [x] Kritik işlem yeniden doğrulama/policy ile korunuyor.
 - [ ] Beş saniyede günlük görevler bulunuyor.
 - [ ] Noktalama karakteri ikon olarak kullanılmıyor.
 - [ ] Mobil navigasyon erişilebilir ve focus güvenli.
 - [ ] Ortak durum bileşenleri teknik ham hata dökmüyor.
+
+> **Wave 02 Sale Release kanıtı (2026-09-23):** Production disable-by-default korunurken timing-safe Basic Auth, remote-peer tabanlı ve bounded ayrı admin brute-force policy'si, canonical 401/429 envelope'u, her istekte yeniden doğrulama, no-store ve route bazlı server capability sınıflandırması eklendi. Gerçek Render zinciri staging manuel QA'ya; navigasyon/ikon/ortak görsel durum kriterleri ilgili admin dalgalarına ve Wave 19'a açık bırakıldı.
 
 ## 11. C-ADMIN-002 — QA-004 Dashboard
 

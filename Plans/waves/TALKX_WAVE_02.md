@@ -2,19 +2,19 @@
 
 > Bu belge yalnız Wave 02 için hazırlanmış uygulama planıdır.
 > Canonical ayrıntı Plan B ve Plan C stable ID maddelerindedir; burada yeni ürün veya sonraki-wave mimarisi üretilmez.
-> Plan hazırdır. Wave 02 aktif değildir, Wave 01 kapanmamıştır ve uygulama başlamamıştır.
+> Wave 02 Sale Release kapsamı 2026-09-23 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 03 başlatılmadı.
 
 ## 1. Durum ve yürütme sınırı
 
 - **Wave:** 02
 - **Wave adı:** Core API, auth, logging, abuse, socket ve admin erişim temeli
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Uygulandı
+- **Wave durumu:** Auto-verified / committed / manual-QA-deferred
+- **Uygulama durumu:** Sale Release çekirdeği tamamlandı
+- **Uygulama yetkisi:** 2026-09-23 tarihinde açıkça verildi
 - **Giriş kapısı:** Wave 01 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 02'yi başlat” talimatı
-- **Mevcut blokaj:** Wave 01 henüz committed değil; Wave 02 uygulanamaz
-- **Önceki wave:** Wave 01 — planı hazır, aktif değil
+- **Mevcut blokaj:** Yok
+- **Önceki wave:** Wave 01 — auto-verified / committed / manual-QA-deferred
 - **Sonraki wave:** Wave 03 — ayrı kullanıcı talimatıyla planı hazırlandı; aktif değil ve uygulanmayacak
 
 Bu dosyanın hazırlanması Wave 02 aktivasyonu, kod değişikliği, test altyapısı kurulumu, migration, canlı config, admin credential değişimi, deploy veya Wave 03 aktivasyonu/uygulaması için yetki değildir.
@@ -552,30 +552,30 @@ Aşağıdakiler Wave 02 planının veya başlangıç talimatının doğal uzant�
 
 Wave 02 uygulamasına geçmeden önce:
 
-- [ ] Wave 01 **AUTO-VERIFIED / COMMITTED**; açık canonical/manual maddeler Checkpoint A/Wave 19 havuzunda.
-- [ ] Kullanıcı açıkça “Wave 02'yi başlat” dedi.
-- [ ] Dirty repo başlangıç fotoğrafı hedef dosyalar için kaydedildi.
-- [ ] Wave 01'in auth/input/origin/payload sözleşmesi güncel kodda yeniden doğrulandı.
-- [ ] Desteklenen Web ve Android client sürümleri compatibility fixture olarak belirlendi.
-- [ ] Render proxy zincirini güvenli biçimde doğrulama yöntemi belirlendi.
-- [ ] Admin auth geçişi için staging ve break-glass davranışı belirlendi.
-- [ ] DB schema ihtiyacı çıkarsa Wave 04 sınırında durulacağı kabul edildi.
-- [ ] Canlı config, credential, revoke, migration ve deploy işlemlerinin ayrıca onay istediği kabul edildi.
-- [ ] Wave 03 kapsamına taşma olmadığı tekrar kontrol edildi.
+- [x] Wave 01 **AUTO-VERIFIED / COMMITTED**; açık canonical/manual maddeler Checkpoint A/Wave 19 havuzunda.
+- [x] Kullanıcı açıkça “Wave 02'yi başlat” dedi.
+- [x] İki bağımsız repo temiz `sale-release` başlangıç fotoğrafıyla kaydedildi.
+- [x] Wave 01'in auth/input/origin/payload sözleşmesi güncel kod ve 6 regresyon testiyle yeniden doğrulandı.
+- [x] Desteklenen Web build ve canonical Android bundled asset compatibility fixture olarak doğrulandı.
+- [x] Proxy güven modeli forwarded header'a kör güvenmeden remote peer + pseudonymous user/device/session anahtarlarıyla kuruldu; gerçek Render zinciri staging QA'ya ertelendi.
+- [x] Admin auth geçişi production disable-by-default ve önceki güvenli kapalı moda rollback davranışını korudu.
+- [x] DB schema ihtiyacı çıkarsa Wave 04 sınırında durulacağı kabul edildi; migration gerekmedi.
+- [x] Canlı config, credential, revoke, migration ve deploy işlemlerinin ayrıca onay istediği kabul edildi; hiçbiri yapılmadı.
+- [x] Wave 03 kapsamına taşma olmadığı tekrar kontrol edildi.
 
 Bu kutular plan hazırlanırken işaretlenmez.
 
 ## 15. Sonuç alanı
 
-- **Başlangıç zamanı:** —
-- **Tamamlanan Plan refs:** —
-- **Değişen dosyalar:** —
-- **Otomatik kanıt:** —
-- **İki-client kanıtı:** —
+- **Başlangıç zamanı:** 2026-09-23
+- **Tamamlanan Plan refs:** B-API-001, B-AUTH-001, B-OBS-001, B-SEC-002, B-WS-001 ve C-ADMIN-001 Sale Release çekirdeği; roadmap/manual kriterler açık bırakıldı
+- **Değişen dosyalar:** Backend contract/logger/session/abuse/socket/admin yardımcıları, ilgili route/index/admin entegrasyonları, focused testler ve canonical planlar; frontend API/WS adapterı ile TR/EN hata anahtarları
+- **Otomatik kanıt:** Backend 19/19; tüm değişen backend dosyaları `node --check`; frontend lint 0 hata/9 mevcut uyarı; Vite build başarılı; text encoding temiz; frontend audit 0; backend audit high eşiğinde exit 0 (8 moderate transitif bulgu); Android `testDebugUnitTest` başarılı
+- **İki-client kanıtı:** Aynı session'a bağlı iki socket revoke sırasında 1008 ile kontrollü kapandı; immutable handshake, expiry ve backpressure focused testlerle geçti
 - **Manuel QA:** Checkpoint A / Wave 19'a ertelendi
-- **Canlı/staging kanıtı:** —
-- **Kullanıcı onayı:** —
-- **Wave durumu:** Bekliyor
+- **Canlı/staging kanıtı:** Yapılmadı; Render proxy zinciri ve gerçek admin/session senaryoları Wave 19 manuel QA havuzunda
+- **Kullanıcı onayı:** Wave 02 başlangıç yetkisi 2026-09-23
+- **Wave durumu:** AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED
 - **Sonraki wave:** Başlatılmadı
 
 ## 16. Durma kuralı
