@@ -2,19 +2,19 @@
 
 > Bu belge yalnız Wave 03 için hazırlanmış uygulama planıdır.
 > Canonical ayrıntı Plan A stable ID maddelerindedir; burada yeni ürün özelliği veya sonraki-wave ekranı üretilmez.
-> Plan hazırdır. Wave 03 aktif değildir, Wave 01–02 kapanmamıştır ve uygulama başlamamıştır.
+> Wave 03 Sale Release kapsamı 2026-09-23 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 04 başlatılmadı.
 
 ## 1. Durum ve yürütme sınırı
 
 - **Wave:** 03
 - **Wave adı:** Test edilebilir client kabuğu, tema/state temeli ve dürüst auth UX
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Uygulandı
+- **Wave durumu:** Auto-verified / committed / manual-QA-deferred
+- **Uygulama durumu:** Küçültülmüş Sale Release kapsamı tamamlandı
+- **Uygulama yetkisi:** 2026-09-23 tarihinde açıkça verildi
 - **Giriş kapısı:** Wave 02 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 03'ü başlat” talimatı
-- **Mevcut blokaj:** Wave 02 henüz committed değil; Wave 03 uygulanamaz
-- **Önceki wave:** Wave 02 — planı hazır, aktif değil
+- **Mevcut blokaj:** Yok
+- **Önceki wave:** Wave 02 — auto-verified / committed / manual-QA-deferred
 - **Sonraki wave:** Wave 04 — planı ayrı talimatla hazırlandı; aktif değil ve uygulanmadı
 
 Bu dosyanın hazırlanması Wave 03 aktivasyonu, frontend kodu/CSS'i, dependency veya test altyapısı değişikliği, Android sync, deploy ya da Wave 04 aktivasyonu/uygulaması için yetki değildir.
@@ -524,31 +524,31 @@ Wave 03 frontend foundation planıdır. Aşağıdakiler ayrıca açık yetki vey
 
 Wave 03 uygulamasına geçmeden önce:
 
-- [ ] Wave 01 ve Wave 02 **AUTO-VERIFIED / COMMITTED**; açık canonical/manual maddeler checkpoint havuzunda.
-- [ ] Kullanıcı açıkça “Wave 03'ü başlat” dedi.
-- [ ] Dirty repo başlangıç fotoğrafı hedef JSX/CSS/package dosyaları için kaydedildi.
-- [ ] Wave 02 API/error/session/socket capability sözleşmeleri güncel kodda yeniden doğrulandı.
+- [x] Wave 01 ve Wave 02 **AUTO-VERIFIED / COMMITTED**; açık canonical/manual maddeler checkpoint havuzunda.
+- [x] Kullanıcı açıkça “Wave 03'ü başlat” dedi.
+- [x] İki bağımsız repo temiz `sale-release` başlangıç fotoğrafıyla kaydedildi.
+- [x] Wave 02 API/error/session/socket capability sözleşmeleri güncel kodda yeniden doğrulandı.
 - [ ] Desteklenen browser ve Android WebView baseline'ı kaydedildi.
 - [ ] QA-003/014/017 mevcut ekran screenshot baseline'ları alındı.
-- [ ] Screen/state/event ve back/deep-link mevcut davranış matrisi çıkarıldı.
-- [ ] Minimum focused test yaklaşımı ve olası dependency etkisi görünür hâle getirildi.
-- [ ] localStorage token risk kararının bu wave içinde sessiz mimari değişiklik üretmeyeceği kabul edildi.
-- [ ] Wave 04 kapsamına taşma olmadığı tekrar kontrol edildi.
+- [x] Screen/state/event ve back/deep-link mevcut davranış matrisi çıkarıldı.
+- [x] Minimum focused test yaklaşımı dependency eklemeden Node test runner ile görünür hâle getirildi.
+- [x] localStorage token risk kararının bu wave içinde sessiz mimari değişiklik üretmeyeceği kabul edildi.
+- [x] Wave 04 kapsamına taşma olmadığı tekrar kontrol edildi.
 
 Bu kutular plan hazırlanırken işaretlenmez.
 
 ## 15. Sonuç alanı
 
-- **Başlangıç zamanı:** —
-- **Tamamlanan Plan refs:** —
-- **Değişen dosyalar:** —
-- **Extraction adımları:** —
-- **Otomatik kanıt:** —
-- **Accessibility kanıtı:** —
-- **Web/Android smoke:** —
+- **Başlangıç zamanı:** 2026-09-23
+- **Tamamlanan Plan refs:** A-FND-001 ve A-AUTH-001 Sale Release çekirdeği; A-FND-002 semantic token/state temeli; A-A11Y-001 label/live-region/touch/focus/reduced-motion alt kapsamı; görsel/WebView/manual kriterler açık bırakıldı
+- **Değişen dosyalar:** Frontend navigation/auth/realtime/screen-state saf modülleri, `App.jsx`, auth UI, semantic token/CSS, TR/EN mesajlar, focused test ve sahiplik belgesi; canonical Plan A, Master Backlog, Wave Map ve bu sonuç kaydı
+- **Extraction adımları:** Android back saf policy'ye, auth notice storage saf policy'ye, realtime domain sınıflandırması ve client state önceliği testli küçük modüllere ayrıldı; tam `App.jsx` parçalama deferred bırakıldı
+- **Otomatik kanıt:** Frontend focused test 6/6; ESLint 0 hata/0 uyarı; Vite production build başarılı; text encoding temiz; frontend audit 0 vulnerability; `git diff --check` temiz
+- **Accessibility kanıtı:** Visible auth label/help/error association, semantic mode button, alert/status live-region, 44 px auth/toast hedefi, global focus-visible ve reduced-motion kuralları static/focused testlerle doğrulandı
+- **Web/Android smoke:** Manuel browser ve gerçek Android WebView smoke yapılmadı; Checkpoint A / Wave 19'a ertelendi. Android sync/build/version işlemi Wave 03 kapsam dışı olduğundan çalıştırılmadı
 - **Manuel QA:** Checkpoint A / Wave 19'a ertelendi
-- **Kullanıcı görsel onayı:** —
-- **Wave durumu:** Bekliyor
+- **Kullanıcı görsel onayı:** Checkpoint A / Wave 19'a ertelendi
+- **Wave durumu:** AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED
 - **Sonraki wave:** Başlatılmadı
 
 ## 16. Durma kuralı

@@ -80,7 +80,7 @@ Her yuzey once su sorulari cevaplar:
 
 ## Plan belge yönlendirmesi
 
-> 2026-09-23 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01 ve Wave 02 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 03–19 başlatılmamıştır.
+> 2026-09-23 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–03 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 04–19 başlatılmamıştır.
 
 | Plan | Canonical dosya | Birincil sahiplik |
 |---|---|---|
@@ -91,7 +91,7 @@ Her yuzey once su sorulari cevaplar:
 | Wave planları — klasör ve sözleşme | [`waves/README.md`](waves/README.md) | 19 wave için dosya adı, hazırlık/aktivasyon ayrımı ve agent okuma sırası |
 | Wave 01 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_01.md`](waves/TALKX_WAVE_01.md) | Yalnız Wave 01 kapsamı, kanıt, checkpoint havuzu ve durma noktası |
 | Wave 02 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_02.md`](waves/TALKX_WAVE_02.md) | Platform/admin erişim temeli, otomatik kanıt ve checkpoint havuzu |
-| Wave 03 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_03.md`](waves/TALKX_WAVE_03.md) | Yalnız Wave 03 client foundation, accessibility/auth UX, kanıt planı ve durma noktası |
+| Wave 03 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_03.md`](waves/TALKX_WAVE_03.md) | Yalnız Wave 03 client foundation, accessibility/auth UX, otomatik kanıt ve checkpoint havuzu |
 | Wave 04 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_04.md`](waves/TALKX_WAVE_04.md) | Yalnız Wave 04 health, DB runtime, performans ve operasyon güvenliği; kanıt planı ve durma noktası |
 | Wave 05 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_05.md`](waves/TALKX_WAVE_05.md) | Yalnız Wave 05 reconnect, active state, gerçek presence ve client recovery; kanıt planı ve durma noktası |
 | Wave 06 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_06.md`](waves/TALKX_WAVE_06.md) | Yalnız Wave 06 veri sahipliği, canonical ülke, privacy ve hesap silme; kanıt planı ve durma noktası |
@@ -193,13 +193,13 @@ Mevcut parcalar:
 
 > JARVIS frontend kurali: Kullanici once mevcut durumu, sonucun anlamini ve birincil sonraki adimi gorur; hata kodu, baglanti ayrintisi ve teknik kanit ikincil detayda kalir.
 
-- [ ] [P1] Lint'teki 7 hata ve 9 uyariyi tek tek siniflandir ve temizle.
+- [x] [P1] Lint'teki 7 hata ve 9 uyariyi tek tek siniflandir ve temizle.
 - [ ] [P1] Uygulama surumunu 0.0.0 yerine gercek release surumunden uret.
 - [ ] [P1] App.jsx icindeki WebSocket, push, outbox, auth, legal ve navigasyonu test altinda kademeli ayir.
-- [ ] [P1] localStorage session token riskini degerlendir.
+- [x] [P1] localStorage session token riskini degerlendir.
 - [ ] [P1] Reconnect, outbox retry ve duplicate-message davranisini test et.
 - [ ] [P1] Eslesme kabul, red ve timeout durumlarini test et.
-- [ ] [P1] Anonim ve arkadas chat state'lerinin birbirine karismadigini test et.
+- [x] [P1] Anonim ve arkadas chat state'lerinin birbirine karismadigini test et.
 - [ ] [P1] Fotograf gonderme, acma ve expire akisini web/Android'de test et.
 - [ ] [P1] Legal reaccept akisini eski ve yeni hesaplarla test et.
 - [ ] [P1] Arkadas sohbeti presence sozlesmesini tamamla: `/friends/list` cevabinda `is_online` ile `last_seen_at` birlikte donsun; authenticated WebSocket baglanma, kopma ve yeniden baglanma yasam dongusu son gorulme zamanini guvenilir bicimde guncellesin; `activeFriend` verisi `ChatScreen` header'ina aktarilsin.
@@ -209,8 +209,8 @@ Mevcut parcalar:
 - [ ] [P1] QA-017'ye gore Global / kendi ulkem eslesme kapsam secimini mevcut anonim eslesme baslatma kartina ve QA-014 arama yuzeyine yedir: `Global` varsayilan olsun, gercek ulke adi gosterilsin, scope degisimi atomik yeniden arama olarak anlatilsin, ulke beklemesi Global'e yalniz kullanici onayli fallback sunsun ve QA-003 teklif hiyerarsisi degismeden kalsin.
 - [ ] [P1] QA-015'e gore Arkadaslar ekranina dogrulanmis TalkX Sistem kaydi ve tek yonlu kalici sohbet ekle: sahte user/friendship olusturma; unread, gecmis/pagination, coklu cihaz read senkronu, guvenli CTA, WebSocket canli ekleme ve push'tan Sistem sohbetine yonlendirmeyi Web/Android'de tamamla.
 
-- [ ] [P2] Geri tusu, refresh ve deep-link davranislarini haritala.
-- [ ] [P2] React hook dependency uyarilarini gider.
+- [x] [P2] Geri tusu, refresh ve deep-link davranislarini haritala.
+- [x] [P2] React hook dependency uyarilarini gider.
 - [ ] [P2] Kullanilmayan state ve importlari temizle.
 - [ ] [P2] Accessibility lint ve klavye testi ekle.
 - [ ] [P2] Tek JS chunk performansini olc.

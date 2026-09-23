@@ -190,11 +190,11 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Her ayrılan modülün tek sorumluluğu ve testi var.
-- [ ] Match/friend/system chat state'leri birbirine karışmıyor.
-- [ ] Refresh, geri, logout ve deep-link davranışı belgeli.
-- [ ] Lint hata ve uyarıları sahiplik bazında kapanıyor.
-- [ ] Extraction ürün davranışını izinsiz değiştirmiyor.
+- [x] Her ayrılan modülün tek sorumluluğu ve testi var.
+- [x] Match/friend/system chat state'leri birbirine karışmıyor.
+- [x] Refresh, geri, logout ve deep-link davranışı belgeli.
+- [x] Lint hata ve uyarıları sahiplik bazında kapanıyor.
+- [x] Extraction ürün davranışını izinsiz değiştirmiyor.
 
 ## 9. A-FND-002 — Tasarım tokenı ve ortak ekran state standardı
 
@@ -212,9 +212,9 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] QA-003/014/017 aynı görsel ailede.
-- [ ] Admin teması buraya kopyalanmıyor; kullanıcı yüzeyi kendi sakin dilini koruyor.
-- [ ] Teknik hata kodu ana ekranda gösterilmiyor.
-- [ ] Yeni bileşenler kontrolsüz yeni renk/glow/spacing üretmiyor.
+- [x] Admin teması buraya kopyalanmıyor; kullanıcı yüzeyi kendi sakin dilini koruyor.
+- [x] Teknik hata kodu ana ekranda gösterilmiyor.
+- [x] Yeni bileşenler kontrolsüz yeni renk/glow/spacing üretmiyor.
 - [ ] Düşük güçlü WebView'da ana akış akıcı.
 
 ## 10. A-AUTH-001 — Auth ve hesap politikası client sözleşmesi
@@ -232,10 +232,10 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Olmayan şifre kurtarma seçeneği vaat edilmiyor.
-- [ ] Uyarı kritik bilgiyi gizlemiyor fakat kayıt ekranını boğmuyor.
-- [ ] Hata mesajları güvenli, yerelleştirilmiş ve eyleme dönük.
-- [ ] Session sona ermesi veri kaybı veya hesap silme gibi anlatılmıyor.
+- [x] Olmayan şifre kurtarma seçeneği vaat edilmiyor.
+- [x] Uyarı kritik bilgiyi gizlemiyor fakat kayıt ekranını boğmuyor.
+- [x] Hata mesajları güvenli, yerelleştirilmiş ve eyleme dönük.
+- [x] Session sona ermesi veri kaybı veya hesap silme gibi anlatılmıyor.
 
 ## 11. A-AUTH-002 — Legal reaccept ve session recovery
 
@@ -580,11 +580,11 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] Accessibility lint ve klavye smoke temiz.
-- [ ] Sayaç her saniye ekran okuyucuya okunmuyor.
+- [x] Sayaç her saniye ekran okuyucuya okunmuyor.
 - [ ] Modal/offer açıldığında focus güvenli taşınıyor.
 - [ ] Kapanışta focus anlamlı yere dönüyor.
 - [ ] Yatay scroll veya kesilmiş ana CTA yok.
-- [ ] Görsel animasyon kapalıyken durum anlaşılır.
+- [x] Görsel animasyon kapalıyken durum anlaşılır.
 
 ## 24. A-MOB-001 — Web/Android WebView eşliği
 
