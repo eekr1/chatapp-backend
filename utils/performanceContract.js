@@ -24,7 +24,7 @@ const buildRouteImpact = (slowRows = [], errorRows = []) => {
         routes.set(key, { ...(routes.get(key) || {}), ...row, key });
     }
     return [...routes.values()].map((row) => {
-        const requests = finiteOrNull(row.req_count) || 0;
+        const requests = finiteOrNull(row.req_count) ?? finiteOrNull(row.sample_count) ?? 0;
         const errors = finiteOrNull(row.error_count) || 0;
         const latency = finiteOrNull(row.p95_ms) ?? finiteOrNull(row.avg_ms) ?? 0;
         return { ...row, impact_score: Math.round((errors * 1000000) + (requests * latency)) };

@@ -124,7 +124,10 @@ test('performance contract distinguishes no data and low confidence from healthy
 
 test('route impact combines traffic, errors and latency deterministically', () => {
     const impact = buildRouteImpact(
-        [{ method: 'GET', route: '/slow', sample_count: 30, p95_ms: 2000 }],
+        [
+            { method: 'GET', route: '/slow', sample_count: 30, p95_ms: 2000 },
+            { method: 'GET', route: '/sampled-only', sample_count: 10, p95_ms: 3000 }
+        ],
         [
             { method: 'GET', route: '/busy', req_count: 1000, error_count: 2, error_rate: 0.2 },
             { method: 'GET', route: '/slow', req_count: 5, error_count: 1, error_rate: 20 }
@@ -132,6 +135,7 @@ test('route impact combines traffic, errors and latency deterministically', () =
     );
     assert.equal(impact[0].key, 'GET /busy');
     assert.ok(impact.every((row) => Number.isFinite(row.impact_score)));
+    assert.equal(impact.find((row) => row.key === 'GET /sampled-only').impact_score, 30000);
 });
 
 test('performance thresholds, stale and partial states are deterministic', () => {
