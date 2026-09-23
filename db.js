@@ -644,6 +644,30 @@ const migrations = Object.freeze([
     version: '001',
     name: 'legacy_schema_baseline',
     sql: createTablesQuery
+  }),
+  Object.freeze({
+    version: '002',
+    name: 'connection_presence_leases',
+    sql: `
+      CREATE TABLE IF NOT EXISTS connection_leases (
+        connection_id UUID PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        session_hash TEXT NOT NULL,
+        device_hash TEXT NOT NULL,
+        instance_id TEXT NOT NULL,
+        generation INTEGER NOT NULL DEFAULT 1 CHECK (generation > 0),
+        connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_connection_leases_user_expiry
+        ON connection_leases(user_id, expires_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_connection_leases_expiry
+        ON connection_leases(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_connection_leases_instance
+        ON connection_leases(instance_id, expires_at DESC);
+    `
   })
 ]);
 

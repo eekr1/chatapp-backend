@@ -30,7 +30,9 @@ const EVENT_SCHEMAS = {
         version: optional((value) => isString(value, { max: 60, trim: true })),
         capabilities: optional((value) => Array.isArray(value)
             && value.length <= 30
-            && value.every((item) => isString(item, { min: 1, max: 60, trim: true })))
+            && value.every((item) => isString(item, { min: 1, max: 60, trim: true }))),
+        recoveryToken: optional((value) => isString(value, { min: 32, max: 128, trim: true })),
+        serverEpoch: optional((value) => isString(value, { min: 1, max: 80, trim: true }))
     },
     setNickname: { nickname: field((value) => isString(value, { min: 3, max: 40, trim: true })) },
     joinQueue: noFields,

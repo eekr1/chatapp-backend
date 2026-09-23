@@ -29,8 +29,11 @@ const { BoundedRateLimiter, hashKey, resolvePeerAddress } = require('./utils/abu
 const { ConnectionRegistry, normalizeClientContext, safeSend } = require('./utils/socketSecurity');
 const { findValidSessionByToken, onSessionsRevoked } = require('./utils/sessionService');
 const logger = require('./utils/logger');
-const { resolveReleaseIdentity } = require('./utils/runtimeConfig');
+const { resolveReleaseIdentity, resolveRealtimeRuntimeConfig } = require('./utils/runtimeConfig');
 const { createHealthState, createLivenessPayload, createReadinessPayload } = require('./utils/health');
+const { RecoveryRegistry, buildRecoverySnapshot } = require('./utils/recoveryState');
+const { createPresenceService } = require('./utils/presenceService');
+const { rebindTransientParticipant, resolveTransientSnapshot } = require('./utils/transientRecovery');
 logger.installSafeConsole();
 
 // Global State (Only Transients)
@@ -42,6 +45,7 @@ onSessionsRevoked((sessions, reason) => connectionRegistry.closeSessions(session
 const app = express();
 const port = process.env.PORT || 3000;
 const releaseIdentity = resolveReleaseIdentity(process.env);
+const realtimeConfig = resolveRealtimeRuntimeConfig(process.env);
 const healthState = createHealthState();
 const REQUEST_TELEMETRY_SAMPLE_RATE = 0.2;
 const REQUEST_TELEMETRY_SLOW_MS = 1500;
@@ -552,6 +556,12 @@ const userRoomMap = new Map(); // clientId (socket uuid) -> roomId
 const pendingMatches = new Map(); // matchId -> { id, users, autoAcceptAt, timeoutMs, timer, finalized }
 const userPendingMatchMap = new Map(); // clientId -> matchId
 const pairRematchCooldowns = new Map(); // pairKey -> expiresAt
+const recoveryRegistry = new RecoveryRegistry({
+    graceMs: realtimeConfig.recoveryGraceMs,
+    enabled: realtimeConfig.recoveryEnabled
+});
+const presenceService = createPresenceService({ pool, config: realtimeConfig });
+let presenceCleanupRunning = false;
 
 
 // Config
@@ -584,8 +594,22 @@ const PUSH_CHANNEL_IDS = {
 const recentRooms = new Map();
 
 // Helpers
+const REVISION_EVENTS = new Set([
+    'queued', 'match_offer', 'match_offer_peer_accepted', 'match_offer_waiting',
+    'match_offer_closed', 'matched', 'ended', 'presence_update', 'friend_refresh'
+]);
 const sendJson = (ws, data) => {
-    return safeSend(ws, data);
+    const lease = recoveryRegistry.getByConnection(ws?.clientId);
+    if (!lease) return safeSend(ws, data);
+    const stateRevision = REVISION_EVENTS.has(data?.type)
+        ? recoveryRegistry.bump(ws.clientId)
+        : lease.stateRevision;
+    return safeSend(ws, {
+        connectionId: ws.clientId,
+        serverEpoch: recoveryRegistry.serverEpoch,
+        stateRevision,
+        ...data
+    });
 };
 
 const resolveWsLang = (ws) => {
@@ -1380,6 +1404,13 @@ const finalizePendingMatchIfReady = async (matchId, options = {}) => {
     if (!pending || pending.finalized) return false;
     if (!pending.users.every((u) => u.decision === 'accepted')) return false;
 
+    const waitingForRecovery = pending.users.some((participant) => {
+        const live = activeClients.get(participant.clientId);
+        if (live?.ws?.readyState === WebSocket.OPEN) return false;
+        return Boolean(recoveryRegistry.getByConnection(participant.clientId)?.detached);
+    });
+    if (waitingForRecovery) return false;
+
     pending.finalized = true;
     const participants = pending.users.map((participant) => {
         const live = activeClients.get(participant.clientId);
@@ -1728,13 +1759,74 @@ const leaveRoom = (clientId, reason = 'leave') => {
 };
 
 
+const rebindTransientState = (previousConnectionId, connectionId, ws) => {
+    if (!previousConnectionId || previousConnectionId === connectionId) return;
+    waitingQueue = rebindTransientParticipant({
+        previousConnectionId, connectionId, ws, waitingQueue,
+        pendingMatches, userPendingMatchMap, rooms, userRoomMap
+    });
+    activeClients.delete(previousConnectionId);
+};
+
+const buildActiveRecoveryState = (connectionId) => resolveTransientSnapshot({
+    connectionId, waitingQueue, pendingMatches, userPendingMatchMap,
+    rooms, userRoomMap, activeClients
+});
+
+const loadUnreadSnapshot = async (userId) => {
+    const result = await pool.query(`
+        SELECT m.sender_id AS user_id, COUNT(*)::int AS count
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.sender_id != $1 AND m.is_read = FALSE
+          AND (c.user_a_id = $1 OR c.user_b_id = $1)
+        GROUP BY m.sender_id
+    `, [userId]);
+    return {
+        friends: result.rows.map((row) => ({ userId: row.user_id, count: Number(row.count) || 0 })),
+        system: 0,
+        revision: Date.now()
+    };
+};
+
+const broadcastPresence = async (userId, presence, lastSeenAt = null) => {
+    const observedAt = new Date().toISOString();
+    try {
+        const result = await pool.query(`
+            SELECT CASE WHEN user_id = $1 THEN friend_user_id ELSE user_id END AS friend_id
+            FROM friendships
+            WHERE status = 'accepted' AND (user_id = $1 OR friend_user_id = $1)
+              AND NOT EXISTS (
+                  SELECT 1 FROM blocks b
+                  WHERE (b.blocker_id = $1 AND b.blocked_id = CASE WHEN friendships.user_id = $1 THEN friendships.friend_user_id ELSE friendships.user_id END)
+                     OR (b.blocked_id = $1 AND b.blocker_id = CASE WHEN friendships.user_id = $1 THEN friendships.friend_user_id ELSE friendships.user_id END)
+              )
+        `, [userId]);
+        const recipients = new Set(result.rows.map((row) => row.friend_id));
+        for (const [, client] of activeClients) {
+            if (!recipients.has(client.dbUserId)) continue;
+            sendJson(client.ws, { type: 'presence_update', userId, presence, lastSeenAt: presence === 'offline' ? lastSeenAt : null, observedAt });
+        }
+    } catch (error) {
+        console.warn('presence fan-out failed', { code: error?.code || 'PRESENCE_FANOUT_FAILED' });
+    }
+};
+
 wss.on('connection', (ws, req) => {
     ws.clientId = uuidv4();
     ws.isAlive = true;
+    ws.recoveryReady = false;
     ws.limiter = new BoundedRateLimiter({ windowMs: RATE_LIMIT_WINDOW, max: RATE_LIMIT_MAX * 2, maxKeys: 2 });
     ws.prefLang = resolveLangFromHeaders(req.headers || {});
     connectionRegistry.connect(ws, ws.clientId);
-    ws.on('pong', heartbeat);
+    ws.on('pong', function onPong() {
+        heartbeat.call(this);
+        if (recoveryRegistry.isCurrentConnection(ws.clientId)) {
+            presenceService.heartbeat(ws.clientId).catch((error) => {
+                console.warn('presence heartbeat failed', { code: error?.code || 'PRESENCE_HEARTBEAT_FAILED' });
+            });
+        }
+    });
 
     broadcastOnlineCount();
     sendJson(ws, { type: 'hello', clientId: ws.clientId });
@@ -1850,6 +1942,48 @@ wss.on('connection', (ws, req) => {
                 expiresAt: new Date(dbUser.sessionExpiresAt).getTime()
             });
 
+            const recovery = recoveryRegistry.attach({
+                connectionId: ws.clientId,
+                userId: dbUser.id,
+                sessionId: dbUser.sessionId,
+                deviceId: deviceId || 'unknown',
+                recoveryToken: data.recoveryToken,
+                previousServerEpoch: data.serverEpoch
+            });
+            const previousClient = recovery.previousConnectionId
+                ? activeClients.get(recovery.previousConnectionId)
+                : null;
+            if (recovery.previousConnectionId) {
+                rebindTransientState(recovery.previousConnectionId, ws.clientId, ws);
+                const reboundPending = getPendingMatchForClient(ws.clientId);
+                if (reboundPending && Date.now() >= reboundPending.pending.autoAcceptAt) {
+                    reboundPending.pending.users.forEach((participant) => {
+                        if (participant.decision === 'pending') participant.decision = 'accepted';
+                    });
+                    await finalizePendingMatchIfReady(reboundPending.matchId, { trigger: 'recovery_deadline' });
+                }
+            }
+            if (previousClient?.ws && previousClient.ws !== ws) {
+                previousClient.ws.superseded = true;
+                sendJson(previousClient.ws, { type: 'error', errorCode: 'CONNECTION_SUPERSEDED', code: 'CONNECTION_SUPERSEDED', message: 'Connection superseded.', retryable: false });
+                previousClient.ws.close(4001, 'superseded');
+            }
+
+            let partial = false;
+            try {
+                const opened = await presenceService.open({
+                    connectionId: ws.clientId,
+                    userId: dbUser.id,
+                    sessionId: dbUser.sessionId,
+                    deviceId: deviceId || 'unknown',
+                    generation: recovery.lease.generation
+                });
+                if (opened.becameOnline) void broadcastPresence(dbUser.id, 'online');
+            } catch (error) {
+                partial = true;
+                console.warn('presence lease open failed', { code: error?.code || 'PRESENCE_OPEN_FAILED' });
+            }
+
             trackBehaviorEvent({
                 eventName: 'user_connected',
                 userId: dbUser.id,
@@ -1863,7 +1997,27 @@ wss.on('connection', (ws, req) => {
                 }
             });
 
-            sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang, capabilities: ['error-envelope-v1', 'session-revoke-v1'] });
+            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1'];
+            if (realtimeConfig.recoveryEnabled) capabilities.push('recovery-v1');
+            sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang, capabilities });
+            let unread = { friends: [], system: 0, revision: 0 };
+            try {
+                unread = await loadUnreadSnapshot(dbUser.id);
+            } catch (error) {
+                partial = true;
+                console.warn('recovery unread snapshot failed', { code: error?.code || 'UNREAD_SNAPSHOT_FAILED' });
+            }
+            sendJson(ws, buildRecoverySnapshot({
+                recovery: {
+                    ...recovery,
+                    serverEpoch: recoveryRegistry.serverEpoch,
+                    graceMs: realtimeConfig.recoveryGraceMs
+                },
+                active: recovery.result === 'resumed' ? buildActiveRecoveryState(ws.clientId) : { kind: 'idle' },
+                unread,
+                partial
+            }));
+            ws.recoveryReady = true;
             return;
         }
 
@@ -1873,6 +2027,10 @@ wss.on('connection', (ws, req) => {
             || (Number.isFinite(registryEntry?.expiresAt) && registryEntry.expiresAt <= Date.now())) {
             sendError(ws, 'AUTH_ERROR');
             if (registryEntry?.expiresAt <= Date.now()) ws.close(1008, 'Session expired');
+            return;
+        }
+        if (!ws.recoveryReady || !recoveryRegistry.isCurrentConnection(ws.clientId)) {
+            sendError(ws, 'RECOVERY_PENDING');
             return;
         }
 
@@ -2547,9 +2705,10 @@ wss.on('connection', (ws, req) => {
         }
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code, reasonBuffer) => {
         connectionRegistry.close(ws.clientId);
         const clientData = activeClients.get(ws.clientId) || null;
+        const closeReason = String(reasonBuffer || '').toLowerCase();
         trackBehaviorEvent({
             eventName: 'user_disconnected',
             userId: clientData?.dbUserId || null,
@@ -2557,15 +2716,39 @@ wss.on('connection', (ws, req) => {
             deviceId: clientData?.deviceId || null,
             platform: clientData?.platform || null
         });
-        cancelPendingMatchForClient(ws.clientId, {
-            actorReason: null,
-            peerReason: 'peer_disconnected',
-            requeueActor: false,
-            requeuePeers: true
-        });
-        if (activeClients.has(ws.clientId)) activeClients.delete(ws.clientId);
-        removeFromQueue(ws.clientId);
-        leaveRoom(ws.clientId, 'disconnect');
+        if (activeClients.get(ws.clientId)?.ws === ws) activeClients.delete(ws.clientId);
+
+        if (!ws.superseded) {
+            const cleanupTransient = () => {
+                cancelPendingMatchForClient(ws.clientId, {
+                    actorReason: null,
+                    peerReason: 'peer_disconnected',
+                    requeueActor: false,
+                    requeuePeers: true
+                });
+                removeFromQueue(ws.clientId);
+                leaveRoom(ws.clientId, 'disconnect');
+                presenceService.closeFinal(ws.clientId)
+                    .then((result) => {
+                        if (result?.becameOffline) void broadcastPresence(result.userId, 'offline', result.lastSeenAt);
+                    })
+                    .catch((error) => console.warn('presence final close failed', { code: error?.code || 'PRESENCE_CLOSE_FAILED' }));
+            };
+            const recoverableClose = code !== 1008
+                && closeReason !== 'server_shutdown'
+                && closeReason !== 'superseded';
+            const deferred = realtimeConfig.recoveryEnabled && recoverableClose
+                && recoveryRegistry.detach(ws.clientId, cleanupTransient);
+            if (deferred) {
+                presenceService.detach(ws.clientId).catch((error) => {
+                    console.warn('presence detach failed', { code: error?.code || 'PRESENCE_DETACH_FAILED' });
+                });
+            } else {
+                const lease = recoveryRegistry.getByConnection(ws.clientId);
+                if (lease) recoveryRegistry.expire(lease.token, 'state_missing');
+                cleanupTransient();
+            }
+        }
         broadcastOnlineCount();
     });
 });
@@ -2792,6 +2975,13 @@ const interval = setInterval(() => {
         ws.isAlive = false;
         ws.ping();
     });
+    if (!presenceCleanupRunning) {
+        presenceCleanupRunning = true;
+        presenceService.cleanupExpired()
+            .then((users) => Promise.all(users.map((user) => broadcastPresence(user.userId, 'offline', user.lastSeenAt))))
+            .catch((error) => console.warn('presence expiry cleanup failed', { code: error?.code || 'PRESENCE_CLEANUP_FAILED' }))
+            .finally(() => { presenceCleanupRunning = false; });
+    }
 }, HEARTBEAT_INTERVAL);
 
 // Cache Cleanup

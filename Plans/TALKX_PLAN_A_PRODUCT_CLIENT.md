@@ -165,10 +165,10 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] Her aşamada kullanıcı hangi modda olduğunu anlıyor.
-- [ ] Arkadaş eklemek anonim sohbeti geriye dönük kalıcı mesaj geçmişine dönüştürmüyor.
+- [x] Arkadaş eklemek anonim sohbeti geriye dönük kalıcı mesaj geçmişine dönüştürmüyor.
 - [ ] Ayrılma, yeni eşleşme ve arkadaşlığa geçiş aynı aksiyon gibi görünmüyor.
 - [ ] Rapor ve engel akışı sohbet durumunu güvenli kapatıyor.
-- [ ] Plan B state sözleşmesi client tarafından tahmin edilmiyor.
+- [x] Plan B state sözleşmesi client tarafından tahmin edilmiyor.
 
 ## 8. A-FND-001 — Frontend kabuğunu test altında ayrıştırma
 
@@ -432,12 +432,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Eski offer yeni search üzerinde açılmıyor.
-- [ ] Friend chat mesajı anon room'a düşmüyor.
-- [ ] System chat normal peer gibi cevap alanı açmıyor.
-- [ ] Cancel tek leave üretip geçici state'i temizliyor.
-- [ ] Belirsiz gönderim sonucu duplicate mesaja yol açmıyor.
-- [ ] Recovery backend snapshot'ını otorite kabul ediyor.
+- [x] Eski offer yeni search üzerinde açılmıyor.
+- [x] Friend chat mesajı anon room'a düşmüyor.
+- [x] System chat normal peer gibi cevap alanı açmıyor.
+- [x] Cancel tek leave üretip geçici state'i temizliyor.
+- [x] Belirsiz gönderim sonucu duplicate mesaja yol açmıyor.
+- [x] Recovery backend snapshot'ını otorite kabul ediyor.
 
 ## 18. A-FRIEND-001 — QA-001 presence
 
@@ -456,11 +456,11 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Gerçek offline kullanıcı Online görünmüyor.
-- [ ] Unknown durum offline diye uydurulmuyor.
-- [ ] Son görülme kaynağı ve zaman formatı tutarlı.
-- [ ] Reconnect'te header flicker/sahte online üretmiyor.
-- [ ] Renk tek başına presence anlatmıyor.
+- [x] Gerçek offline kullanıcı Online görünmüyor.
+- [x] Unknown durum offline diye uydurulmuyor.
+- [x] Son görülme kaynağı ve zaman formatı tutarlı.
+- [x] Reconnect'te header flicker/sahte online üretmiyor.
+- [x] Renk tek başına presence anlatmıyor.
 
 ## 19. A-FRIEND-002 — QA-002 sohbet header aksiyonları
 

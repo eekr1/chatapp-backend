@@ -124,8 +124,17 @@ router.get('/list', async (req, res) => {
                 f.status,
                 u.id AS user_id,
                 u.username,
+                u.last_seen_at,
                 p.display_name,
                 p.avatar_url,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM connection_leases cl
+                        WHERE cl.user_id = u.id AND cl.expires_at > NOW()
+                    ) THEN 'online'
+                    ELSE 'offline'
+                END AS presence_state,
+                NOW() AS presence_observed_at,
                 CASE WHEN f.user_id = $1 THEN 'outgoing' ELSE 'incoming' END AS direction
             FROM friendships f
             JOIN users u ON (f.user_id = u.id OR f.friend_user_id = u.id)
@@ -154,7 +163,7 @@ router.get('/list', async (req, res) => {
             .map((friend) => ({
                 ...friend,
                 unread_count: unreadMap[friend.user_id] || 0,
-                is_online: req.isUserOnline ? req.isUserOnline(friend.user_id) : false
+                is_online: friend.presence_state === 'online'
             }));
         const requests = result.rows.filter((row) => row.status === 'pending');
 

@@ -33,10 +33,23 @@ const resolveDatabaseRuntimeConfig = (env = process.env) => ({
     readinessTimeoutMs: clampInteger(env.DB_READINESS_TIMEOUT_MS, 4000, 500, 15000)
 });
 
+const resolveRealtimeRuntimeConfig = (env = process.env) => ({
+    recoveryEnabled: String(env.REALTIME_RECOVERY_ENABLED || '').trim().toLowerCase() === 'true',
+    recoveryGraceMs: clampInteger(env.RECOVERY_GRACE_MS, 15000, 5000, 60000),
+    presenceHeartbeatMs: clampInteger(env.PRESENCE_HEARTBEAT_MS, 30000, 10000, 60000),
+    presenceLeaseMs: clampInteger(env.PRESENCE_LEASE_MS, 90000, 30000, 180000),
+    presenceStaleMs: clampInteger(env.PRESENCE_STALE_MS, 120000, 30000, 300000),
+    instanceId: String(env.RENDER_INSTANCE_ID || env.INSTANCE_ID || 'local-single').trim().slice(0, 120) || 'local-single',
+    topology: String(env.REALTIME_TOPOLOGY || 'single').trim().toLowerCase() === 'shared-db'
+        ? 'shared-db'
+        : 'single'
+});
+
 module.exports = {
     clampInteger,
     normalizeEnvironment,
     normalizeCommitSha,
     resolveReleaseIdentity,
-    resolveDatabaseRuntimeConfig
+    resolveDatabaseRuntimeConfig,
+    resolveRealtimeRuntimeConfig
 };

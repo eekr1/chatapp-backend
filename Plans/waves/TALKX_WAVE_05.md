@@ -2,20 +2,20 @@
 
 > Bu belge yalnız Wave 05 için hazırlanmış uygulama planıdır.
 > Canonical ayrıntı Plan B ve Plan A stable ID maddelerindedir; burada Wave 06 ülke/veri sahipliği veya Wave 07–09 matchmaking protokolü üretilmez.
-> Plan hazırdır. Wave 05 aktif değildir, Wave 01–04 kapanmamıştır ve uygulama başlamamıştır.
+> Wave 05 Sale Release kapsamı 2026-09-23 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 06 başlatılmadı.
 
 ## 1. Durum ve yürütme sınırı
 
 - **Wave:** 05
 - **Wave adı:** Reconnect, active state ve gerçek presence
 - **Plan katılımı:** Plan B + Plan A
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Uygulandı
+- **Wave durumu:** Auto-verified / committed / manual-QA-deferred
+- **Uygulama durumu:** Sale Release çekirdeği tamamlandı; canlı/staging/cihaz QA ertelendi
+- **Uygulama yetkisi:** 2026-09-23 tarihinde açıkça verildi
 - **Giriş kapısı:** Wave 04 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 05'i başlat” talimatı
-- **Mevcut blokaj:** Wave 04 henüz committed değil; Wave 05 uygulanamaz
-- **Önceki wave:** Wave 04 — planı hazır, aktif değil
+- **Mevcut blokaj:** Yok; canlı topology/config/migration/deploy ve manuel QA ayrı onay/checkpoint kapsamıdır
+- **Önceki wave:** Wave 04 — auto-verified / committed / manual-QA-deferred
 - **Sonraki wave:** Wave 06 — planı ayrı talimatla hazırlandı; aktif değil ve uygulanmadı
 
 Bu dosyanın hazırlanması Wave 05 aktivasyonu, kod/test/dependency değişikliği, DB migrationı, Android sync, canlı servis işlemi, deploy veya Wave 06 aktivasyonu/uygulaması için yetki değildir.
@@ -642,41 +642,40 @@ Checkbox yalnız ilgili canonical kriter gerçek kod, otomatik test, manuel QA v
 
 Bu kutular plan hazırlanırken işaretlenmez; yalnız Wave 05 gerçekten başlatılırken güncel kanıtla kapatılır:
 
-- [ ] Wave 01–04 QA kapanışları ve kullanıcı onayı doğrulandı.
-- [ ] Kullanıcı açıkça “Wave 05'i başlat” talimatı verdi.
-- [ ] Root, backend ve frontend Git status/remote/branch/commit snapshot'ı alındı.
-- [ ] Wave 02 WebSocket/auth contractı güncel kodda yeniden doğrulandı.
-- [ ] Wave 03 client module/state/test standardı güncel repoda doğrulandı.
-- [ ] Wave 04 migration/health/config/runbook kapıları doğrulandı.
+- [x] Wave 01–04 QA kapanışları ve kullanıcı onayı doğrulandı.
+- [x] Kullanıcı açıkça “Wave 05'i başlat” talimatı verdi.
+- [x] Root, backend ve frontend Git status/remote/branch/commit snapshot'ı alındı.
+- [x] Wave 02 WebSocket/auth contractı güncel kodda yeniden doğrulandı.
+- [x] Wave 03 client module/state/test standardı güncel repoda doğrulandı.
+- [x] Wave 04 migration/health/config/runbook kapıları doğrulandı.
 - [ ] Runtime instance, WebSocket affinity ve shared DB/event topology read-only belirlendi.
-- [ ] Mevcut queue/offer/room/unread/presence state ve close/reconnect event haritası güncellendi.
-- [ ] Presence migrationı, indeks/query planı ve retention/cleanup etkisi incelendi.
-- [ ] Recovery grace/freshness/heartbeat config sözleşmesi ve capability rollout'u kilitlendi.
-- [ ] Canlı DB/config/restart/deploy işlemleri ayrı onay kapısına bağlandı.
-- [ ] Wave 06 ve Wave 07–10 scope'larına taşma olmadığı doğrulandı.
+- [x] Mevcut queue/offer/room/unread/presence state ve close/reconnect event haritası güncellendi.
+- [x] Presence migrationı, indeks/query planı ve retention/cleanup etkisi incelendi.
+- [x] Recovery grace/freshness/heartbeat config sözleşmesi ve capability rollout'u kilitlendi.
+- [x] Canlı DB/config/restart/deploy işlemleri ayrı onay kapısına bağlandı.
+- [x] Wave 06 ve Wave 07–10 scope'larına taşma olmadığı doğrulandı.
 
 ## 15. Sonuç alanı
 
-Wave 05 yürütülürse kapanış kaydı en az şunları içerir:
-
-- Başlangıç/bitiş zamanı, Plan refs ve gerçek değişen dosyalar
-- Üç Git bağlamının önce/sonra status/commit farkı
-- Recovery/presence contract schema ve compatibility sonucu
-- Queue/offer/room grace, restart, stale event ve idempotent cleanup iki-client kanıtı
-- Presence migrationı, query planı, lease/expiry, multi-device ve last-seen sonuçları
-- Client domain reducer, entity/revision guard, outbox ve media cleanup sonuçları
-- QA-001 online/offline/unknown/last-seen TR/EN ve accessibility kanıtı
-- Anonymous → friend history/mod geçişi izolasyon kanıtı
-- Lint/build/encoding/backend syntax/focused/full test komutları ve exit code'ları
-- Staging/Android mevcut build manuel QA sonucu; varsa ayrı onaylı canlı işlem kaydı
-- Canonical checkbox ve Master QA-001 durum değişiklikleri
-- Kullanıcı onayı, son Wave durumu ve Wave 06'nın başlatılmadığına dair açık kayıt
+- **Başlangıç/bitiş tarihi:** 2026-09-23
+- **Plan refs:** B-WS-002, B-PRES-001, A-MATCH-004, A-FRIEND-001 ve A-PRD-002 Sale Release çekirdeği uygulandı
+- **Backend sonucu:** Sürümlü recovery snapshot, rotating tab tokenı, server epoch, connection/revision guard, grace detach/rebind/expiry, server-time offer recovery, persistent unread reconciliation ve idempotent cleanup kuruldu
+- **Presence sonucu:** Migration `002` ile indeksli PostgreSQL lease registry; hashed device/session binding, heartbeat/expiry, multi-device final close, güvenilir last seen, set-based friends projection ve accepted-friend/block filtreli transition fan-out kuruldu
+- **Client sonucu:** Snapshot-before-outbox gate, stale connection/epoch/revision drop, safe idle/reset, server `autoAcceptAt`, late history ve media owner guard, duplicate leave intent koruması uygulandı
+- **QA-001 sonucu:** Friends list ve friend header aynı `online/offline/unknown/last seen` kaydını tüketiyor; TR/EN göreli metin ve renk dışı accessible durum metni var. Master QA-001 manuel kanıt beklediği için `Açık` kaldı
+- **Otomatik kanıt:** Backend 38/38; frontend 13/13; frontend lint temiz; production build başarılı; değişen backend CommonJS syntax kontrolleri ve iki repo `diff --check` temiz
+- **Query/topology sınırı:** Set-based SQL ve üç lease indeksi source/test ile doğrulandı. Gerçek PostgreSQL `EXPLAIN`, temsilî latency, Render instance/affinity ve shared fan-out topology kanıtı çalıştırılmadı; ilgili performance checkbox açık kaldı
+- **Canonical checkbox:** B-WS-002 6/6; B-PRES-001 4/5; A-MATCH-004 6/6; A-FRIEND-001 5/5; A-PRD-002 2/5 otomatik kanıtla kapandı. Subjektif mod/aksiyon QA ve report/block manuel matrisi açık kaldı
+- **Canlı/staging işlemler:** Production DB migrationı, Render/Neon config, recovery flag enablement, restart ve deploy yapılmadı
+- **Manuel QA:** Gerçek iki-client queue/offer/room/restart, multi-device/abrupt loss, EXPLAIN/latency, desktop/dar viewport/a11y ve mevcut Android build background/foreground Checkpoint A / Wave 19'a ertelendi
+- **Wave durumu:** AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED
+- **Sonraki wave:** Wave 06 başlatılmadı
 
 ## 16. Durma kuralı
 
-Wave 04 QA kapanışı ve kullanıcının açık Wave 05 başlatma talimatı birlikte gelene kadar:
+Wave 05 auto-verified/committed kapanışından sonra durulur. Kullanıcı Wave 06'yı ayrıca açıkça başlatana kadar:
 
-- Wave 05 için kod, test, dependency, migration, DB, config, Android veya deploy değişikliği yapılmaz.
-- Render/Neon/canlı servis üzerinde hiçbir state değişikliği yapılmaz.
-- Wave 05 `Aktif` işaretlenmez; bu belge yalnız `Hazır — aktif değil` durumunda kalır.
-- Wave 06 yalnız ayrı açık planlama talimatıyla belgelenebilir; aktive edilmez veya uygulanmaz.
+- Wave 06 için kod, test, refactor, migration, config veya hazırlık yapılmaz.
+- Render/Neon/canlı servis üzerinde hiçbir state değişikliği yapılmaz; recovery flag, production migration ve deploy ayrıca açık kullanıcı onayı ister.
+- Wave 05'in gerçek cihaz/two-client/topology/performance maddeleri Checkpoint A / Wave 19'da kalır.
+- Wave 06 `Bekliyor` kalır; aktive edilmez veya uygulanmaz.

@@ -315,12 +315,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Reconnect sonucu açık event/snapshot ile dönüyor.
-- [ ] Korunmayan queue `devam ediyor` gibi sunulmuyor.
-- [ ] Eski connection eventleri yeni connection'ı bozmuyor.
-- [ ] Pending offer countdown server zamanı ile toparlanıyor.
-- [ ] Active room yoksa client ghost chat göstermiyor.
-- [ ] Recovery duplicate join/message/read üretmiyor.
+- [x] Reconnect sonucu açık event/snapshot ile dönüyor.
+- [x] Korunmayan queue `devam ediyor` gibi sunulmuyor.
+- [x] Eski connection eventleri yeni connection'ı bozmuyor.
+- [x] Pending offer countdown server zamanı ile toparlanıyor.
+- [x] Active room yoksa client ghost chat göstermiyor.
+- [x] Recovery duplicate join/message/read üretmiyor.
 
 ## 14. B-MM-001 — QA-014 search lifecycle
 
@@ -464,10 +464,10 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Bir cihaz açıkken diğer cihaz kapanınca kullanıcı offline olmuyor.
-- [ ] Son aktif socket kapanınca last seen güvenilir güncelleniyor.
-- [ ] Server restart sonrası herkes sonsuza kadar online kalmıyor.
-- [ ] Client unknown'u gerçek online/offline gibi sunmuyor.
+- [x] Bir cihaz açıkken diğer cihaz kapanınca kullanıcı offline olmuyor.
+- [x] Son aktif socket kapanınca last seen güvenilir güncelleniyor.
+- [x] Server restart sonrası herkes sonsuza kadar online kalmıyor.
+- [x] Client unknown'u gerçek online/offline gibi sunmuyor.
 - [ ] Presence sorgusu liste performansını bozmuyor.
 
 ## 18. B-MSG-001 — Mesaj idempotency ve outbox
