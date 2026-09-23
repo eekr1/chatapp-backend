@@ -1,15 +1,27 @@
 const { Pool } = require('pg');
+const { createMigrationRunner } = require('./migrations/runner');
+const { resolveDatabaseRuntimeConfig } = require('./utils/runtimeConfig');
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error('DATABASE_URL is required (set it in your environment).');
 }
 
+const databaseRuntimeConfig = resolveDatabaseRuntimeConfig(process.env);
 const pool = new Pool({
   connectionString,
   ssl: {
     rejectUnauthorized: false
-  } // Render postgres requires SSL
+  },
+  max: databaseRuntimeConfig.max,
+  idleTimeoutMillis: databaseRuntimeConfig.idleTimeoutMillis,
+  connectionTimeoutMillis: databaseRuntimeConfig.connectionTimeoutMillis,
+  query_timeout: databaseRuntimeConfig.query_timeout,
+  statement_timeout: databaseRuntimeConfig.statement_timeout
+});
+
+pool.on('error', (error) => {
+  console.error('Database pool error.', { code: error?.code || 'DB_POOL_ERROR' });
 });
 
 // Table creation queries
@@ -627,21 +639,87 @@ const createTablesQuery = `
 `;
 
 
-const ensureTables = async () => {
-  const client = await pool.connect();
+const migrations = Object.freeze([
+  Object.freeze({
+    version: '001',
+    name: 'legacy_schema_baseline',
+    sql: createTablesQuery
+  })
+]);
+
+const migrationRunner = createMigrationRunner({ pool, migrations });
+
+const runMigrations = async () => {
+  const state = await migrationRunner.run();
+  console.log('Database migrations current.', {
+    currentHead: state.currentHead,
+    expectedHead: state.expectedHead
+  });
+  return state;
+};
+
+const ensureTables = runMigrations;
+
+const getDatabaseReadiness = async () => {
+  let client;
   try {
-    await client.query(createTablesQuery);
-    console.log('Database tables ensured.');
-  } catch (err) {
-    console.error('Error creating tables:', err);
-    throw err;
+    client = await pool.connect();
+    const schemaResult = await client.query({
+      text: 'SELECT current_schema() AS schema, NOW() AS server_time',
+      query_timeout: databaseRuntimeConfig.readinessTimeoutMs
+    });
+    const schema = String(schemaResult.rows?.[0]?.schema || 'unknown');
+    if (schema !== 'public') {
+      return {
+        ok: false,
+        code: 'DB_SCHEMA_INVALID',
+        schema,
+        migrationHead: null,
+        expectedMigrationHead: migrationRunner.expectedHead
+      };
+    }
+
+    const migrationState = await migrationRunner.inspect(client);
+    if (!migrationState.ok) {
+      return {
+        ok: false,
+        code: migrationState.checksumMismatch.length ? 'MIGRATION_CHECKSUM_MISMATCH' : 'MIGRATION_NOT_CURRENT',
+        schema,
+        migrationHead: migrationState.currentHead,
+        expectedMigrationHead: migrationState.expectedHead
+      };
+    }
+
+    return {
+      ok: true,
+      code: 'OK',
+      schema,
+      migrationHead: migrationState.currentHead,
+      expectedMigrationHead: migrationState.expectedHead
+    };
+  } catch (error) {
+    const timeoutCodes = new Set(['57014', 'ETIMEDOUT', 'ECONNRESET']);
+    return {
+      ok: false,
+      code: timeoutCodes.has(error?.code) ? 'DB_TIMEOUT' : 'DB_UNAVAILABLE',
+      schema: 'unknown',
+      migrationHead: null,
+      expectedMigrationHead: migrationRunner.expectedHead
+    };
   } finally {
-    client.release();
+    client?.release();
   }
 };
 
+const closeDatabase = () => pool.end();
+
 module.exports = {
   pool,
-  ensureTables
+  ensureTables,
+  runMigrations,
+  getDatabaseReadiness,
+  closeDatabase,
+  databaseRuntimeConfig,
+  migrations
 };
 

@@ -11,7 +11,7 @@ const {
 } = require('./utils/wave01Security');
 const http = require('http');
 const { v4: uuidv4 } = require('uuid');
-const { pool, ensureTables } = require('./db');
+const { pool, ensureTables, getDatabaseReadiness, closeDatabase } = require('./db');
 const { validateUsername } = require('./moderation');
 const adminRoutes = require('./admin');
 const authRoutes = require('./routes/auth');
@@ -29,6 +29,8 @@ const { BoundedRateLimiter, hashKey, resolvePeerAddress } = require('./utils/abu
 const { ConnectionRegistry, normalizeClientContext, safeSend } = require('./utils/socketSecurity');
 const { findValidSessionByToken, onSessionsRevoked } = require('./utils/sessionService');
 const logger = require('./utils/logger');
+const { resolveReleaseIdentity } = require('./utils/runtimeConfig');
+const { createHealthState, createLivenessPayload, createReadinessPayload } = require('./utils/health');
 logger.installSafeConsole();
 
 // Global State (Only Transients)
@@ -39,6 +41,8 @@ onSessionsRevoked((sessions, reason) => connectionRegistry.closeSessions(session
 
 const app = express();
 const port = process.env.PORT || 3000;
+const releaseIdentity = resolveReleaseIdentity(process.env);
+const healthState = createHealthState();
 const REQUEST_TELEMETRY_SAMPLE_RATE = 0.2;
 const REQUEST_TELEMETRY_SLOW_MS = 1500;
 const REQUEST_TELEMETRY_EVENTS_RETENTION_DAYS = 7;
@@ -79,7 +83,7 @@ const isTelemetryCandidatePath = (pathName = '/') => (
 );
 
 const isTelemetryExcludedPath = (pathName = '/') => {
-    if (pathName === '/health') return true;
+    if (pathName === '/health' || pathName.startsWith('/health/')) return true;
     if (pathName === '/admin/stream') return true;
     if (pathName.startsWith('/admin/assets/')) return true;
     if (pathName.startsWith('/assets/')) return true;
@@ -514,6 +518,19 @@ app.get('/api/legal', async (req, res) => {
 
 app.get('/health', (req, res) => {
     res.json({ ok: true });
+});
+
+app.get('/health/live', (req, res) => {
+    const payload = createLivenessPayload({ release: releaseIdentity, healthState });
+    res.status(healthState.shuttingDown ? 503 : 200).json(payload);
+});
+
+app.get('/health/ready', async (req, res) => {
+    const database = healthState.shuttingDown
+        ? { ok: false, code: 'SHUTTING_DOWN' }
+        : await getDatabaseReadiness();
+    const payload = createReadinessPayload({ release: releaseIdentity, database, healthState });
+    res.status(payload.status === 'ready' ? 200 : 503).json(payload);
 });
 
 const server = http.createServer(app);
@@ -2810,10 +2827,44 @@ const startServer = async () => {
             console.log(`Backend running on ${port}`);
         });
     } catch (error) {
-        console.error('Fatal startup error: database initialization failed.', error);
+        console.error('Fatal startup error: database initialization failed.', {
+            code: error?.code || 'DB_INITIALIZATION_FAILED'
+        });
         process.exit(1);
     }
 };
+
+let shutdownPromise = null;
+const shutdown = (signal) => {
+    if (shutdownPromise) return shutdownPromise;
+    healthState.shuttingDown = true;
+    clearInterval(interval);
+    if (notificationSchedulerState.timer) clearTimeout(notificationSchedulerState.timer);
+    for (const client of wss.clients) {
+        try { client.close(1001, 'server_shutdown'); } catch { /* best effort */ }
+    }
+
+    shutdownPromise = new Promise((resolve) => {
+        const forceTimer = setTimeout(resolve, 8000);
+        server.close(() => {
+            clearTimeout(forceTimer);
+            resolve();
+        });
+    })
+        .then(() => closeDatabase())
+        .then(() => {
+            console.log('Graceful shutdown complete.', { signal });
+            process.exit(0);
+        })
+        .catch((error) => {
+            console.error('Graceful shutdown failed.', { code: error?.code || 'SHUTDOWN_FAILED' });
+            process.exit(1);
+        });
+    return shutdownPromise;
+};
+
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
 
 startServer();
 

@@ -2,7 +2,7 @@
 
 > Plan A/B/C içindeki 67 stable uygulama maddesini bağımlılık sırasına göre wave'lere yönlendiren canonical yürütme haritası.
 > Bu belge plan ayrıntısını tekrar etmez; ayrıntının otoritesi ilgili Plan A/B/C maddesidir.
-> Harita ile Wave 01–19 planları hazırdır. Wave 01–03 Sale Release kapsamları 2026-09-23 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı; Wave 04–19 başlatılmadı.
+> Harita ile Wave 01–19 planları hazırdır. Wave 01–04 Sale Release kapsamları 2026-09-23 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı; Wave 05–19 başlatılmadı.
 
 > **Sale Release override:** Bu harita, Master Backlog ile Plan A/B/C'deki uzun vadeli kararları değiştirmez. Satış öncesinde hangi parçanın uygulanacağını, hangi parçanın küçültüldüğünü ve hangisinin **Post-acquisition Roadmap / Deferred** olarak korunacağını belirler. Bir wave dosyasındaki eski kapanış veya manuel QA dili bu override ile çelişirse bu harita geçerlidir.
 
@@ -25,14 +25,15 @@ Wave yeni ürün kararı veya mimari üretmez. Çelişkide uygulama durur; önce
 - **Wave Map durumu:** Hazır
 - **Aktif wave:** Yok
 - **Hazırlanmış Wave Planları:** `waves/TALKX_WAVE_01.md`, `waves/TALKX_WAVE_02.md`, `waves/TALKX_WAVE_03.md`, `waves/TALKX_WAVE_04.md`, `waves/TALKX_WAVE_05.md`, `waves/TALKX_WAVE_06.md`, `waves/TALKX_WAVE_07.md`, `waves/TALKX_WAVE_08.md`, `waves/TALKX_WAVE_09.md`, `waves/TALKX_WAVE_10.md`, `waves/TALKX_WAVE_11.md`, `waves/TALKX_WAVE_12.md`, `waves/TALKX_WAVE_13.md`, `waves/TALKX_WAVE_14.md`, `waves/TALKX_WAVE_15.md`, `waves/TALKX_WAVE_16.md`, `waves/TALKX_WAVE_17.md`, `waves/TALKX_WAVE_18.md` ve `waves/TALKX_WAVE_19.md` — on dokuz plan da aktif değil
-- **Uygulama durumu:** Wave 01–03 auto-verified; ayrı repo commitleri ve ertelenmiş manuel QA ile kapalı
-- **İlk yürütme adayı:** Wave 04 — yalnız ayrı açık kullanıcı talimatıyla
+- **Uygulama durumu:** Wave 01–04 auto-verified; ayrı repo commitleri ve ertelenmiş manuel QA ile kapalı
+- **İlk yürütme adayı:** Wave 05 — yalnız ayrı açık kullanıcı talimatıyla
 - **Wave 01 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
 - **Wave 02 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
 - **Wave 03 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
-- **Sonraki işlem:** Dur; Wave 04 için ayrı açık başlangıç talimatını bekle
+- **Wave 04 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
+- **Sonraki işlem:** Dur; Wave 05 için ayrı açık başlangıç talimatını bekle
 
-Wave 04 ve sonrası yalnız hazırlanmış plandır; aktivasyon veya uygulama anlamına gelmez.
+Wave 05 ve sonrası yalnız hazırlanmış plandır; aktivasyon veya uygulama anlamına gelmez.
 
 ## 3. Değişmez yürütme kuralları
 
@@ -123,7 +124,7 @@ Roadmap'e taşınan stable ID ve kabul kriterleri silinmez. Canonical Plan A/B/C
 | 01 | Ürün sınırı, internet yüzeyi güvenliği ve global uyum başlangıcı | A-PRD-001 → B-SEC-001 → C-COMP-001 | Ürün vaadi ile güvenlik/uyum kararları çelişmiyor | Auto-verified / commit & QA deferred |
 | 02 | Core API, auth, logging, abuse, socket ve admin erişim temeli | B-API-001 → B-AUTH-001 → B-OBS-001 → B-SEC-002 → B-WS-001 → C-ADMIN-001 | Sürümlü platform erişim sözleşmesi kanıtlı | Auto-verified / commit & QA deferred |
 | 03 | Test edilebilir client kabuğu, tema/state temeli ve dürüst auth UX | A-FND-001 → A-FND-002 → A-A11Y-001 → A-AUTH-001 | Client temeli TalkX temasını ve erişilebilirliği koruyor | Auto-verified / commit & QA deferred |
-| 04 | Health, performans verisi, DB runtime ve operasyon güvenliği | B-API-002 → B-ANL-002 → B-DB-001 → C-PERF-001 → C-OPS-001 → C-OPS-002 | Readiness, migration ve kurtarma zemini kanıtlı | Bekliyor |
+| 04 | Health, performans verisi, DB runtime ve operasyon güvenliği | B-API-002 → B-ANL-002 → B-DB-001 → C-PERF-001 → C-OPS-001 → C-OPS-002 | Readiness, migration ve kurtarma zemini kanıtlı | Auto-verified / commit & QA deferred |
 | 05 | Reconnect, active state ve gerçek presence | B-WS-002 → B-PRES-001 → A-MATCH-004 → A-FRIEND-001 → A-PRD-002 | İki-client recovery/presence deterministik | Bekliyor |
 | 06 | Veri sahipliği, canonical ülke, privacy ve hesap silme | B-DATA-001 → B-DATA-002 → C-COMP-002 → B-DATA-003 → C-TRUST-002 | Veri yaşam döngüsü ve ülke otoritesi geri izlenebilir | Bekliyor |
 | 07 | QA-014 gerçek arama yaşam döngüsü | B-MM-001 → A-MATCH-001 | Arama ekranı yalnız server-otoriteli phase gösteriyor | Bekliyor |
@@ -272,4 +273,4 @@ Yeni kanıt bir bağımlılığın yanlış olduğunu gösterirse wave durur; il
 
 Bu harita ancak 67 stable ID tam ve benzersiz dağıtılmış, bütün bağımlılıklar ileri/aynı-wave sırasıyla uyumlu, QA-001–017 sahiplikleri korunmuş, QA-017 sırası Master ile uyumlu ve riskli işlem sınırları görünür olduğunda hazırdır.
 
-**Mevcut sonuç:** Wave Map hazırdır. Wave 01–03 Sale Release kapsamları auto-verified/committed olup manuel QA Checkpoint A / Wave 19'a ertelenmiştir. Aktif wave yoktur ve Wave 04 başlatılmamıştır.
+**Mevcut sonuç:** Wave Map hazırdır. Wave 01–04 Sale Release kapsamları auto-verified/committed olup manuel QA Checkpoint A / Wave 19'a ertelenmiştir. Aktif wave yoktur ve Wave 05 başlatılmamıştır.

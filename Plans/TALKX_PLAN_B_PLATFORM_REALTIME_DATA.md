@@ -216,10 +216,10 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] DB ulaşılamıyorsa readiness başarısız.
-- [ ] Liveness kısa DB sorunu yüzünden process restart döngüsü yaratmıyor.
+- [x] DB ulaşılamıyorsa readiness başarısız.
+- [x] Liveness kısa DB sorunu yüzünden process restart döngüsü yaratmıyor.
 - [ ] Commit/version gerçek deploy ile eşleşiyor.
-- [ ] Credential veya connection string response'a çıkmıyor.
+- [x] Credential veya connection string response'a çıkmıyor.
 - [ ] Plan C release kaydı health cevabıyla doğrulanabiliyor.
 
 ## 10. B-AUTH-001 — Session ve çoklu cihaz yaşam döngüsü
@@ -600,13 +600,13 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Boş ve mevcut DB aynı migration zincirinden geçiyor.
-- [ ] Aynı migration tekrar çalışınca veri bozmuyor.
-- [ ] Partial migration görünür başarısız.
-- [ ] Rollback veya forward-fix prosedürü belgeli.
+- [x] Boş ve mevcut DB aynı migration zincirinden geçiyor.
+- [x] Aynı migration tekrar çalışınca veri bozmuyor.
+- [x] Partial migration görünür başarısız.
+- [x] Rollback veya forward-fix prosedürü belgeli.
 - [ ] Backup/restore sonrası kritik count doğrulanıyor.
 - [ ] Pool/timeout Render ve Neon limitleriyle uyumlu.
-- [ ] Credential repo/log'a girmiyor.
+- [x] Credential repo/log'a girmiyor.
 
 ## 23. B-DATA-001 — Veri sahipliği ve retention matrisi
 
@@ -739,11 +739,11 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] P95 olmayan bucket sıfır gibi gösterilmiyor.
-- [ ] Eşik ve pencere açık.
-- [ ] Az örnek kırmızı alarm değil.
-- [ ] Route etkisi trafik ve hata ile birlikte hesaplanıyor.
-- [ ] C-PERF-001 özeti aynı sözleşmeyi tüketiyor.
+- [x] P95 olmayan bucket sıfır gibi gösterilmiyor.
+- [x] Eşik ve pencere açık.
+- [x] Az örnek kırmızı alarm değil.
+- [x] Route etkisi trafik ve hata ile birlikte hesaplanıyor.
+- [x] C-PERF-001 özeti aynı sözleşmeyi tüketiyor.
 
 ## 28. B-OBS-001 — Structured logging ve hassas veri maskesi
 

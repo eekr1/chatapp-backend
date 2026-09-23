@@ -2,19 +2,19 @@
 
 > Bu belge yalnız Wave 04 için hazırlanmış uygulama planıdır.
 > Canonical ayrıntı Plan B ve Plan C stable ID maddelerindedir; burada sonraki-wave realtime veya ürün özelliği üretilmez.
-> Plan hazırdır. Wave 04 aktif değildir, Wave 01–03 kapanmamıştır ve uygulama başlamamıştır.
+> Wave 04 Sale Release kapsamı 2026-09-23 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 05 başlatılmadı.
 
 ## 1. Durum ve yürütme sınırı
 
 - **Wave:** 04
 - **Wave adı:** Health, performans verisi, DB runtime ve operasyon güvenliği
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Uygulandı
+- **Wave durumu:** Auto-verified / committed / manual-QA-deferred
+- **Uygulama durumu:** Sale Release çekirdeği tamamlandı; canlı/staging işlemler ertelendi
+- **Uygulama yetkisi:** 2026-09-23 tarihinde açıkça verildi
 - **Giriş kapısı:** Wave 03 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık “Wave 04'ü başlat” talimatı
-- **Mevcut blokaj:** Wave 03 henüz committed değil; Wave 04 uygulanamaz
-- **Önceki wave:** Wave 03 — planı hazır, aktif değil
+- **Mevcut blokaj:** Yok; canlı/staging kanıtı ayrıca onay gerektiren checkpoint maddesidir
+- **Önceki wave:** Wave 03 — auto-verified / committed / manual-QA-deferred
 - **Sonraki wave:** Wave 05 — planı ayrı talimatla hazırlandı; aktif değil ve uygulanmadı
 
 Bu dosyanın hazırlanması Wave 04 aktivasyonu, DB sorgusu/migrationı, backup/restore, canlı config, Render restart/deploy veya Wave 05 aktivasyonu/uygulaması için yetki değildir.
@@ -579,36 +579,37 @@ Yürütme sırası önce read-only kapsam ve etki analizi, sonra local otomatik 
 
 Bu maddeler plan hazırlanırken işaretlenmez; yalnız Wave 04 gerçekten başlatılırken güncel kanıtla kapatılır:
 
-- [ ] Wave 01–03 QA kapanışları ve kullanıcı onayı doğrulandı.
-- [ ] Kullanıcı açıkça “Wave 04'ü başlat” talimatı verdi.
-- [ ] Root, backend ve frontend Git bağlamlarının status/remote/branch/commit snapshot'ı alındı.
-- [ ] Wave 02 API/observability sözleşmeleri ile Plan C admin provider sınırı güncel kodda yeniden doğrulandı.
-- [ ] Mevcut `/health` consumer, monitor ve deploy health-check envanteri çıkarıldı.
+- [x] Wave 01–03 auto-verified/committed kapanışları ve ertelenmiş QA durumu doğrulandı.
+- [x] Kullanıcı açıkça “Wave 04'ü başlat” talimatı verdi.
+- [x] Workspace root orchestration-only kabul edildi; backend ve frontend status/remote/branch/commit snapshot'ı ayrı alındı.
+- [x] Wave 02 API/observability sözleşmeleri ile Plan C admin provider sınırı güncel kodda yeniden doğrulandı.
+- [x] Mevcut `/health` local consumer/provider envanteri çıkarıldı; Render panel health-check eşlemesi Checkpoint A / Wave 19'a bırakıldı.
 - [ ] Güncel DB schema, migration/runtime ve connection mode read-only olarak kaydedildi.
-- [ ] Tarihsel Neon/restore kanıtlarının güncelliği yeniden doğrulandı; eski sayımlar güncel gerçek kabul edilmedi.
+- [x] Tarihsel dump SHA-256 ve archive listesi yeniden doğrulandı; eski sayımlar güncel gerçek kabul edilmedi.
 - [ ] Backup storage, encryption, retention ve izole restore hedefi belirlendi.
-- [ ] Canlı sistem mutasyonları ayrı onay kapısına bağlandı.
-- [ ] Wave 05 kapsamına taşma olmadığı doğrulandı.
+- [x] Canlı sistem mutasyonları ayrı onay kapısına bağlandı.
+- [x] Wave 05 kapsamına taşma olmadığı doğrulandı.
 
 ## 15. Sonuç alanı
 
-Wave 04 yürütülürse kapanış kaydı en az şu kanıtları içerir:
-
-- Başlangıç/bitiş zamanı, kullanılan Plan ref'leri ve gerçek değişen dosyalar
-- Git/release/config sahiplik matrisi ve doğrulanan commit/version/environment
-- Liveness, readiness, DB-down, timeout, schema ve migration-drift sonuçları
-- Migration ledger, checksum, advisory lock, empty/existing DB ve failure-path sonuçları
-- Pool/timeout/graceful shutdown ile direct endpoint ve `current_schema()` kanıtı
-- Performance API/SQL/UI karşılaştırması; sample, confidence, no-data ve threshold sonuçları
-- Backup archive/hash/list/storage bilgisi, izole restore raporu, güncel kritik sayımlar ve RPO/RTO
-- Runbook dry-run, staging kanıtı ve varsa ayrı onayla yapılan canlı işlem kaydı
-- Kullanıcı QA onayı, son Wave durumu ve Wave 05'in başlatılmadığına dair açık durma kaydı
+- **Başlangıç/bitiş tarihi:** 2026-09-23
+- **Tamamlanan Plan refs:** B-API-002 local health/readiness çekirdeği; B-ANL-002 performance sözleşmesi; B-DB-001 migration/runtime çekirdeği; C-PERF-001 otomatik/provider alt kapsamı; C-OPS-001 runbook; C-OPS-002 tarihsel archive doğrulaması ve güvenli prosedür alt kapsamı
+- **Değişen alanlar:** Backend health/release endpointleri, DB pool/readiness ve migration runner, performance API/admin görünümü, migration/backup CLI'ları, focused testler, deploy/rollback ve backup/restore runbookları ile canonical plan kayıtları
+- **Health kanıtı:** Legacy `/health` korundu; `/health/live` DB'den bağımsız; `/health/ready` bounded DB, `public` schema ve migration head kontrolüyle fail-closed. Release alanları allowlist ve unknown fallback testlerinden geçti
+- **Migration/runtime kanıtı:** `schema_migrations`, SHA-256 checksum, sıralı version-gap kontrolü, advisory lock, transaction rollback, failed ledger, idempotent retry ve bounded pool/connect/query/statement timeout sözleşmesi fixture testlerinde geçti
+- **Performance kanıtı:** No-data `null`, düşük örnek `low_confidence`, threshold boundary, stale/partial, previous-period ve trafik+hata+latency route impact sözleşmesi; admin render static testi geçti. Gelişmiş QA-011 dashboard redesign deferred kaldı
+- **Backup kanıtı:** Yalnız tarihsel `talkx_chatapp_reports_20260807.dump` read-only doğrulandı: 485262 byte, 127 archive entry, SHA-256 `90bfa16377451a80cf15c5977de807ecc0e01634740a44ba203fd99ada55510d`, `pg_restore 17.11`. Güncel backup/restore veya count parity iddiası yok
+- **Otomatik doğrulama:** Backend 29/29; tüm değişen JS dosyaları `node --check`; text encoding temiz; `git diff --check` temiz; npm high audit exit 0, 8 moderate transitif Firebase bulgusu
+- **Canlı/staging işlemler:** Production DB sorgusu/migrationı, yeni backup, restore, Render/Neon config, restart ve deploy yapılmadı
+- **Manuel QA:** Health DB-down gerçek ortam, deploy commit eşliği, Render panel health-check, gerçek PostgreSQL empty/existing migration, isolated restore/count parity, RPO/RTO ve admin responsive/keyboard QA Checkpoint A / Wave 19'a ertelendi
+- **Wave durumu:** AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED
+- **Sonraki wave:** Wave 05 başlatılmadı
 
 ## 16. Durma kuralı
 
-Wave 03 QA kapanışı ve kullanıcının açık Wave 04 başlatma talimatı birlikte gelene kadar:
+Wave 04 auto-verified/committed kapanışından sonra durulur. Kullanıcı Wave 05'i ayrıca açıkça başlatana kadar:
 
-- Wave 04 için kod, config, migration, DB, backup, deploy veya operasyon değişikliği yapılmaz.
-- Render/Neon üzerinde hiçbir state değişikliği yapılmaz.
-- Wave 04 `Aktif` işaretlenmez; bu belge yalnız `Hazır — aktif değil` durumunda kalır.
-- Wave 05 yalnız ayrı açık planlama talimatıyla belgelenebilir; aktive edilmez veya uygulanmaz.
+- Wave 05 için kod, test, refactor, config veya hazırlık yapılmaz.
+- Render/Neon üzerinde hiçbir state değişikliği yapılmaz; Wave 04'ün açık canlı/staging maddeleri Checkpoint A / Wave 19'da kalır.
+- Production migration, backup, restore, cutover, restart veya deploy açık kullanıcı onayı olmadan uygulanmaz.
+- Wave 05 `Bekliyor` kalır; aktive edilmez veya uygulanmaz.

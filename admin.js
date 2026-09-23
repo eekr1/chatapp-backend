@@ -5,6 +5,7 @@ const http = require('http');
 const path = require('path');
 const { pool } = require('./db');
 const { createAdminGuard } = require('./utils/adminSecurity');
+const { buildPerformanceOverview, resolvePerformancePolicy } = require('./utils/performanceContract');
 const { getPushDiagnostics } = require('./utils/push');
 const {
     fetchLegalSettings,
@@ -1843,7 +1844,8 @@ router.get('/performance/overview', async (req, res) => {
                 COALESCE(SUM(req_count), 0)::bigint AS total_requests,
                 COALESCE(SUM(error_count), 0)::bigint AS error_requests,
                 COALESCE(SUM(total_duration_ms), 0)::bigint AS total_duration_ms,
-                COALESCE(SUM(slow_count), 0)::bigint AS slow_requests
+                COALESCE(SUM(slow_count), 0)::bigint AS slow_requests,
+                MAX(bucket_minute) AS last_bucket_at
              FROM http_request_metrics_minute
              WHERE bucket_minute > NOW() - ($1::text || ' hours')::interval`,
             [hours]
@@ -1851,11 +1853,22 @@ router.get('/performance/overview', async (req, res) => {
 
         const percentilesRes = await pool.query(
             `SELECT
-                COALESCE(ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p50_ms,
-                COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p95_ms,
-                COALESCE(ROUND(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p99_ms
+                COUNT(*)::int AS sample_count,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1)::float8 AS p50_ms,
+                ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1)::float8 AS p95_ms,
+                ROUND(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1)::float8 AS p99_ms
              FROM http_request_events
              WHERE created_at > NOW() - ($1::text || ' hours')::interval`,
+            [hours]
+        );
+
+        const previousTotalsRes = await pool.query(
+            `SELECT
+                COALESCE(SUM(req_count), 0)::bigint AS total_requests,
+                COALESCE(SUM(error_count), 0)::bigint AS error_requests
+             FROM http_request_metrics_minute
+             WHERE bucket_minute > NOW() - (($1 * 2)::text || ' hours')::interval
+               AND bucket_minute <= NOW() - ($1::text || ' hours')::interval`,
             [hours]
         );
 
@@ -1896,31 +1909,20 @@ router.get('/performance/overview', async (req, res) => {
             [hours]
         );
 
-        const totals = totalsRes.rows[0] || {};
-        const percentiles = percentilesRes.rows[0] || {};
-        const totalRequests = Number(totals.total_requests) || 0;
-        const errorRequests = Number(totals.error_requests) || 0;
-        const errorRate = totalRequests > 0
-            ? Math.round((errorRequests * 10000) / totalRequests) / 100
-            : 0;
-
-        return res.json({
+        return res.json(buildPerformanceOverview({
             hours,
-            total_requests: totalRequests,
-            error_requests: errorRequests,
-            error_rate: errorRate,
-            slow_requests: Number(totals.slow_requests) || 0,
-            avg_ms: totalRequests > 0
-                ? Math.round(((Number(totals.total_duration_ms) || 0) / totalRequests) * 10) / 10
-                : 0,
-            p50_ms: Number(percentiles.p50_ms) || 0,
-            p95_ms: Number(percentiles.p95_ms) || 0,
-            p99_ms: Number(percentiles.p99_ms) || 0,
-            top_slow_routes: topSlowRoutesRes.rows || [],
-            top_error_routes: topErrorRoutesRes.rows || []
+            totals: totalsRes.rows[0] || {},
+            previousTotals: previousTotalsRes.rows[0] || {},
+            percentiles: percentilesRes.rows[0] || {},
+            topSlowRoutes: topSlowRoutesRes.rows || [],
+            topErrorRoutes: topErrorRoutesRes.rows || [],
+            policy: resolvePerformancePolicy(process.env)
+        }));
+    } catch {
+        return res.status(503).json({
+            error: 'Performance data is temporarily unavailable.',
+            errorCode: 'PERFORMANCE_DATA_UNAVAILABLE'
         });
-    } catch (e) {
-        return res.status(500).json({ error: e.message });
     }
 });
 
@@ -1942,7 +1944,7 @@ router.get('/performance/timeseries', async (req, res) => {
         const p95Res = await pool.query(
             `SELECT
                 date_trunc('minute', created_at) AS bucket,
-                COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1), 0)::float8 AS p95_ms
+                ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::numeric, 1)::float8 AS p95_ms
              FROM http_request_events
              WHERE created_at > NOW() - ($1::text || ' hours')::interval
              GROUP BY date_trunc('minute', created_at)
@@ -1953,7 +1955,7 @@ router.get('/performance/timeseries', async (req, res) => {
         const p95ByBucket = new Map();
         for (const row of p95Res.rows || []) {
             const key = row.bucket instanceof Date ? row.bucket.toISOString() : String(row.bucket || '');
-            p95ByBucket.set(key, Number(row.p95_ms) || 0);
+            p95ByBucket.set(key, row.p95_ms == null ? null : Number(row.p95_ms));
         }
 
         const series = (countRes.rows || []).map((row) => {
@@ -1962,13 +1964,16 @@ router.get('/performance/timeseries', async (req, res) => {
                 bucket: key,
                 req_count: Number(row.req_count) || 0,
                 error_count: Number(row.error_count) || 0,
-                p95_ms: p95ByBucket.get(key) || 0
+                p95_ms: p95ByBucket.has(key) ? p95ByBucket.get(key) : null
             };
         });
 
         return res.json({ hours, series });
-    } catch (e) {
-        return res.status(500).json({ error: e.message });
+    } catch {
+        return res.status(503).json({
+            error: 'Performance trend is temporarily unavailable.',
+            errorCode: 'PERFORMANCE_TREND_UNAVAILABLE'
+        });
     }
 });
 
@@ -1999,8 +2004,11 @@ router.get('/performance/slow-requests', async (req, res) => {
             minDurationMs,
             items: result.rows || []
         });
-    } catch (e) {
-        return res.status(500).json({ error: e.message });
+    } catch {
+        return res.status(503).json({
+            error: 'Slow request evidence is temporarily unavailable.',
+            errorCode: 'PERFORMANCE_EVIDENCE_UNAVAILABLE'
+        });
     }
 });
 

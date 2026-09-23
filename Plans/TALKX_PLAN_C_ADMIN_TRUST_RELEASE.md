@@ -457,12 +457,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] Master QA-011 kriterleri tamam.
-- [ ] Eşik ve zaman penceresi görünür.
-- [ ] Az örnek kritik alarm değil.
-- [ ] P95 yoksa 0 gösterilmiyor.
-- [ ] Route etkisi trafik ve hata ile sıralı.
-- [ ] Özet ham kayda geri izlenebilir.
-- [ ] Release Health ile API latency aynı metrik yapılmıyor.
+- [x] Eşik ve zaman penceresi görünür.
+- [x] Az örnek kritik alarm değil.
+- [x] P95 yoksa 0 gösterilmiyor.
+- [x] Route etkisi trafik ve hata ile sıralı.
+- [x] Özet ham kayda geri izlenebilir.
+- [x] Release Health ile API latency aynı metrik yapılmıyor.
 
 ## 18. C-ANL-001 — QA-012 davranış analitiği
 
@@ -725,13 +725,13 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Hangi dosyanın hangi repo/release'e ait olduğu açık.
-- [ ] Credential değeri docs/log'a yazılmıyor.
-- [ ] Config değişikliği deploy/restart gereksinimi belli.
+- [x] Hangi dosyanın hangi repo/release'e ait olduğu açık.
+- [x] Credential değeri docs/log'a yazılmıyor.
+- [x] Config değişikliği deploy/restart gereksinimi belli.
 - [ ] Health ve gerçek kullanıcı smoke birlikte.
 - [ ] Rollback hedef commit/artifact belli.
-- [ ] Android ortak dosyaları sahipsiz root artefactı değil.
-- [ ] Runbook stale komut/endpoint taşımıyor.
+- [x] Android ortak dosyaları sahipsiz root artefactı değil.
+- [x] Runbook stale komut/endpoint taşımıyor.
 
 ## 26. C-OPS-002 — Backup, restore ve felaket kurtarma
 
@@ -755,14 +755,14 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Dump okunabilir/listelenebilir.
+- [x] Dump okunabilir/listelenebilir.
 - [ ] Backup şifresiz ve erişimsiz dağınık dosya değil.
-- [ ] Restore boş schema açmakla veri restore'u karıştırmıyor.
+- [x] Restore boş schema açmakla veri restore'u karıştırmıyor.
 - [ ] Kritik user/message/friend/report/legal count doğrulanıyor.
 - [ ] `current_schema()=public` doğrulanıyor.
-- [ ] Pooler/direct endpoint seçimi runbook'ta gerekçeli.
+- [x] Pooler/direct endpoint seçimi runbook'ta gerekçeli.
 - [ ] Cutover sonrası backend restart ve smoke.
-- [ ] Canlı restore açık yetki olmadan yapılmıyor.
+- [x] Canlı restore açık yetki olmadan yapılmıyor.
 
 ## 27. C-QA-001 — Admin, operasyon ve release QA
 

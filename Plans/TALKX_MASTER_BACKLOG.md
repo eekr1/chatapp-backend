@@ -80,7 +80,7 @@ Her yuzey once su sorulari cevaplar:
 
 ## Plan belge yönlendirmesi
 
-> 2026-09-23 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–03 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 04–19 başlatılmamıştır.
+> 2026-09-23 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–04 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 05–19 başlatılmamıştır.
 
 | Plan | Canonical dosya | Birincil sahiplik |
 |---|---|---|
@@ -92,7 +92,7 @@ Her yuzey once su sorulari cevaplar:
 | Wave 01 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_01.md`](waves/TALKX_WAVE_01.md) | Yalnız Wave 01 kapsamı, kanıt, checkpoint havuzu ve durma noktası |
 | Wave 02 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_02.md`](waves/TALKX_WAVE_02.md) | Platform/admin erişim temeli, otomatik kanıt ve checkpoint havuzu |
 | Wave 03 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_03.md`](waves/TALKX_WAVE_03.md) | Yalnız Wave 03 client foundation, accessibility/auth UX, otomatik kanıt ve checkpoint havuzu |
-| Wave 04 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_04.md`](waves/TALKX_WAVE_04.md) | Yalnız Wave 04 health, DB runtime, performans ve operasyon güvenliği; kanıt planı ve durma noktası |
+| Wave 04 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_04.md`](waves/TALKX_WAVE_04.md) | Health, migration/runtime, performans sözleşmesi, runbook ve checkpoint kanıtı |
 | Wave 05 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_05.md`](waves/TALKX_WAVE_05.md) | Yalnız Wave 05 reconnect, active state, gerçek presence ve client recovery; kanıt planı ve durma noktası |
 | Wave 06 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_06.md`](waves/TALKX_WAVE_06.md) | Yalnız Wave 06 veri sahipliği, canonical ülke, privacy ve hesap silme; kanıt planı ve durma noktası |
 | Wave 07 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_07.md`](waves/TALKX_WAVE_07.md) | Yalnız Wave 07 QA-014 server-otoriteli arama yaşam döngüsü, UI/UX, kanıt planı ve durma noktası |
@@ -233,11 +233,11 @@ Mevcut parcalar:
 - [ ] [P1] Tek kullanimlik fotografin DB boyutu, timeout, silinme ve raporlama davranisini test et.
 - [ ] [P1] Direkt mesaj idempotency ve client_msg_id kurallarini DB seviyesinde netlestir.
 - [ ] [P1] Session suresi, tum cihazlardan cikis ve sifre degisiminde oturum iptali karari ver.
-- [ ] [P1] DB'yi de kontrol eden readiness endpoint'i ekle.
-- [ ] [P1] Health cevabinda deploy commit SHA ve uygulama surumu goster.
+- [x] [P1] DB'yi de kontrol eden readiness endpoint'i ekle.
+- [x] [P1] Health cevabinda deploy commit SHA ve uygulama surumu goster.
 - [ ] [P1] Scheduler'in coklu instance'ta duplicate bildirim uretmesini engelle.
 - [ ] [P1] Bildirim dagitim sozlesmesini QA-010'a gore yerellestir: anlik, planli ve `run-now` akislari TR/EN icerik haritasi kabul etsin; WS istemcilerini `client.lang`, push tokenlarini `profiles.locale` ile segmentlere ayirsin; bilinmeyen dilde Ingilizce fallback kullansin ve teslimat sonucunu dil bazinda raporlasin.
-- [ ] [P2] Performans ozet sozlesmesini QA-011'e gore guclendir: esik/SLO, ornek sayisi ve guven durumu, onceki donem farki, `veri yok` semantigi ve etki sirali route ozetini API'den acik tasiyarak adminin ham dakikalik kayitlardan sonuc tahmin etmesini engelle.
+- [x] [P2] Performans ozet sozlesmesini QA-011'e gore guclendir: esik/SLO, ornek sayisi ve guven durumu, onceki donem farki, `veri yok` semantigi ve etki sirali route ozetini API'den acik tasiyarak adminin ham dakikalik kayitlardan sonuc tahmin etmesini engelle.
 - [ ] [P2] Davranis analitigi sozlesmesini QA-012'ye gore yeniden kur: kisi, deneme, eslesme cifti ve sohbet birimlerini ayir; sirali/cohort funnel, onceki donem farki, dusuk ornek guveni ve match/conversation bazli olay hikayesini backend tarafinda acik uret.
 - [ ] [P1] Yasal metin yayin sozlesmesini QA-013'e gore guvenli hale getir: taslak/onizleme/yayin ayrimi, alan bazli dogrulama, degisiklik ozeti, surum-reaccept etki hesabi, atomik yayin, audit ve geri alma destegi sagla.
 - [ ] [P1] Eslesme arama yasam dongusunu QA-014 icin aciklastir: queue onay zamani/search kimligi, iptal onayi, reconnect sonrasi kuyrukta kalma veya yeniden katilma semantigi ve match_offer gecisini frontend'in tahmin etmeyecegi bir event sozlesmesiyle tasir.
@@ -285,8 +285,8 @@ Mevcut parcalar:
 
 ## 10. Veritabani ve veri yasam dongusu
 
-- [ ] [P0] Tek buyuk ensureTables sorgusundan surumlu migration sistemine gecis plani yap.
-- [ ] [P0] Neon backup/restore runbook'unu yeniden dogrula.
+- [x] [P0] Tek buyuk ensureTables sorgusundan surumlu migration sistemine gecis plani yap.
+- [x] [P0] Neon backup/restore runbook'unu yeniden dogrula.
 - [ ] [P0] Backup sifreleme, saklama suresi ve erisim yetkisini belirle.
 - [ ] [P1] Tum tablolar icin veri amaci, sahibi, saklama suresi ve silme matrisi olustur.
 - [ ] [P1] Mesaj, report, support media, analytics, push log ve IP/geo retention karari ver.
@@ -299,7 +299,7 @@ Mevcut parcalar:
 - [ ] [P1] Hesap silmede silinecek, anonimlestirilecek veya tutulacak veriyi kesinlestir.
 - [ ] [P1] Legacy/anon tablolarda orphan veri kontrolu yap.
 - [ ] [P1] Pool size, query timeout ve statement timeout belirle.
-- [ ] [P1] Neon direct endpoint ve search_path=public kuralini runbook'ta koru.
+- [x] [P1] Neon direct endpoint ve search_path=public kuralini runbook'ta koru.
 - [ ] [P2] Yavas sorgu ve buyuyen tablo analizi yap.
 - [ ] [P2] Staging DB ve migration rollback proseduru kur.
 
