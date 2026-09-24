@@ -57,6 +57,12 @@ const {
     resolveDirectConversation,
     validateDirectText
 } = require('./utils/directMessage');
+const {
+    validateImageDataUrl,
+    persistDirectImage,
+    consumeImage,
+    cleanupExpiredMedia
+} = require('./utils/mediaLifecycle');
 logger.installSafeConsole();
 
 // Global State (Only Transients)
@@ -592,8 +598,6 @@ const RATE_LIMIT_WINDOW = 1000;
 const RATE_LIMIT_MAX = 5;
 const REPORT_TTL = 5 * 60 * 1000;
 const HEARTBEAT_INTERVAL = 30000;
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB
-const EPHEMERAL_MEDIA_TTL_DAYS = 7;
 const MATCH_CONFIRM_TIMEOUT_MS = (() => {
     const parsed = Number(process.env.MATCH_CONFIRM_TIMEOUT_MS);
     if (!Number.isFinite(parsed)) return 8000;
@@ -798,13 +802,6 @@ const composeAdminPushBody = (noticeTitle, body) => {
     const cleanBody = toText(body, '').trim();
     if (cleanNoticeTitle && cleanBody) return `${cleanNoticeTitle}: ${cleanBody}`;
     return cleanBody || cleanNoticeTitle || '';
-};
-
-const estimateBase64Bytes = (b64) => {
-    if (typeof b64 !== 'string') return 0;
-    const len = b64.length;
-    const padding = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
-    return Math.max(0, Math.floor((len * 3) / 4) - padding);
 };
 
 const disableInvalidPushTokens = async (tokens) => {
@@ -1108,23 +1105,6 @@ adminRoutes.getActiveConversationCount = () => {
     return count;
 };
 
-const validateImageDataUrl = (dataUrl) => {
-    if (typeof dataUrl !== 'string') return { ok: false, reason: 'Invalid image payload.' };
-    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
-        return { ok: false, reason: 'Invalid image format.' };
-    }
-
-    const parts = dataUrl.split(',', 2);
-    if (parts.length !== 2) return { ok: false, reason: 'Invalid image payload.' };
-
-    const bytes = estimateBase64Bytes(parts[1]);
-    if (bytes > MAX_IMAGE_BYTES) {
-        return { ok: false, reason: 'Image exceeds 2MB limit.' };
-    }
-
-    return { ok: true };
-};
-
 const WS_EVENT_COST = Object.freeze({ message: 2, direct_message: 2, image_send: 5, direct_image_send: 5, report: 5, joinQueue: 2 });
 const wsAbuseLimiter = new BoundedRateLimiter({ windowMs: RATE_LIMIT_WINDOW, max: RATE_LIMIT_MAX * 4, maxKeys: 20000 });
 
@@ -1138,9 +1118,8 @@ const broadcastOnlineCount = () => {
 
 const cleanupEphemeralMedia = async () => {
     try {
-        await pool.query(
-            `DELETE FROM ephemeral_media WHERE created_at < NOW() - INTERVAL '${EPHEMERAL_MEDIA_TTL_DAYS} days'`
-        );
+        const result = await cleanupExpiredMedia({ pool, dryRun: process.env.MEDIA_CLEANUP_EXECUTE !== 'true' });
+        if (result.affected) console.info('ephemeral_media cleanup', result);
     } catch (e) {
         // Non-fatal. Table may not be ready on cold start.
         console.warn('ephemeral_media cleanup failed:', e.message);
@@ -1273,7 +1252,23 @@ async function endConversation(conversationId, reason) {
     } catch (e) { console.error('DB Error endConversation:', e); }
 }
 
-async function logReport(reporterId, reportedId, conversationId, reason) {
+async function resolveReportSubject(reportedId, conversationId, messageId, mediaId) {
+    if (!reportedId || !conversationId || (!messageId && !mediaId)) return { messageId: null, mediaId: null, mediaStatus: null };
+    const result = await pool.query(
+        `SELECT m.id,m.media_id,em.status AS media_status
+         FROM messages m LEFT JOIN ephemeral_media em ON em.id=m.media_id
+         WHERE m.conversation_id=$1 AND m.sender_id=$2
+           AND (($3::uuid IS NOT NULL AND m.id=$3::uuid) OR ($4::uuid IS NOT NULL AND m.media_id=$4::uuid))
+         LIMIT 1`,
+        [conversationId, reportedId, messageId || null, mediaId || null]
+    );
+    const row = result.rows[0];
+    return row
+        ? { messageId: row.id, mediaId: row.media_id || null, mediaStatus: row.media_status || null }
+        : { messageId: null, mediaId: null, mediaStatus: null };
+}
+
+async function logReport(reporterId, reportedId, conversationId, reason, evidence = {}) {
     const cleanReason = String(reason || '').trim().slice(0, 800);
     const cleanConversationId = conversationId || null;
     if (!reporterId || !reportedId || !cleanReason) {
@@ -1283,6 +1278,7 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
         return { error: 'self_report_not_allowed' };
     }
     try {
+        const subject = await resolveReportSubject(reportedId, cleanConversationId, evidence.messageId, evidence.mediaId);
         // Prevent duplicate report
         const check = cleanConversationId
             ? await pool.query(
@@ -1300,8 +1296,13 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
         if (check.rows.length > 0) return { duplicate: true };
 
         await pool.query(
-            'INSERT INTO reports (reporter_user_id, reported_user_id, conversation_id, reason) VALUES ($1, $2, $3, $4)',
-            [reporterId, reportedId, cleanConversationId, cleanReason]
+            `INSERT INTO reports
+              (reporter_user_id,reported_user_id,conversation_id,reason,command_id,reason_category,subject_message_id,subject_media_id,evidence_availability,moderation_status,protocol_version,meta)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'metadata_only','received','wave11-v1',$9)
+             ON CONFLICT (reporter_user_id,command_id) WHERE command_id IS NOT NULL DO NOTHING`,
+            [reporterId, reportedId, cleanConversationId, cleanReason, evidence.commandId || null,
+                evidence.reasonCategory || 'other', subject.messageId, subject.mediaId,
+                JSON.stringify({ evidence_policy: 'metadata_only', content_retained: false, media_status: subject.mediaStatus })]
         );
 
         // Auto Ban Logic
@@ -2819,10 +2820,8 @@ wss.on('connection', (ws, req) => {
 
             case 'image_send':
                 if (!data.roomId || !data.imageData) return;
-                {
-                    const v = validateImageDataUrl(data.imageData);
-                    if (!v.ok) return sendError(ws, 'INVALID_IMAGE');
-                }
+                const imageValidation = validateImageDataUrl(data.imageData);
+                if (!imageValidation.ok) return sendError(ws, imageValidation.code || 'INVALID_IMAGE');
                 const iRoomId = userRoomMap.get(ws.clientId);
                 if (iRoomId !== data.roomId) return;
                 const iRoom = rooms.get(iRoomId);
@@ -2848,8 +2847,12 @@ wss.on('connection', (ws, req) => {
                 // Store
                 try {
                     const insertRes = await pool.query(
-                        'INSERT INTO ephemeral_media (sender_id, receiver_id, media_data) VALUES ($1, $2, $3) RETURNING id',
-                        [iSender.dbUserId, iReceiver.dbUserId, data.imageData]
+                        `INSERT INTO ephemeral_media
+                          (sender_id,receiver_id,conversation_id,media_data,content_type,byte_size,width,height,content_fingerprint,status,expires_at,policy_version)
+                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'available',NOW() + INTERVAL '7 days','talkx-media-policy-wave11-v1') RETURNING id`,
+                        [iSender.dbUserId, iReceiver.dbUserId, iRoom.conversationId || null, imageValidation.dataUrl,
+                            imageValidation.contentType, imageValidation.byteSize, imageValidation.width,
+                            imageValidation.height, imageValidation.fingerprint]
                     );
                     const mediaId = insertRes.rows[0].id;
 
@@ -2902,26 +2905,28 @@ wss.on('connection', (ws, req) => {
                 if (!clientDataFetch || !clientDataFetch.dbUserId) return;
 
                 try {
-                    const res = await pool.query(
-                        'SELECT * FROM ephemeral_media WHERE id = $1 AND receiver_id = $2',
-                        [data.mediaId, clientDataFetch.dbUserId]
-                    );
-
-                    if (res.rows.length === 0) {
+                    const consumed = await consumeImage({ pool, mediaId: data.mediaId, receiverId: clientDataFetch.dbUserId });
+                    if (!consumed.ok) {
                         return sendJson(ws, {
                             type: 'image_error',
-                            code: 'MEDIA_EXPIRED',
+                            code: consumed.code,
                             mediaId: data.mediaId,
-                            message: t(resolveWsLang(ws), 'ws.MEDIA_EXPIRED', {}, 'Photo expired.')
+                            mediaStatus: consumed.code === 'MEDIA_ALREADY_CONSUMED' ? 'consumed' : 'expired',
+                            message: t(resolveWsLang(ws), 'ws.MEDIA_EXPIRED', {}, 'Photo is no longer available.')
                         });
                     }
-
-                    const item = res.rows[0];
-                    sendJson(ws, { type: 'image_data', mediaId: data.mediaId, imageData: item.media_data });
-
-                    // DELETE immediately
-                    await pool.query('DELETE FROM ephemeral_media WHERE id = $1', [data.mediaId]);
-                } catch (e) { console.error(e); }
+                    sendJson(ws, {
+                        type: 'image_data',
+                        mediaId: data.mediaId,
+                        imageData: consumed.media_data,
+                        contentType: consumed.content_type,
+                        mediaStatus: 'consumed',
+                        revision: consumed.revision
+                    });
+                } catch (e) {
+                    console.error('fetch_image error', e);
+                    sendJson(ws, { type: 'image_error', code: 'MEDIA_FETCH_FAILED', mediaId: data.mediaId, mediaStatus: 'unavailable' });
+                }
                 break;
 
             case 'direct_image_send':
@@ -2944,7 +2949,7 @@ wss.on('connection', (ws, req) => {
 
                     const v = validateImageDataUrl(data.imageData);
                     if (!v.ok) {
-                        sendError(ws, 'INVALID_IMAGE', null, { clientMsgId });
+                        sendError(ws, v.code || 'INVALID_IMAGE', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                         break;
                     }
@@ -2960,23 +2965,6 @@ wss.on('connection', (ws, req) => {
                             break;
                         }
 
-                        const existing = await pool.query(
-                            'SELECT id, conversation_id, media_id FROM messages WHERE sender_id = $1 AND client_msg_id = $2 LIMIT 1',
-                            [distSenderId, clientMsgId]
-                        );
-                        if (existing.rows.length > 0) {
-                            const row = existing.rows[0];
-                            sendJson(ws, {
-                                type: 'direct_message_ack',
-                                clientMsgId,
-                                status: 'duplicate',
-                                serverMessageId: row.id,
-                                conversationId: row.conversation_id,
-                                mediaId: row.media_id
-                            });
-                            break;
-                        }
-
                         const dConvId = await findOrCreatePersistentConversation(distSenderId, distTargetUserId);
                         if (!dConvId) {
                             sendError(ws, 'CONVERSATION_CREATE_FAILED', null, { clientMsgId });
@@ -2984,30 +2972,41 @@ wss.on('connection', (ws, req) => {
                             break;
                         }
 
-                        const dInsertRes = await pool.query(
-                            'INSERT INTO ephemeral_media (sender_id, receiver_id, media_data) VALUES ($1, $2, $3) RETURNING id',
-                            [distSenderId, distTargetUserId, data.imageData]
-                        );
-                        const dMediaId = dInsertRes.rows[0].id;
+                        const persisted = await persistDirectImage({
+                            pool,
+                            senderId: distSenderId,
+                            receiverId: distTargetUserId,
+                            conversationId: dConvId,
+                            clientMsgId,
+                            imageData: v.dataUrl,
+                            validated: v
+                        });
+                        const dMediaId = persisted.mediaId;
+                        const serverMessageId = persisted.serverMessageId;
+                        if (persisted.duplicate) {
+                            sendJson(ws, {
+                                type: 'direct_message_ack',
+                                clientMsgId,
+                                status: 'duplicate',
+                                serverMessageId,
+                                conversationId: persisted.conversationId,
+                                mediaId: dMediaId,
+                                mediaStatus: 'available'
+                            });
+                            break;
+                        }
 
-                        const messageInsert = await pool.query(
-                            'INSERT INTO messages (conversation_id, sender_id, client_msg_id, text, msg_type, media_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-                            [dConvId, distSenderId, clientMsgId, 'Photo sent', 'image', dMediaId]
-                        );
-                        const serverMessageId = messageInsert.rows[0].id;
-
-                        let dTargetClient = null;
+                        const dTargetClients = [];
                         for (const [, cData] of activeClients) {
                             if (cData.dbUserId === distTargetUserId) {
-                                dTargetClient = cData;
-                                break;
+                                dTargetClients.push(cData);
                             }
                         }
 
-                        const dTargetLang = await resolveUserLang(distTargetUserId, normalizeLang(dTargetClient?.lang, 'en'));
+                        const dTargetLang = await resolveUserLang(distTargetUserId, normalizeLang(dTargetClients[0]?.lang, 'en'));
                         const localizedPhotoText = t(dTargetLang, 'ws.PHOTO_SENT', {}, 'Photo sent');
                         const imageDeliveryId = uuidv4();
-                        if (dTargetClient) {
+                        for (const dTargetClient of dTargetClients) {
                             sendJson(dTargetClient.ws, {
                                 type: 'direct_message',
                                 fromUserId: distSenderId,
@@ -3015,6 +3014,7 @@ wss.on('connection', (ws, req) => {
                                 fromNickname: clientData.nickname,
                                 msgType: 'image',
                                 mediaId: dMediaId,
+                                mediaStatus: 'available',
                                 text: localizedPhotoText,
                                 conversationId: dConvId,
                                 deliveryId: imageDeliveryId,
@@ -3066,6 +3066,7 @@ wss.on('connection', (ws, req) => {
                         sendJson(ws, {
                             type: 'image_sent',
                             mediaId: dMediaId,
+                            mediaStatus: 'available',
                             targetUserId: distTargetUserId,
                             clientMsgId
                         });
@@ -3076,11 +3077,12 @@ wss.on('connection', (ws, req) => {
                             status: 'sent',
                             serverMessageId,
                             conversationId: dConvId,
-                            mediaId: dMediaId
+                            mediaId: dMediaId,
+                            mediaStatus: 'available'
                         });
                     } catch (e) {
                         console.error('direct_image_send error', e);
-                        sendError(ws, 'PHOTO_SEND_FAILED', null, { clientMsgId });
+                        sendError(ws, e?.code === 'IDEMPOTENCY_CONFLICT' ? 'IDEMPOTENCY_CONFLICT' : 'PHOTO_SEND_FAILED', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                     }
                 }
@@ -3090,8 +3092,15 @@ wss.on('connection', (ws, req) => {
             case 'report':
                 {
                     const reason = String(data.reason || '').trim();
+                    const commandId = toClientMsgId(data.commandId) || uuidv4();
+                    const reasonCategory = String(data.reasonCategory || 'other').trim().toLowerCase();
+                    const allowedReasons = new Set(['spam', 'harassment', 'hate', 'sexual', 'threat', 'scam', 'other']);
                     if (!reason) {
                         sendError(ws, 'INVALID_INPUT');
+                        break;
+                    }
+                    if (!allowedReasons.has(reasonCategory)) {
+                        sendError(ws, 'INVALID_REPORT_REQUEST');
                         break;
                     }
 
@@ -3103,7 +3112,11 @@ wss.on('connection', (ws, req) => {
                         roomId: data.roomId || null,
                         targetUserId,
                         conversationIdHint,
-                        reason
+                        reason,
+                        commandId,
+                        reasonCategory,
+                        messageId: data.messageId || null,
+                        mediaId: data.mediaId || null
                     });
 
                     if (!reportResult?.ok) {
@@ -3119,6 +3132,8 @@ wss.on('connection', (ws, req) => {
                     sendJson(ws, {
                         type: 'success',
                         code: 'REPORT_OK',
+                        commandId,
+                        evidenceAvailability: 'metadata_only',
                         duplicate: !!reportResult.duplicate,
                         message: t(resolveWsLang(ws), 'ws.REPORT_OK', {}, 'Your report has been sent.')
                     });
@@ -3235,7 +3250,11 @@ const handleReport = async ({
     roomId,
     targetUserId,
     conversationIdHint,
-    reason
+    reason,
+    commandId,
+    reasonCategory,
+    messageId,
+    mediaId
 }) => {
     const cleanReason = String(reason || '').trim().slice(0, 800);
     if (!cleanReason) {
@@ -3293,7 +3312,9 @@ const handleReport = async ({
             }
         }
 
-        const fallback = await logReport(reporterId, reportedId, fallbackConversationId, cleanReason);
+        const fallback = await logReport(reporterId, reportedId, fallbackConversationId, cleanReason, {
+            commandId, reasonCategory, messageId, mediaId
+        });
         if (fallback?.error) {
             console.error('Report fallback insert failed:', {
                 reporterId,
@@ -3341,9 +3362,15 @@ const handleReport = async ({
 
     // 3. Log Report
     try {
+        const subject = await resolveReportSubject(reportedId, conversationId, messageId, mediaId);
         await pool.query(
-            'INSERT INTO reports (reporter_user_id, reported_user_id, conversation_id, reason, meta) VALUES ($1, $2, $3, $4, $5)',
-            [reporterId, reportedId, conversationId, cleanReason, JSON.stringify({ weight })]
+            `INSERT INTO reports
+              (reporter_user_id,reported_user_id,conversation_id,reason,meta,command_id,reason_category,subject_message_id,subject_media_id,evidence_availability,moderation_status,protocol_version)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'metadata_only','received','wave11-v1')
+             ON CONFLICT (reporter_user_id,command_id) WHERE command_id IS NOT NULL DO NOTHING`,
+            [reporterId, reportedId, conversationId, cleanReason,
+                JSON.stringify({ weight, evidence_policy: 'metadata_only', content_retained: false, media_status: subject.mediaStatus }),
+                commandId || null, reasonCategory || 'other', subject.messageId, subject.mediaId]
         );
     } catch (e) {
         console.error('Report insert error', e);

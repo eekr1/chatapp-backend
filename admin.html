@@ -2105,13 +2105,13 @@
         let h=allowBulk?renderBulkToolbar():'';
         h+='<table><thead><tr>';
         if(allowBulk) h+='<th class="bulk-select-cell"><input id="bulk-select-all" type="checkbox" onclick="toggleBulkAll(this.checked)" aria-label="Tumunu sec"></th>';
-        if(currentTab==='reports') h+='<th>Tarih</th><th>Raporlayan</th><th>Raporlanan</th><th>Sebep</th><th>Islem</th>';
+        if(currentTab==='reports') h+='<th>Tarih</th><th>Raporlayan</th><th>Raporlanan</th><th>Sebep</th><th>Kanit</th><th>Durum</th><th>Islem</th>';
         else if(currentTab==='bans') h+='<th>Kullanici</th><th>Tur</th><th>Bitis</th><th>Sebep</th><th>Islem</th>';
         else if(currentTab==='profiles') h+=`${renderProfileSortHeader('Kullanici','username')}<th>Gorunen Isim</th><th>Sehir</th><th>Ulke</th><th>IP/Kaynak</th>${renderProfileSortHeader('Son Gorulme','last_seen_at')}${renderProfileSortHeader('Kayit','created_at')}<th>Islem</th>`;
         else h+='<th>Tarih</th><th>Konu</th><th>Kullanici</th><th>E-posta</th><th>Durum</th><th>Medya</th><th>Islem</th>';
         h+='</tr></thead><tbody>';
         if(!items.length){
-          const baseColSpan=currentTab==='reports'?5:currentTab==='bans'?5:currentTab==='profiles'?8:7;
+          const baseColSpan=currentTab==='reports'?7:currentTab==='bans'?5:currentTab==='profiles'?8:7;
           const colSpan=allowBulk?baseColSpan+1:baseColSpan;
           h+=`<tr><td colspan="${colSpan}">Kayit bulunamadi.</td></tr>`;
         }else{
@@ -2125,7 +2125,8 @@
             }
             if(currentTab==='reports'){
               const rid=it.reported_user_id||'';
-              h+=`<td>${d(it.created_at)}</td><td>${esc(it.reporter||'Anon')}</td><td>${esc(it.reported||'Anon')}</td><td>${esc(it.reason||'')}</td><td>
+              const evidence=[it.evidence_availability||'metadata_only',it.subject_message_id?'mesaj':'',it.subject_media_id?'medya':''].filter(Boolean).join(' / ');
+              h+=`<td>${d(it.created_at)}</td><td>${esc(it.reporter||'Anon')}</td><td>${esc(it.reported||'Anon')}</td><td><strong>${esc(it.reason_category||'other')}</strong><br/>${esc(it.reason||'')}</td><td>${esc(evidence)}</td><td>${esc(it.moderation_status||'received')}</td><td>
                 <button class="btn btn-ban" onclick="actionBan('${rid}',1,'Rapor: ${esc(it.reason||'')}')">24s</button>
                 <button class="btn btn-perm" onclick="actionBan('${rid}',0,'Rapor: ${esc(it.reason||'')}')">Kalici</button>
                 <button class="btn btn-shadow" onclick="actionShadow('${rid}','Rapor: ${esc(it.reason||'')}')">Golge</button></td>`;

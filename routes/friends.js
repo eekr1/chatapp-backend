@@ -374,9 +374,11 @@ router.get('/history/:friendId', async (req, res) => {
 
     try {
         const msgRes = await pool.query(`
-            SELECT m.id, m.conversation_id, m.sender_id, m.client_msg_id, m.text, m.msg_type, m.created_at, m.is_read, m.media_id
+            SELECT m.id, m.conversation_id, m.sender_id, m.client_msg_id, m.text, m.msg_type, m.created_at, m.is_read, m.media_id,
+                   em.status AS media_status, em.expires_at AS media_expires_at
             FROM messages m
             JOIN conversations c ON m.conversation_id = c.id
+            LEFT JOIN ephemeral_media em ON em.id = m.media_id
             WHERE ((c.user_a_id = $1 AND c.user_b_id = $2) OR (c.user_a_id = $2 AND c.user_b_id = $1))
             AND m.msg_type IN ('direct', 'image')
             ORDER BY m.created_at ASC, m.id ASC
@@ -386,12 +388,12 @@ router.get('/history/:friendId', async (req, res) => {
             console.log(`[DEBUG] History for ${myId}<->${friendId} found ${msgRes.rows.length} messages.`);
         }
 
-        const messages = await Promise.all(msgRes.rows.map(async (msg) => {
-            let mediaExpired = false;
-            if (msg.msg_type === 'image' && msg.media_id) {
-                const check = await pool.query('SELECT 1 FROM ephemeral_media WHERE id = $1', [msg.media_id]);
-                mediaExpired = check.rows.length === 0;
-            }
+        const messages = msgRes.rows.map((msg) => {
+            const mediaStatus = msg.msg_type === 'image'
+                ? (msg.media_status || 'expired')
+                : null;
+            const mediaExpired = msg.msg_type === 'image'
+                && (mediaStatus !== 'available' || (msg.media_expires_at && new Date(msg.media_expires_at).getTime() <= Date.now()));
             return {
                 from: msg.sender_id === myId ? 'me' : 'peer',
                 text: msg.text,
@@ -400,12 +402,13 @@ router.get('/history/:friendId', async (req, res) => {
                 serverMessageId: msg.id,
                 conversationId: msg.conversation_id,
                 mediaId: msg.media_id,
+                mediaStatus: mediaExpired && mediaStatus === 'available' ? 'expired' : mediaStatus,
                 mediaExpired,
                 createdAt: msg.created_at,
                 timestamp: new Date(msg.created_at).getTime(),
                 isRead: msg.is_read
             };
-        }));
+        });
 
         res.json({ success: true, messages });
 

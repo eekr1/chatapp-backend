@@ -99,9 +99,13 @@ const EVENT_SCHEMAS = {
     },
     report: {
         reason: field((value) => isString(value, { min: 1, max: REPORT_REASON_MAX_LENGTH, trim: true })),
+        commandId: optional((value) => isString(value, { min: 1, max: 120, trim: true })),
+        reasonCategory: optional((value) => isString(value, { min: 2, max: 24, trim: true })),
         roomId: optional(isUuid),
         targetUserId: optional(isUuid),
-        conversationId: optional(isUuid)
+        conversationId: optional(isUuid),
+        messageId: optional(isUuid),
+        mediaId: optional(isUuid)
     },
     joinDirect: { targetUsername: field((value) => isString(value, { min: 3, max: 40, trim: true })) }
 };

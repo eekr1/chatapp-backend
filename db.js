@@ -763,6 +763,54 @@ const migrations = Object.freeze([
         ON conversations(match_id)
         WHERE match_id IS NOT NULL;
     `
+  }),
+  Object.freeze({
+    version: '005',
+    name: 'wave11_media_trust_lifecycle',
+    sql: `
+      ALTER TABLE ephemeral_media
+        ALTER COLUMN media_data DROP NOT NULL,
+        ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+        ADD COLUMN IF NOT EXISTS client_msg_id TEXT,
+        ADD COLUMN IF NOT EXISTS message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS content_type TEXT,
+        ADD COLUMN IF NOT EXISTS byte_size INTEGER,
+        ADD COLUMN IF NOT EXISTS width INTEGER,
+        ADD COLUMN IF NOT EXISTS height INTEGER,
+        ADD COLUMN IF NOT EXISTS content_fingerprint TEXT,
+        ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'available',
+        ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS purged_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS policy_version TEXT NOT NULL DEFAULT 'talkx-media-policy-wave11-v1';
+      UPDATE ephemeral_media
+      SET expires_at=COALESCE(expires_at,created_at + INTERVAL '7 days'),
+          status=CASE WHEN status IS NULL THEN 'available' ELSE status END;
+      ALTER TABLE ephemeral_media
+        ALTER COLUMN expires_at SET DEFAULT (NOW() + INTERVAL '7 days'),
+        ALTER COLUMN expires_at SET NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ephemeral_media_sender_client_msg
+        ON ephemeral_media(sender_id,client_msg_id) WHERE client_msg_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_ephemeral_media_cleanup
+        ON ephemeral_media(status,expires_at);
+      CREATE INDEX IF NOT EXISTS idx_ephemeral_media_message
+        ON ephemeral_media(message_id);
+
+      ALTER TABLE reports
+        ADD COLUMN IF NOT EXISTS command_id TEXT,
+        ADD COLUMN IF NOT EXISTS reason_category TEXT,
+        ADD COLUMN IF NOT EXISTS subject_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS subject_media_id UUID REFERENCES ephemeral_media(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS evidence_availability TEXT NOT NULL DEFAULT 'metadata_only',
+        ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'received',
+        ADD COLUMN IF NOT EXISTS owner_admin TEXT,
+        ADD COLUMN IF NOT EXISTS protocol_version TEXT NOT NULL DEFAULT 'wave11-v1';
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_reporter_command
+        ON reports(reporter_user_id,command_id) WHERE command_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_reports_subject_media
+        ON reports(subject_media_id,created_at DESC);
+    `
   })
 ]);
 

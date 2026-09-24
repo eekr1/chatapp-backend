@@ -673,9 +673,11 @@ router.get('/data', async (req, res) => {
     try {
         if (type === 'reports') {
             const result = await pool.query(`
-                SELECT r.*, 
-                       COALESCE(u1.username, 'Anon') as reporter, 
-                       COALESCE(u2.username, 'Anon') as reported
+                SELECT r.id,r.reported_user_id,r.conversation_id,r.reason,r.reason_category,r.created_at,
+                       r.subject_message_id,r.subject_media_id,r.evidence_availability,
+                       r.moderation_status,r.owner_admin,r.protocol_version,
+                       CASE WHEN u1.username IS NULL THEN 'Anon' ELSE LEFT(u1.username, 2) || '***' END AS reporter,
+                       CASE WHEN u2.username IS NULL THEN 'Anon' ELSE LEFT(u2.username, 2) || '***' END AS reported
                 FROM reports r
                 LEFT JOIN users u1 ON r.reporter_user_id = u1.id
                 LEFT JOIN users u2 ON r.reported_user_id = u2.id
