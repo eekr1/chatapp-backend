@@ -3,7 +3,7 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const { pool } = require('../db');
 const { sendSupportReportEmail } = require('../utils/brevoSupport');
-const { calculateLegalStatus } = require('../utils/legalAcceptance');
+const { calculateLegalStatus, legalStatusPayload } = require('../utils/legalAcceptance');
 const { sendApiError, t, resolveRequestLang } = require('../utils/i18n');
 const { findValidSessionByToken, parseBearerToken } = require('../utils/sessionService');
 const { hashKey, resolvePeerAddress } = require('../utils/abuseProtection');
@@ -144,8 +144,7 @@ const authenticateOptional = async (req, res, next) => {
             return res.status(428).json({
                 error: t(resolveRequestLang(req), 'errors.LEGAL_REACCEPT_REQUIRED', {}, 'Legal reaccept required.'),
                 code: 'LEGAL_REACCEPT_REQUIRED',
-                required_versions: legalStatus.required,
-                accepted_versions: legalStatus.accepted
+                ...legalStatusPayload(legalStatus)
             });
         }
 
@@ -153,7 +152,7 @@ const authenticateOptional = async (req, res, next) => {
         next();
     } catch (e) {
         console.error('Support optional auth error:', e);
-        return sendApiError(req, res, 500, 'SERVER_ERROR');
+        return sendApiError(req, res, 503, 'LEGAL_STATUS_UNAVAILABLE', {}, 'errors.LEGAL_STATUS_UNAVAILABLE', { retryable: true });
     }
 };
 

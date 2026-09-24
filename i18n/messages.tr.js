@@ -6,6 +6,8 @@ module.exports = {
         RATE_LIMIT: 'Cok fazla deneme. Lutfen bekleyin.',
         SERVER_ERROR: 'Sunucu hatasi.',
         LEGAL_REACCEPT_REQUIRED: 'Guncel sozlesmeler kabul edilmelidir.',
+        LEGAL_STATUS_UNAVAILABLE: 'Guncel yasal durum su an dogrulanamiyor.',
+        LEGAL_VERSION_MISMATCH: 'Sozlesme surumu degisti. Guncel metni yeniden inceleyin.',
         INVALID_INPUT: 'Gecersiz istek.',
         INVALID_TARGET_ID: 'Gecersiz hedef kullanici kimligi.',
         BLOCK_OPERATION_FAILED: 'Engelleme islemi su anda tamamlanamadi.',

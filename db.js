@@ -811,6 +811,27 @@ const migrations = Object.freeze([
       CREATE INDEX IF NOT EXISTS idx_reports_subject_media
         ON reports(subject_media_id,created_at DESC);
     `
+  }),
+  Object.freeze({
+    version: '006',
+    name: 'wave12_legal_acceptance_identity',
+    sql: `
+      ALTER TABLE legal_acceptances
+        ADD COLUMN IF NOT EXISTS release_id TEXT,
+        ADD COLUMN IF NOT EXISTS release_revision TEXT,
+        ADD COLUMN IF NOT EXISTS requirement_fingerprint TEXT,
+        ADD COLUMN IF NOT EXISTS command_id TEXT,
+        ADD COLUMN IF NOT EXISTS locale TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_legal_acceptance_requirement
+        ON legal_acceptances(user_id,requirement_fingerprint)
+        WHERE requirement_fingerprint IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_legal_acceptance_command
+        ON legal_acceptances(user_id,command_id)
+        WHERE command_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_legal_acceptance_release
+        ON legal_acceptances(release_id,accepted_at DESC)
+        WHERE release_id IS NOT NULL;
+    `
   })
 ]);
 

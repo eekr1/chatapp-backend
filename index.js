@@ -22,6 +22,7 @@ const supportRoutes = require('./routes/support');
 const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 const { shouldDebouncePush } = require('./utils/pushDebounce');
 const { fetchLegalSettings } = require('./utils/legalContent');
+const { buildLegalRelease, calculateLegalStatus, legalStatusPayload } = require('./utils/legalAcceptance');
 const { normalizeLang, resolveRequestLang, resolveLangFromHeaders, t } = require('./utils/i18n');
 const { sendApiError } = require('./utils/i18n');
 const { requestContext } = require('./utils/contracts');
@@ -539,7 +540,18 @@ app.use('/support', supportRoutes);
 app.get('/api/legal', async (req, res) => {
     try {
         const { item, updatedAt } = await fetchLegalSettings(pool);
-        res.json({ ...item, updatedAt });
+        const release = buildLegalRelease({ item, updatedAt });
+        res.set('Cache-Control', 'public, max-age=300, must-revalidate');
+        res.set('ETag', `\"${release.checksum}\"`);
+        res.json({
+            ...item,
+            updatedAt,
+            release_id: release.releaseId,
+            revision: release.revision,
+            checksum: release.checksum,
+            published_at: release.publishedAt,
+            format: release.format
+        });
     } catch (e) {
         const lang = resolveRequestLang(req);
         res.status(500).json({
@@ -2259,6 +2271,22 @@ wss.on('connection', (ws, req) => {
             }
 
             const isShadow = ban && ban.ban_type === 'shadow';
+            try {
+                const legalStatus = await calculateLegalStatus(pool, dbUser.id);
+                if (legalStatus.requiresReaccept) {
+                    sendError(ws, 'LEGAL_REACCEPT_REQUIRED', null, {
+                        retryable: false,
+                        metadata: legalStatusPayload(legalStatus)
+                    });
+                    ws.close(1008, 'Legal reaccept required');
+                    return;
+                }
+            } catch (error) {
+                console.warn('WebSocket legal status unavailable:', { code: error?.code || 'LEGAL_STATUS_UNAVAILABLE' });
+                sendError(ws, 'LEGAL_STATUS_UNAVAILABLE', null, { retryable: true });
+                ws.close(1013, 'Legal status unavailable');
+                return;
+            }
             activeClients.set(ws.clientId, {
                 ws,
                 dbUserId: dbUser.id,

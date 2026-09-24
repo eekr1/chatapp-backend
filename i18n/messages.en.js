@@ -6,6 +6,8 @@ module.exports = {
         RATE_LIMIT: 'Too many attempts. Please wait.',
         SERVER_ERROR: 'Server error.',
         LEGAL_REACCEPT_REQUIRED: 'You must accept the updated legal documents.',
+        LEGAL_STATUS_UNAVAILABLE: 'Your current legal status cannot be verified right now.',
+        LEGAL_VERSION_MISMATCH: 'The legal release changed. Review the current documents again.',
         INVALID_INPUT: 'Invalid request.',
         INVALID_TARGET_ID: 'Invalid target user id.',
         BLOCK_OPERATION_FAILED: 'Block operation cannot be completed right now.',

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
-const { calculateLegalStatus } = require('../utils/legalAcceptance');
+const { calculateLegalStatus, legalStatusPayload } = require('../utils/legalAcceptance');
 const { sendApiError } = require('../utils/i18n');
 const { authenticate: authenticateSession } = require('../utils/sessionService');
 
@@ -11,11 +11,11 @@ const authenticate = async (req, res, next) => {
             const legalStatus = await calculateLegalStatus(pool, req.user.user_id);
             if (legalStatus.requiresReaccept) {
                 return sendApiError(req, res, 428, 'LEGAL_REACCEPT_REQUIRED', {}, 'errors.LEGAL_REACCEPT_REQUIRED', {
-                    metadata: { required_versions: legalStatus.required, accepted_versions: legalStatus.accepted }
+                    metadata: legalStatusPayload(legalStatus)
                 });
             }
             return next();
-        } catch { return sendApiError(req, res, 500, 'SERVER_ERROR'); }
+        } catch { return sendApiError(req, res, 503, 'LEGAL_STATUS_UNAVAILABLE', {}, 'errors.LEGAL_STATUS_UNAVAILABLE', { retryable: true }); }
     });
 };
 

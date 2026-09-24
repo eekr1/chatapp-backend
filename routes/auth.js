@@ -10,7 +10,7 @@ const {
     revokeCurrent
 } = require('../utils/sessionService');
 const { buildSuccessMeta } = require('../utils/contracts');
-const { fetchLegalSettings } = require('../utils/legalContent');
+const { getRequiredLegalState, buildRequirementFingerprint } = require('../utils/legalAcceptance');
 const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
 
 const isBoundedString = (value, min, max) => typeof value === 'string'
@@ -32,7 +32,9 @@ router.post('/register', async (req, res) => {
         password,
         terms_accepted,
         terms_version,
-        privacy_version
+        privacy_version,
+        expected_release_id,
+        command_id
     } = req.body || {};
 
     const lang = resolveRequestLang(req);
@@ -56,22 +58,14 @@ router.post('/register', async (req, res) => {
 
     const submittedTermsVersion = String(terms_version || '').trim();
     const submittedPrivacyVersion = String(privacy_version || '').trim();
-    if (!submittedTermsVersion || submittedTermsVersion.length > 60 || !submittedPrivacyVersion || submittedPrivacyVersion.length > 60) {
+    const expectedReleaseId = String(expected_release_id || '').trim();
+    const commandId = String(command_id || '').trim();
+    if (!submittedTermsVersion || submittedTermsVersion.length > 60 || !submittedPrivacyVersion || submittedPrivacyVersion.length > 60
+        || !expectedReleaseId || expectedReleaseId.length > 120 || !commandId || commandId.length > 120) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     try {
-        const { item: legalItem } = await fetchLegalSettings(pool);
-        const expectedTermsVersion = String(legalItem?.versions?.terms || 'v1');
-        const expectedPrivacyVersion = String(legalItem?.versions?.privacy || 'v1');
-
-        if (
-            submittedTermsVersion !== expectedTermsVersion
-            || submittedPrivacyVersion !== expectedPrivacyVersion
-        ) {
-            return sendApiError(req, res, 400, 'LEGAL_VERSION_MISMATCH');
-        }
-
         const requestedLocale = normalizeLang(req.body?.locale || req.headers['x-talkx-lang'] || lang, 'en');
         const hashedPassword = await hashPassword(String(password));
         const requestIp = getClientIp(req);
@@ -80,6 +74,15 @@ router.post('/register', async (req, res) => {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
+            const legalState = await getRequiredLegalState(client, { lock: true });
+            if (expectedReleaseId !== legalState.releaseId
+                || submittedTermsVersion !== legalState.required.terms
+                || submittedPrivacyVersion !== legalState.required.privacy) {
+                const error = new Error('Legal release changed.');
+                error.code = 'LEGAL_VERSION_MISMATCH';
+                error.legalState = legalState;
+                throw error;
+            }
 
             const userRes = await client.query(
                 'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username',
@@ -94,9 +97,11 @@ router.post('/register', async (req, res) => {
 
             await client.query(
                 `INSERT INTO legal_acceptances
-                  (user_id, terms_version, privacy_version, accepted_at, ip, user_agent)
-                 VALUES ($1, $2, $3, NOW(), $4, $5)`,
-                [user.id, submittedTermsVersion, submittedPrivacyVersion, requestIp, requestUserAgent]
+                  (user_id, terms_version, privacy_version, accepted_at, ip, user_agent,
+                   release_id, release_revision, requirement_fingerprint, command_id, locale)
+                 VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9, $10)`,
+                [user.id, submittedTermsVersion, submittedPrivacyVersion, requestIp, requestUserAgent,
+                    legalState.releaseId, legalState.revision, buildRequirementFingerprint(legalState.required), commandId, requestedLocale]
             );
 
             await client.query('COMMIT');
@@ -115,6 +120,15 @@ router.post('/register', async (req, res) => {
             client.release();
         }
     } catch (e) {
+        if (e?.code === 'LEGAL_VERSION_MISMATCH') {
+            return res.status(409).json({
+                error: t(lang, 'errors.LEGAL_VERSION_MISMATCH', {}, 'Legal version mismatch.'),
+                code: 'LEGAL_VERSION_MISMATCH',
+                release_id: e.legalState?.releaseId || null,
+                revision: e.legalState?.revision || null,
+                required_versions: e.legalState?.required || null
+            });
+        }
         if (e.code === '23505') {
             return res.status(409).json({
                 error: lang === 'tr' ? 'Bu kullanici adi zaten alinmis.' : 'This username is already taken.',

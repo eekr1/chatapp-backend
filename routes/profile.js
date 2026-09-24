@@ -3,7 +3,7 @@ const router = express.Router();
 const { pool } = require('../db');
 const { comparePassword, hashPassword } = require('../utils/security');
 const { authenticate, revokeAllForUser } = require('../utils/sessionService');
-const { calculateLegalStatus, getRequiredLegalVersions } = require('../utils/legalAcceptance');
+const { calculateLegalStatus, acceptLegalRequirement, legalStatusPayload } = require('../utils/legalAcceptance');
 const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
 const { displayCountry } = require('../utils/countryPolicy');
 const { requestUserRuntimeTermination } = require('../utils/userRuntimeTermination');
@@ -22,7 +22,7 @@ const sendLegalReacceptRequired = (req, res, legalStatus) => res.status(428).jso
     error: t(resolveRequestLang(req), 'errors.LEGAL_REACCEPT_REQUIRED', {}, 'Legal reaccept required.'),
     code: 'LEGAL_REACCEPT_REQUIRED',
     required_versions: legalStatus?.required || null,
-    accepted_versions: legalStatus?.accepted || null
+    ...legalStatusPayload(legalStatus)
 });
 
 const requireLegalAcceptance = async (req, res, next) => {
@@ -35,7 +35,7 @@ const requireLegalAcceptance = async (req, res, next) => {
         return next();
     } catch (e) {
         console.error('Legal acceptance check error:', e);
-        return sendApiError(req, res, 500, 'SERVER_ERROR');
+        return sendApiError(req, res, 503, 'LEGAL_STATUS_UNAVAILABLE', {}, 'errors.LEGAL_STATUS_UNAVAILABLE', { retryable: true });
     }
 };
 
@@ -65,15 +65,10 @@ router.get('/me', authenticate, async (req, res) => {
 router.get('/me/legal-status', authenticate, async (req, res) => {
     try {
         const status = await calculateLegalStatus(pool, req.user.user_id);
-        return res.json({
-            success: true,
-            required_versions: status.required,
-            accepted_versions: status.accepted,
-            requires_reaccept: status.requiresReaccept
-        });
+        return res.json({ success: true, ...legalStatusPayload(status) });
     } catch (e) {
         console.error('GET /me/legal-status error:', e);
-        return sendApiError(req, res, 500, 'SERVER_ERROR');
+        return sendApiError(req, res, 503, 'LEGAL_STATUS_UNAVAILABLE', {}, 'errors.LEGAL_STATUS_UNAVAILABLE', { retryable: true });
     }
 });
 
@@ -107,44 +102,51 @@ router.get('/me/match-country', authenticate, async (req, res) => {
 router.post('/me/legal-accept', authenticate, async (req, res) => {
     const termsVersion = String(req.body?.terms_version || '').trim();
     const privacyVersion = String(req.body?.privacy_version || '').trim();
+    const expectedReleaseId = String(req.body?.expected_release_id || '').trim();
+    const commandId = String(req.body?.command_id || '').trim();
+    const locale = normalizeLang(req.body?.locale || req.headers['x-talkx-lang'], 'en');
 
-    if (!termsVersion || !privacyVersion) {
+    if (!termsVersion || !privacyVersion || !expectedReleaseId || !commandId
+        || expectedReleaseId.length > 120 || commandId.length > 120) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     try {
-        const required = await getRequiredLegalVersions(pool);
-        if (termsVersion !== required.terms || privacyVersion !== required.privacy) {
-            return res.status(400).json({
-                error: t(resolveRequestLang(req), 'errors.LEGAL_VERSION_MISMATCH', {}, 'Legal version mismatch.'),
-                code: 'LEGAL_VERSION_MISMATCH',
-                required_versions: required
-            });
-        }
-
-        await pool.query(
-            `INSERT INTO legal_acceptances
-              (user_id, terms_version, privacy_version, accepted_at, ip, user_agent)
-             VALUES ($1, $2, $3, NOW(), $4, $5)`,
-            [
-                req.user.user_id,
-                required.terms,
-                required.privacy,
-                getClientIp(req),
-                String(req.headers['user-agent'] || '').trim().slice(0, 400) || null
-            ]
-        );
+        const result = await acceptLegalRequirement({
+            pool,
+            userId: req.user.user_id,
+            expectedReleaseId,
+            termsVersion,
+            privacyVersion,
+            commandId,
+            locale,
+            ip: getClientIp(req),
+            userAgent: String(req.headers['user-agent'] || '').trim().slice(0, 400) || null
+        });
 
         return res.json({
             success: true,
-            required_versions: required,
-            accepted_versions: {
-                terms: required.terms,
-                privacy: required.privacy,
-                accepted_at: new Date().toISOString()
-            }
+            release_id: result.releaseId,
+            revision: result.revision,
+            required_versions: result.required,
+            accepted_versions: result.accepted,
+            replayed: result.replayed,
+            command_id: commandId
         });
     } catch (e) {
+        if (e?.code === 'LEGAL_VERSION_MISMATCH') {
+            return res.status(409).json({
+                error: t(resolveRequestLang(req), 'errors.LEGAL_VERSION_MISMATCH', {}, 'Legal version mismatch.'),
+                code: 'LEGAL_VERSION_MISMATCH',
+                release_id: e.legalState?.releaseId || null,
+                revision: e.legalState?.revision || null,
+                required_versions: e.legalState?.required || null,
+                retryable: false
+            });
+        }
+        if (e?.code === 'IDEMPOTENCY_CONFLICT') {
+            return sendApiError(req, res, 409, 'IDEMPOTENCY_CONFLICT');
+        }
         console.error('POST /me/legal-accept error:', e);
         return sendApiError(req, res, 500, 'SERVER_ERROR');
     }
@@ -299,6 +301,7 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
         );
 
         let deletionRequest = existingRequested.rows[0] || null;
+        const duplicate = Boolean(deletionRequest);
         if (!existingRequested.rows.length) {
             const inserted = await db.query(
                 `INSERT INTO account_deletion_requests
@@ -340,6 +343,7 @@ router.post('/me/delete-request', authenticate, requireLegalAcceptance, async (r
             requested_at: deletionRequest.requested_at,
             policy_version: deletionRequest.policy_version,
             runtime_ack: runtimeAck,
+            duplicate,
             message: t(resolveRequestLang(req), 'profile.DELETE_REQUEST_RECEIVED', {}, 'Deletion request received.')
         });
     } catch (e) {
