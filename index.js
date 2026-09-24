@@ -35,6 +35,7 @@ const { RecoveryRegistry, buildRecoverySnapshot } = require('./utils/recoverySta
 const { createPresenceService } = require('./utils/presenceService');
 const { onUserRuntimeTermination } = require('./utils/userRuntimeTermination');
 const { rebindTransientParticipant, resolveTransientSnapshot } = require('./utils/transientRecovery');
+const { createSearchLifecycle } = require('./utils/searchLifecycle');
 logger.installSafeConsole();
 
 // Global State (Only Transients)
@@ -551,7 +552,7 @@ const wss = new WebSocketServer({
  * 
  * V6 UPDATE: 'username' is now fetched from DB for connected users if available.
  */
-let waitingQueue = []; // [{ clientId, ws, nickname, dbUserId }]
+let waitingQueue = []; // [{ clientId, ws, nickname, dbUserId, searchId, queueAttempt, queuedAt }]
 const rooms = new Map(); // roomId -> { users: [...], sockets: {...}, conversationId: uuid }
 const userRoomMap = new Map(); // clientId (socket uuid) -> roomId
 const pendingMatches = new Map(); // matchId -> { id, users, autoAcceptAt, timeoutMs, timer, finalized }
@@ -597,7 +598,7 @@ const recentRooms = new Map();
 // Helpers
 const REVISION_EVENTS = new Set([
     'queued', 'match_offer', 'match_offer_peer_accepted', 'match_offer_waiting',
-    'match_offer_closed', 'matched', 'ended', 'presence_update', 'friend_refresh'
+    'match_offer_closed', 'search_phase', 'queue_left', 'matched', 'ended', 'presence_update', 'friend_refresh'
 ]);
 const sendJson = (ws, data) => {
     const lease = recoveryRegistry.getByConnection(ws?.clientId);
@@ -612,6 +613,16 @@ const sendJson = (ws, data) => {
         ...data
     });
 };
+
+const searchLifecycle = createSearchLifecycle({
+    onPhase: (record, event) => {
+        waitingQueue = waitingQueue.map((item) => item.searchId === record.searchId
+            ? { ...item, phase: record.phase, searchRevision: record.revision }
+            : item);
+        const client = activeClients.get(record.connectionId);
+        if (client?.ws?.readyState === WebSocket.OPEN) sendJson(client.ws, event);
+    }
+});
 
 const resolveWsLang = (ws) => {
     const fromClient = activeClients.get(ws.clientId)?.lang || null;
@@ -1294,8 +1305,8 @@ const createRoom = (roomId, conversationId, userA, userB, matchId = null, trigge
     userRoomMap.set(userA.clientId, roomId);
     userRoomMap.set(userB.clientId, roomId);
 
-    sendJson(userA.ws, { type: 'matched', roomId, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
-    sendJson(userB.ws, { type: 'matched', roomId, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
+    sendJson(userA.ws, { type: 'matched', roomId, searchId: userA.searchId, queueAttempt: userA.queueAttempt, searchRevision: userA.searchRevision, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
+    sendJson(userB.ws, { type: 'matched', roomId, searchId: userB.searchId, queueAttempt: userB.queueAttempt, searchRevision: userB.searchRevision, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
 
     trackBehaviorEvent({
         eventName: 'chat_started',
@@ -1354,7 +1365,7 @@ const queueClientForRematch = (clientId, trigger = 'auto_requeue') => {
     setTimeout(() => {
         const clientData = activeClients.get(clientId);
         if (!clientData?.ws || clientData.ws.readyState !== WebSocket.OPEN) return;
-        joinQueue(clientData.ws, { trigger }).catch((e) => {
+        joinQueue(clientData.ws, { trigger, requeue: true }).catch((e) => {
             console.error('queueClientForRematch error:', e?.message || e);
         });
     }, 0);
@@ -1381,7 +1392,13 @@ const cancelPendingMatchById = (
         const reason = isActor ? actorReason : peerReason;
         if (!reason) return;
 
-        sendJson(ws, { type: 'match_offer_closed', reason });
+        sendJson(ws, {
+            type: 'match_offer_closed',
+            reason,
+            searchId: participant.searchId || null,
+            queueAttempt: participant.queueAttempt || null,
+            searchRevision: participant.searchRevision || null
+        });
     });
 
     pending.users.forEach((participant) => {
@@ -1423,7 +1440,10 @@ const finalizePendingMatchIfReady = async (matchId, options = {}) => {
             username: live.username || participant.username,
             dbUserId: live.dbUserId || participant.dbUserId,
             deviceId: live.deviceId || null,
-            platform: live.platform || null
+            platform: live.platform || null,
+            searchId: participant.searchId,
+            queueAttempt: participant.queueAttempt,
+            searchRevision: participant.searchRevision
         };
     }).filter(Boolean);
 
@@ -1447,12 +1467,16 @@ const finalizePendingMatchIfReady = async (matchId, options = {}) => {
 
     const roomId = uuidv4();
     createRoom(roomId, conversationId, participants[0], participants[1], matchId, trigger);
+    participants.forEach((participant) => searchLifecycle.terminate(participant.clientId, 'matched'));
     return true;
 };
 
 const createPendingMatch = (userA, userB) => {
     const matchId = uuidv4();
     const autoAcceptAt = Date.now() + MATCH_CONFIRM_TIMEOUT_MS;
+    const userAOffer = searchLifecycle.markOffer(userA.clientId);
+    const userBOffer = searchLifecycle.markOffer(userB.clientId);
+    if (!userAOffer || !userBOffer) return null;
     const pending = {
         id: matchId,
         users: [
@@ -1462,6 +1486,9 @@ const createPendingMatch = (userA, userB) => {
                 nickname: userA.nickname,
                 username: userA.username,
                 dbUserId: userA.dbUserId,
+                searchId: userAOffer.searchId,
+                queueAttempt: userAOffer.queueAttempt,
+                searchRevision: userAOffer.searchRevision,
                 decision: 'pending'
             },
             {
@@ -1470,6 +1497,9 @@ const createPendingMatch = (userA, userB) => {
                 nickname: userB.nickname,
                 username: userB.username,
                 dbUserId: userB.dbUserId,
+                searchId: userBOffer.searchId,
+                queueAttempt: userBOffer.queueAttempt,
+                searchRevision: userBOffer.searchRevision,
                 decision: 'pending'
             }
         ],
@@ -1487,7 +1517,12 @@ const createPendingMatch = (userA, userB) => {
         if (!peer || participant.ws.readyState !== WebSocket.OPEN) return;
         sendJson(participant.ws, {
             type: 'match_offer',
+            protocolVersion: 1,
             matchId,
+            searchId: participant.searchId,
+            queueAttempt: participant.queueAttempt,
+            searchRevision: participant.searchRevision,
+            serverNow: new Date().toISOString(),
             peerNickname: peer.nickname,
             peerUsername: peer.username,
             peerId: peer.dbUserId,
@@ -1503,7 +1538,9 @@ const createPendingMatch = (userA, userB) => {
             matchId,
             metadata: {
                 peer_user_id: peer.dbUserId || null,
-                timeout_ms: MATCH_CONFIRM_TIMEOUT_MS
+                timeout_ms: MATCH_CONFIRM_TIMEOUT_MS,
+                search_id: participant.searchId,
+                queue_attempt: participant.queueAttempt
             }
         });
     });
@@ -1564,12 +1601,12 @@ const applyMatchDecision = async (ws, providedMatchId, decision) => {
                 decision: 'accept'
             }
         });
-        sendJson(ws, { type: 'match_offer_waiting' });
+        sendJson(ws, { type: 'match_offer_waiting', searchId: participant.searchId, queueAttempt: participant.queueAttempt, searchRevision: participant.searchRevision });
         const peer = pending.users.find((u) => u.clientId !== ws.clientId);
         if (peer && peer.decision === 'pending') {
             const peerWs = activeClients.get(peer.clientId)?.ws || peer.ws;
             if (peerWs && peerWs.readyState === WebSocket.OPEN) {
-                sendJson(peerWs, { type: 'match_offer_peer_accepted' });
+                sendJson(peerWs, { type: 'match_offer_peer_accepted', searchId: peer.searchId, queueAttempt: peer.queueAttempt, searchRevision: peer.searchRevision });
             }
         }
         await finalizePendingMatchIfReady(matchId, { trigger: 'manual_accept' });
@@ -1613,24 +1650,60 @@ const joinQueue = async (ws, options = {}) => {
         return sendError(ws, 'NO_NICKNAME');
     }
 
+    let lifecycleResult;
+    if (options.requeue) {
+        const requeued = searchLifecycle.requeue({ connectionId: ws.clientId });
+        if (!requeued) return sendError(ws, 'SEARCH_NOT_ACTIVE');
+        lifecycleResult = { kind: 'accepted', ...requeued };
+    } else {
+        lifecycleResult = searchLifecycle.begin({
+            userId: clientData.dbUserId,
+            connectionId: ws.clientId,
+            searchId: options.searchId,
+            commandId: options.commandId
+        });
+    }
+    sendJson(ws, lifecycleResult.event);
+    if (lifecycleResult.kind === 'conflict' || lifecycleResult.kind === 'replay') return lifecycleResult;
+    const searchRecord = lifecycleResult.record;
+    const isCurrentQueueSearch = () => {
+        const current = searchLifecycle.getByConnection(ws.clientId);
+        return current === searchRecord && ['queued', 'extended'].includes(current.phase);
+    };
+
     trackBehaviorEvent({
-        eventName: 'match_search_attempt',
+        eventName: 'match_search_started',
         userId: clientData.dbUserId,
         clientId: ws.clientId,
         deviceId: clientData.deviceId || null,
         platform: clientData.platform || null,
         metadata: {
-            trigger
+            trigger,
+            search_id: searchRecord.searchId,
+            queue_attempt: searchRecord.queueAttempt
+        }
+    });
+    trackBehaviorEvent({
+        eventName: 'match_queue_confirmed',
+        userId: clientData.dbUserId,
+        clientId: ws.clientId,
+        deviceId: clientData.deviceId || null,
+        platform: clientData.platform || null,
+        metadata: {
+            trigger,
+            search_id: searchRecord.searchId,
+            queue_attempt: searchRecord.queueAttempt
         }
     });
 
     // Ban Check
     const ban = await checkBan(clientData.dbUserId);
+    if (!isCurrentQueueSearch()) return lifecycleResult;
     if (ban) {
         if (ban.ban_type === 'shadow') {
-            sendJson(ws, { type: 'queued' });
-            return;
+            return lifecycleResult;
         }
+        searchLifecycle.terminate(ws.clientId, 'banned');
         const lang = resolveWsLang(ws);
         return sendError(
             ws,
@@ -1661,7 +1734,13 @@ const joinQueue = async (ws, options = {}) => {
         ws,
         nickname: clientData.nickname,
         username: clientData.username, // V13: Pass username
-        dbUserId: clientData.dbUserId
+        dbUserId: clientData.dbUserId,
+        searchId: searchRecord.searchId,
+        queueAttempt: searchRecord.queueAttempt,
+        searchStartedAt: searchRecord.searchStartedAt,
+        queuedAt: searchRecord.queuedAt,
+        phase: searchRecord.phase,
+        searchRevision: searchRecord.revision
     };
 
     if (waitingQueue.length > 0) {
@@ -1673,6 +1752,7 @@ const joinQueue = async (ws, options = {}) => {
             if (!p || p.clientId === me.clientId) continue;
 
             const blocked = await checkBlock(me.dbUserId, p.dbUserId);
+            if (!isCurrentQueueSearch()) return lifecycleResult;
             if (!blocked && !isPairOnRematchCooldown(me.dbUserId, p.dbUserId)) {
                 peerIndex = i;
                 peer = p;
@@ -1681,36 +1761,26 @@ const joinQueue = async (ws, options = {}) => {
         }
 
         if (peer && peerIndex !== -1) {
-            waitingQueue.splice(peerIndex, 1);
+            const peerSearch = searchLifecycle.getByConnection(peer.clientId);
+            if (!peerSearch || peerSearch.searchId !== peer.searchId || !['queued', 'extended'].includes(peerSearch.phase)) {
+                waitingQueue = waitingQueue.filter((item) => item.clientId !== peer.clientId);
+                waitingQueue.push(me);
+                return lifecycleResult;
+            }
+            const currentPeerIndex = waitingQueue.findIndex((item) => item.clientId === peer.clientId && item.searchId === peer.searchId);
+            if (currentPeerIndex < 0) {
+                waitingQueue.push(me);
+                return lifecycleResult;
+            }
+            waitingQueue.splice(currentPeerIndex, 1);
             createPendingMatch(me, peer);
         } else {
             waitingQueue.push(me);
-            sendJson(ws, { type: 'queued' });
-            trackBehaviorEvent({
-                eventName: 'match_search_queued',
-                userId: clientData.dbUserId,
-                clientId: ws.clientId,
-                deviceId: clientData.deviceId || null,
-                platform: clientData.platform || null,
-                metadata: {
-                    trigger
-                }
-            });
         }
     } else {
         waitingQueue.push(me);
-        sendJson(ws, { type: 'queued' });
-        trackBehaviorEvent({
-            eventName: 'match_search_queued',
-            userId: clientData.dbUserId,
-            clientId: ws.clientId,
-            deviceId: clientData.deviceId || null,
-            platform: clientData.platform || null,
-            metadata: {
-                trigger
-            }
-        });
     }
+    return lifecycleResult;
 };
 
 const leaveRoom = (clientId, reason = 'leave') => {
@@ -1767,6 +1837,7 @@ const rebindTransientState = (previousConnectionId, connectionId, ws) => {
         pendingMatches, userPendingMatchMap, rooms, userRoomMap
     });
     activeClients.delete(previousConnectionId);
+    searchLifecycle.rebind(previousConnectionId, connectionId);
 };
 
 onUserRuntimeTermination(async ({ userId, reason }) => {
@@ -1781,6 +1852,7 @@ onUserRuntimeTermination(async ({ userId, reason }) => {
         });
         removeFromQueue(clientId);
         leaveRoom(clientId, reason);
+        searchLifecycle.terminate(clientId, reason);
         const lease = recoveryRegistry.getByConnection(clientId);
         if (lease) recoveryRegistry.expire(lease.token, reason);
         await presenceService.closeFinal(clientId).catch(() => null);
@@ -2020,7 +2092,7 @@ wss.on('connection', (ws, req) => {
                 }
             });
 
-            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1'];
+            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1', 'matchSearchLifecycleV1'];
             if (realtimeConfig.recoveryEnabled) capabilities.push('recovery-v1');
             sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang, capabilities });
             let unread = { friends: [], system: 0, revision: 0 };
@@ -2072,7 +2144,11 @@ wss.on('connection', (ws, req) => {
                 break;
 
             case 'joinQueue':
-                await joinQueue(ws, { trigger: 'manual' });
+                await joinQueue(ws, {
+                    trigger: 'manual',
+                    searchId: data.searchId,
+                    commandId: data.commandId
+                });
                 break;
 
             case 'matchDecision':
@@ -2320,20 +2396,34 @@ wss.on('connection', (ws, req) => {
                 break;
 
             case 'leaveQueue': // Handle cancel waiting/match offer
-                removeFromQueue(ws.clientId);
-                cancelPendingMatchForClient(ws.clientId, {
-                    actorReason: null,
-                    peerReason: 'peer_cancelled',
-                    requeueActor: false,
-                    requeuePeers: true
-                });
-                trackBehaviorEvent({
-                    eventName: 'match_search_cancelled',
-                    userId: clientData.dbUserId,
-                    clientId: ws.clientId,
-                    deviceId: clientData.deviceId || null,
-                    platform: clientData.platform || null
-                });
+                {
+                    const currentSearch = searchLifecycle.getByConnection(ws.clientId);
+                    const cancelResult = searchLifecycle.cancel({
+                        userId: clientData.dbUserId,
+                        connectionId: ws.clientId,
+                        searchId: data.searchId || currentSearch?.searchId,
+                        commandId: data.commandId,
+                        reason: data.reason || 'user_cancelled'
+                    });
+                    sendJson(ws, cancelResult.event);
+                    if (cancelResult.kind === 'cancelled') {
+                        removeFromQueue(ws.clientId);
+                        cancelPendingMatchForClient(ws.clientId, {
+                            actorReason: null,
+                            peerReason: 'peer_cancelled',
+                            requeueActor: false,
+                            requeuePeers: true
+                        });
+                        trackBehaviorEvent({
+                            eventName: 'match_search_cancelled',
+                            userId: clientData.dbUserId,
+                            clientId: ws.clientId,
+                            deviceId: clientData.deviceId || null,
+                            platform: clientData.platform || null,
+                            metadata: { search_id: cancelResult.record.searchId, queue_attempt: cancelResult.record.queueAttempt }
+                        });
+                    }
+                }
                 break;
 
             case 'next':
@@ -2751,6 +2841,7 @@ wss.on('connection', (ws, req) => {
                 });
                 removeFromQueue(ws.clientId);
                 leaveRoom(ws.clientId, 'disconnect');
+                searchLifecycle.terminate(ws.clientId, 'disconnect');
                 presenceService.closeFinal(ws.clientId)
                     .then((result) => {
                         if (result?.becameOffline) void broadcastPresence(result.userId, 'offline', result.lastSeenAt);

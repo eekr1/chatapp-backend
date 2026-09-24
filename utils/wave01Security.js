@@ -35,7 +35,11 @@ const EVENT_SCHEMAS = {
         serverEpoch: optional((value) => isString(value, { min: 1, max: 80, trim: true }))
     },
     setNickname: { nickname: field((value) => isString(value, { min: 3, max: 40, trim: true })) },
-    joinQueue: noFields,
+    joinQueue: {
+        protocolVersion: optional((value) => value === 1),
+        searchId: optional(isUuid),
+        commandId: optional(isUuid)
+    },
     matchDecision: { matchId: field(isUuid), decision: field((value) => value === 'accept' || value === 'reject') },
     message: { roomId: field(isUuid), text: field((value) => isString(value, { min: 1, max: CHAT_MESSAGE_MAX_LENGTH, trim: true })) },
     direct_message: {
@@ -45,7 +49,12 @@ const EVENT_SCHEMAS = {
     },
     typing: { targetUserId: optional(isUuid) },
     stop_typing: { targetUserId: optional(isUuid) },
-    leaveQueue: noFields,
+    leaveQueue: {
+        protocolVersion: optional((value) => value === 1),
+        searchId: optional(isUuid),
+        commandId: optional(isUuid),
+        reason: optional((value) => value === 'user_cancelled' || value === 'screen_closed')
+    },
     next: noFields,
     leave: noFields,
     image_send: { roomId: field(isUuid), imageData: field((value) => isString(value, { min: 1, max: WS_MAX_PAYLOAD_BYTES })) },
@@ -80,6 +89,11 @@ const validateWsEvent = (payload) => {
         if (!rule.check(payload[name])) return { ok: false, code: 'INVALID_INPUT' };
     }
     if (payload.type === 'report' && !payload.roomId && !payload.targetUserId) return { ok: false, code: 'INVALID_INPUT' };
+    if (payload.type === 'joinQueue' || payload.type === 'leaveQueue') {
+        const lifecycleFields = ['protocolVersion', 'searchId', 'commandId'];
+        const count = lifecycleFields.filter((name) => Object.prototype.hasOwnProperty.call(payload, name)).length;
+        if (count !== 0 && count !== lifecycleFields.length) return { ok: false, code: 'INVALID_INPUT' };
+    }
     return { ok: true, event: payload };
 };
 

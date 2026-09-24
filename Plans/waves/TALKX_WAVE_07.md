@@ -549,42 +549,41 @@ Canlı deploy, flag değişimi, gerçek kullanıcı telemetry sorgusu veya produ
 
 Bu kutular plan hazırlanırken işaretlenmez; yalnız Wave 07 gerçekten başlatılırken güncel kanıtla kapatılır:
 
-- [ ] Wave 01–06 QA kapanışları ve kullanıcı onayı doğrulandı.
-- [ ] Kullanıcı açıkça “Wave 07'yi başlat” talimatı verdi.
-- [ ] Root, backend ve frontend Git status/remote/branch/commit snapshot'ı alındı.
-- [ ] Wave 05 connection identity, recovery snapshot, server epoch ve state revision gerçek kodda doğrulandı.
-- [ ] Wave 06'nın bu Wave için scope/country davranışı açmadığı doğrulandı.
-- [ ] Current queue/pending/requeue/disconnect/shadow-ban yolları yeniden envanterlendi.
+- [x] Wave 01–06 QA kapanışları ve kullanıcı onayı doğrulandı.
+- [x] Kullanıcı açıkça “Wave 07'yi başlat” talimatı verdi.
+- [x] Workspace root orchestration-only tutuldu; backend ve frontend Git status/remote/branch/commit snapshot'ı alındı.
+- [x] Wave 05 connection identity, recovery snapshot, server epoch ve state revision gerçek kodda doğrulandı.
+- [x] Wave 06'nın bu Wave için scope/country davranışı açmadığı doğrulandı.
+- [x] Current queue/pending/requeue/disconnect/shadow-ban yolları yeniden envanterlendi.
 - [ ] Existing MatchScreen/App/i18n/ChatScreen baseline test ve screenshot kanıtı alındı.
-- [ ] Search state machine, timestamp formatı, idempotency ve immediate-match sırası kilitlendi.
+- [x] Search state machine, timestamp formatı, idempotency ve immediate-match sırası kilitlendi.
 - [ ] Legacy client/capability/rollback politikası owner tarafından onaylandı.
 - [ ] Mood/prompt TR/EN içerik seti ve güvenlik inceleme sahibi belirlendi.
-- [ ] Web/Android/reduced-motion/a11y manuel QA cihaz matrisi hazırlandı.
-- [ ] Wave 08 Global/Country ve Wave 09 QA-003 offer sınırlarına taşma olmadığı doğrulandı.
+- [x] Web/Android/reduced-motion/a11y manuel QA cihaz matrisi hazırlandı ve Checkpoint B / Wave 19'a aktarıldı.
+- [x] Wave 08 Global/Country ve Wave 09 QA-003 offer sınırlarına taşma olmadığı doğrulandı.
 
 ## 19. Sonuç alanı
 
-Wave 07 yürütülürse kapanış kaydı en az şunları içerir:
-
-- Başlangıç/bitiş zamanı, Plan refs ve gerçek değişen dosyalar
-- Üç Git bağlamının önce/sonra status/commit farkı
-- Final protocol/capability/state-transition sözleşmesi
-- Search identity, queue timing, cancel/idempotency ve stale-event kanıtları
-- Preserved/reset reconnect ve server restart sonuçları
-- Immediate match, reject/timeout requeue ve multi-device sonuçları
-- Prompt catalog parity/content validator ve no-filter/no-auto-send kanıtı
-- Web/Android responsive, safe-area, reduced-motion, keyboard ve screen-reader kanıtı
-- Syntax/lint/build/encoding/focused/full test komutları ve exit code'ları
-- Rollout/rollback provası ve ilgili metric özeti
-- B-MM-001, A-MATCH-001 ve Master QA-014 kabul tablosu
-- Checkpoint B / Wave 19'a aktarılmış manuel QA kaydı
-- Wave 08'in başlatılmadığına dair açık durma kaydı
+- **Başlangıç/bitiş tarihi:** 2026-09-24
+- **Plan refs:** B-MM-001 ve A-MATCH-001 Sale Release çekirdeği uygulandı; QA-014'ün manuel cihaz/onay maddeleri açık bırakıldı.
+- **Backend sözleşmesi:** `matchSearchLifecycleV1`, UUID `searchId`/`commandId`, artan `queueAttempt`/`searchRevision`, UTC `queuedAt`/`serverNow`, merkezi tier policy, idempotent cancel/replay ve user-level active-search conflict eklendi. Queue, offer, close, wait ve matched eventleri aynı journey kimliğine bağlandı.
+- **Yarış/recovery:** Async ban/block beklerken cancel tombstone kontrolü late queue/offer'ı durduruyor; reject/timeout requeue aynı search içinde yeni attempt açıyor. Wave 05 snapshot preserved queue/offer kimliği, phase, revision ve server zamanını taşıyor; reset otomatik join üretmiyor.
+- **Client/UI:** Timer yalnız `queued` ack sonrası server saatiyle başlıyor; stale search/attempt/revision no-op. Reconnecting/offline ile extended ayrıldı. Radar/anahtar iki ambient parçacığa çevrildi; fake yüzde/ETA/merge yok. Random/Fun/Casual/Deep ve kategori başına 8 TR/EN prompt manuel ilerliyor; seçim offer'a ve dokununca composer'a taşınıyor, otomatik gönderilmiyor.
+- **Kapsam koruması:** Mood/prompt WebSocket filtre payload'ına girmiyor; country, scope, fallback, yeni offer tasarımı, DB migration veya dependency eklenmedi. Wave 08/09 uygulanmadı.
+- **Değişen backend yüzeyi:** `index.js`, `utils/searchLifecycle.js`, `utils/transientRecovery.js`, `utils/wave01Security.js`, `test/wave07-search-lifecycle.test.js` ve canonical plan kayıtları.
+- **Değişen frontend yüzeyi:** `src/App.jsx`, `src/screens/MatchScreen.jsx`, `src/screens/ChatScreen.jsx`, `src/state/searchLifecycle.js`, `src/state/realtimeDomains.js`, `src/match/promptCatalog.js`, TR/EN message katalogları, `src/index.css`, `test/wave07-search-lifecycle.test.js`.
+- **Otomatik kanıt:** Backend syntax kontrolleri ve 51/51 test; frontend lint, 20/20 test ve production build; repository encoding ve iki repo `diff --check` geçti. Frontend audit 0 bulgu; backend high audit kapısı exit 0, Firebase transitif zincirinde breaking force-fix isteyen 8 moderate bulgu kaydetti.
+- **Canonical kabul:** B-MM-001 otomatik maddeleri 6/6; A-MATCH-001 otomatik maddeleri 6/6 kanıtlandı. Master/full stable-ID kapanışı Web/Android ve kullanıcı QA onayı beklediği için açık kaldı.
+- **Canlı işlemler:** Deploy, production DB, Render restart/config, Play Console, secret veya legal publish yapılmadı.
+- **Manuel QA:** Delayed ack/tier görselleri, preserved/reset reconnect, rapid cancel/late offer, iki-client offer/requeue/auto-accept, 320 px/kısa viewport/safe-area, Android background/foreground, reduced-motion, keyboard/screen-reader ve TR/EN içerik incelemesi Checkpoint B / Wave 19'a ertelendi.
+- **Wave durumu:** AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED.
+- **Sonraki wave:** Wave 08 başlatılmadı.
 
 ## 20. Durma kuralı
 
-Wave 06 QA kapanışı ve kullanıcının açık Wave 07 başlatma talimatı birlikte gelene kadar:
+Wave 07 auto-verified/committed kapanışından sonra durulur:
 
-- Wave 07 için kod, test, dependency, migration, config, data scan veya deploy değişikliği yapılmaz.
-- Wave 07 `Aktif` işaretlenmez; bu belge yalnız `Hazır — aktif değil` durumunda kalır.
-- Canonical `[ ]` kabul maddeleri kanıtsız işaretlenmez.
-- Wave 08 uygulanmaz; hazırlanmış plan aktif edilmez.
+- Wave 08 için kod, test, dependency, migration, refactor veya hazırlık yapılmaz.
+- Canonical `[ ]` manuel kabul maddeleri kanıtsız işaretlenmez; Checkpoint B / Wave 19 havuzunda kalır.
+- Canlı deploy/config/data/store/legal işlemleri ayrıca açık kullanıcı onayı olmadan uygulanmaz.
+- Wave 08 yalnız yeni ve açık kullanıcı talimatıyla başlatılabilir.

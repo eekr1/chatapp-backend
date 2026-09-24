@@ -80,7 +80,7 @@ Her yuzey once su sorulari cevaplar:
 
 ## Plan belge yönlendirmesi
 
-> 2026-09-24 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–06 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 07–19 başlatılmamıştır.
+> 2026-09-24 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–07 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 08–19 başlatılmamıştır.
 
 | Plan | Canonical dosya | Birincil sahiplik |
 |---|---|---|
@@ -95,7 +95,7 @@ Her yuzey once su sorulari cevaplar:
 | Wave 04 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_04.md`](waves/TALKX_WAVE_04.md) | Health, migration/runtime, performans sözleşmesi, runbook ve checkpoint kanıtı |
 | Wave 05 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_05.md`](waves/TALKX_WAVE_05.md) | Reconnect, active state, gerçek presence, client recovery ve Checkpoint A kanıtı |
 | Wave 06 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_06.md`](waves/TALKX_WAVE_06.md) | Veri registry, canonical ülke, fail-closed privacy/retention, hesap silme ve support operasyon kanıtı |
-| Wave 07 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_07.md`](waves/TALKX_WAVE_07.md) | Yalnız Wave 07 QA-014 server-otoriteli arama yaşam döngüsü, UI/UX, kanıt planı ve durma noktası |
+| Wave 07 Planı — Auto-verified, manual QA deferred | [`waves/TALKX_WAVE_07.md`](waves/TALKX_WAVE_07.md) | Yalnız Wave 07 QA-014 server-otoriteli arama yaşam döngüsü, UI/UX, kanıt planı ve durma noktası |
 | Wave 08 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_08.md`](waves/TALKX_WAVE_08.md) | Yalnız Wave 08 QA-017 Global/Kendi Ülkem queue, UI, analytics ve Home dilimi; kanıt planı ve durma noktası |
 | Wave 09 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_09.md`](waves/TALKX_WAVE_09.md) | Yalnız Wave 09 QA-003 pending-match protokolü, teklif/kabul UI'si, kanıt planı ve durma noktası |
 | Wave 10 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_10.md`](waves/TALKX_WAVE_10.md) | Yalnız Wave 10 kalıcı metin mesajı idempotency, outbox, retry ve ordering; medya handoff'u, kanıt planı ve durma noktası |
@@ -205,7 +205,7 @@ Mevcut parcalar:
 - [ ] [P1] Arkadas sohbeti presence sozlesmesini tamamla: `/friends/list` cevabinda `is_online` ile `last_seen_at` birlikte donsun; authenticated WebSocket baglanma, kopma ve yeniden baglanma yasam dongusu son gorulme zamanini guvenilir bicimde guncellesin; `activeFriend` verisi `ChatScreen` header'ina aktarilsin.
 - [ ] [P1] Arkadas sohbeti header aksiyonlarini ortak bir UI standardina tasi: rapor ve cikis butonlari anlasilir ikon/etiket, tooltip/aria-label, tutarli hiyerarsi, yeterli tiklama alani, focus/hover/pressed durumlari ve mobil tasma davranisi kazansin.
 - [ ] [P1] Anonim eslesme teklif/kabul ekranini QA-003 tasarim yonune gore yeniden tasarla: eslesme ani guclu bir kart hiyerarsisi, anlasilir geri sayim/progress, `Sohbete Basla` ana aksiyonu, `Gec` ikincil aksiyonu ve `Eslesmeyi iptal et` ucuncul aksiyonuyla sunulsun; mevcut kabul/red/iptal ve bekleme durumlari korunup responsive ve erisilebilir hale getirilsin.
-- [ ] [P1] Anonim eslesme arama ekranini QA-014 briefine gore yeniden tasarla: anahtar/radar yerine iki anonim parcacikli ambient animasyon, gercek queue/reconnect durum metinleri, durust gecen sure, eslesmeyi etkilemeyen sohbet havasi secimi, kullanici kontrollu buz kirici karti ve QA-003 kabul ekranina kesintisiz gecis sagla.
+- [x] [P1] Anonim eslesme arama ekranini QA-014 briefine gore yeniden tasarla: anahtar/radar yerine iki anonim parcacikli ambient animasyon, gercek queue/reconnect durum metinleri, durust gecen sure, eslesmeyi etkilemeyen sohbet havasi secimi, kullanici kontrollu buz kirici karti ve QA-003 kabul ekranina kesintisiz gecis sagla.
 - [ ] [P1] QA-017'ye gore Global / kendi ulkem eslesme kapsam secimini mevcut anonim eslesme baslatma kartina ve QA-014 arama yuzeyine yedir: `Global` varsayilan olsun, gercek ulke adi gosterilsin, scope degisimi atomik yeniden arama olarak anlatilsin, ulke beklemesi Global'e yalniz kullanici onayli fallback sunsun ve QA-003 teklif hiyerarsisi degismeden kalsin.
 - [ ] [P1] QA-015'e gore Arkadaslar ekranina dogrulanmis TalkX Sistem kaydi ve tek yonlu kalici sohbet ekle: sahte user/friendship olusturma; unread, gecmis/pagination, coklu cihaz read senkronu, guvenli CTA, WebSocket canli ekleme ve push'tan Sistem sohbetine yonlendirmeyi Web/Android'de tamamla.
 
@@ -240,7 +240,7 @@ Mevcut parcalar:
 - [x] [P2] Performans ozet sozlesmesini QA-011'e gore guclendir: esik/SLO, ornek sayisi ve guven durumu, onceki donem farki, `veri yok` semantigi ve etki sirali route ozetini API'den acik tasiyarak adminin ham dakikalik kayitlardan sonuc tahmin etmesini engelle.
 - [ ] [P2] Davranis analitigi sozlesmesini QA-012'ye gore yeniden kur: kisi, deneme, eslesme cifti ve sohbet birimlerini ayir; sirali/cohort funnel, onceki donem farki, dusuk ornek guveni ve match/conversation bazli olay hikayesini backend tarafinda acik uret.
 - [ ] [P1] Yasal metin yayin sozlesmesini QA-013'e gore guvenli hale getir: taslak/onizleme/yayin ayrimi, alan bazli dogrulama, degisiklik ozeti, surum-reaccept etki hesabi, atomik yayin, audit ve geri alma destegi sagla.
-- [ ] [P1] Eslesme arama yasam dongusunu QA-014 icin aciklastir: queue onay zamani/search kimligi, iptal onayi, reconnect sonrasi kuyrukta kalma veya yeniden katilma semantigi ve match_offer gecisini frontend'in tahmin etmeyecegi bir event sozlesmesiyle tasir.
+- [x] [P1] Eslesme arama yasam dongusunu QA-014 icin aciklastir: queue onay zamani/search kimligi, iptal onayi, reconnect sonrasi kuyrukta kalma veya yeniden katilma semantigi ve match_offer gecisini frontend'in tahmin etmeyecegi bir event sozlesmesiyle tasir.
 - [ ] [P1] QA-017 Global / kendi ulkem eslesme sozlesmesini kur: sunucu otoriteli `GLOBAL|COUNTRY` scope, canonical ISO ulke kodu, scope ve ulke tasiyan `searchId`, tek aktif kuyruk, atomik scope degisimi, ayni scope ile requeue/reconnect, stale event reddi ve kullanici onayli Global fallback eventlerini mevcut block/cooldown/match_offer kurallariyla birlestir.
 - [ ] [P1] QA-015 Sistem mesaji altyapisini kur: campaign/recipient modeli, locale, hedef snapshot'i, kalici inbox API'si, read receipt, versiyonlu WebSocket, push dikkat katmani, idempotency, batch/backoff, yetki ve audit.
 - [ ] [P1] QA-016 Release Health veri sozlesmesini kur: istemci hata alimi veya secilen gozlemleme saglayicisi adaptoru, schema dogrulama, idempotency, rate limit, PII temizleme, source-map/release esleme, fingerprint gruplama, etkilenen kullanici/session ve onceki release karsilastirmali rollup uretsin.
@@ -320,7 +320,7 @@ Mevcut parcalar:
 - [ ] [P2] Performans ozeti test matrisi kur: 0/az/yeterli ornek, esik alti-siniri-ustu, P95 degeri olmayan bucket, hata/spike, onceki donem farki, stale/kismi veri ve route etki siralamasini API/ham kanitla karsilastir.
 - [ ] [P2] Davranis analitigi test matrisi kur: sirali ve siradan cikmis eventler, pencere sinirini asan yolculuk, duplicate/reconnect, tek eslesmenin iki katilimci eventi, dusuk ornek, platform/cohort filtresi, onceki donem ve match hikayesi sayilarini ham eventlerle karsilastir.
 - [ ] [P1] Yasal yayin test matrisi kur: taslak/kaydet/yayin/geri alma, TR-EN eksigi, placeholder, URL/uzunluk, eszamanli editor, surum degisti-degismedi, reaccept etki sayisi, audit, public API ve web/Android son kullanici onizlemesini kapsa.
-- [ ] [P1] QA-014 eslesme arama test matrisi kur: hazirlaniyor/queued/uzayan arama/reconnect/offline/iptal/match_offer, sayac yasam dongusu, sohbet havasi ve soru tekrar kurali, secimin kabul-sohbete tasinmasi, reduced-motion ve 100dvh mobil yerlesimi kapsa.
+- [x] [P1] QA-014 eslesme arama test matrisi kur: hazirlaniyor/queued/uzayan arama/reconnect/offline/iptal/match_offer, sayac yasam dongusu, sohbet havasi ve soru tekrar kurali, secimin kabul-sohbete tasinmasi, reduced-motion ve 100dvh mobil yerlesimi kapsa.
 - [ ] [P1] QA-015 test matrisi kur: tek/sectili/segment/herkes, TR-EN-fallback, online/offline, push hatasi, coklu cihaz, unread/read sync, reconnect/retry/duplicate, test gonderimi, CTA allowlist, yetki/audit/rate limit ve Web/Android.
 - [ ] [P1] QA-016 Release Health test matrisi kur: Web ErrorBoundary/window/unhandled rejection/chunk, Android native crash ve sonraki acilis teslimi, offline/retry/duplicate, source map, release/build ayrimi, PII redaksiyonu, grouping, az ornek/no-data, baseline/regresyon, crash-free oran ve admin ozetinin ham kanitla dogrulugunu kapsa.
 - [ ] [P1] QA-017 Global / kendi ulkem eslesme test matrisi kur: ilk ve donen kullanici varsayimi, ulke yok/gecersiz/stale, Global ve ayni ulke eslesmesi, farkli ulke izolasyonu, arama sirasinda atomik scope degisimi, reconnect/requeue, gecikmis event, fallback kabul/ret, QA-003'e gecis, TR/EN, Web/Android ve gizlilik sinirlarini kapsa.
@@ -1060,7 +1060,7 @@ Her bulgu su formatla eklenecek:
 - Durum: Acik
 ### QA-014  Anonim eşleşme arama ekranını canlı, dürüst ve işlevsel hâle getir
 
-**Durum:** Açık  
+**Durum:** Otomatik doğrulandı; Web/Android manuel QA Checkpoint B / Wave 19'a ertelendi
 **Öncelik:** P1  
 **Tarih:** 2026-09-02  
 **Alan:** Frontend / anonim eşleşme / WebSocket durumları / animasyon / içerik / TR-EN / Web-Android  

@@ -351,12 +351,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] Master QA-014 backend maddeleri tamam.
-- [ ] Queue onayı olmadan client sayaç başlatmıyor.
-- [ ] Cancel sonrası geç offer gösterilmiyor.
-- [ ] Reconnect korunma semantiği testli.
-- [ ] `match_offer` yalnız geçerli search'ten.
-- [ ] Server/client saat farkı sonucu bozmaz.
-- [ ] Behavior eventler aynı search yolculuğuna bağlanıyor.
+- [x] Queue onayı olmadan client sayaç başlatmıyor.
+- [x] Cancel sonrası geç offer gösterilmiyor.
+- [x] Reconnect korunma semantiği testli.
+- [x] `match_offer` yalnız geçerli search'ten.
+- [x] Server/client saat farkı sonucu bozmaz.
+- [x] Behavior eventler aynı search yolculuğuna bağlanıyor.
 
 ## 15. B-MM-002 — QA-017 Global/Country matchmaking
 

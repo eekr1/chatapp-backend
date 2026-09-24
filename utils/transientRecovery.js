@@ -36,7 +36,21 @@ const resolveTransientSnapshot = ({
     connectionId, waitingQueue, pendingMatches, userPendingMatchMap,
     rooms, userRoomMap, activeClients
 }) => {
-    if (waitingQueue.some((item) => item.clientId === connectionId)) return { kind: 'queue' };
+    const queueEntry = waitingQueue.find((item) => item.clientId === connectionId);
+    if (queueEntry) return {
+        kind: 'queue',
+        protocolVersion: 1,
+        searchId: queueEntry.searchId,
+        queueAttempt: queueEntry.queueAttempt,
+        searchStartedAt: queueEntry.searchStartedAt,
+        queuedAt: queueEntry.queuedAt,
+        serverNow: new Date().toISOString(),
+        phase: queueEntry.phase || 'queued',
+        searchRevision: queueEntry.searchRevision || 1,
+        queuePreserved: true,
+        timingPolicyVersion: 'match-search-timing-v1',
+        tierThresholdsMs: { continuing: 8000, quiet: 20000, extended: 45000 }
+    };
     const matchId = userPendingMatchMap.get(connectionId);
     const pending = matchId ? pendingMatches.get(matchId) : null;
     if (pending) {
@@ -44,6 +58,10 @@ const resolveTransientSnapshot = ({
         const peer = pending.users.find((item) => item.clientId !== connectionId);
         return {
             kind: 'offer', matchId,
+            protocolVersion: 1,
+            searchId: participant?.searchId || null,
+            queueAttempt: participant?.queueAttempt || 1,
+            phase: 'offer',
             decision: participant?.decision || 'pending',
             autoAcceptAt: pending.autoAcceptAt,
             timeoutMs: pending.timeoutMs,

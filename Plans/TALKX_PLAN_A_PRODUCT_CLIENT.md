@@ -325,13 +325,13 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] Master QA-014 kabul kriterlerinin tamamı korunuyor.
-- [ ] Ekran gerçek backend phase'ini tahmin etmiyor.
-- [ ] Animasyon offer öncesi sahte başarı anlatmıyor.
+- [x] Ekran gerçek backend phase'ini tahmin etmiyor.
+- [x] Animasyon offer öncesi sahte başarı anlatmıyor.
 - [ ] Kısa telefon ve Android WebView'da 100dvh içine sığıyor.
-- [ ] Reconnect ve uzun bekleme farklı anlatılıyor.
-- [ ] Eski search eventi yeni aramayı bozamıyor.
-- [ ] Mood/prompt scope değişiminde kaybolmuyor.
-- [ ] QA-003 countdown süresi geçiş animasyonuyla gecikmiyor.
+- [x] Reconnect ve uzun bekleme farklı anlatılıyor.
+- [x] Eski search eventi yeni aramayı bozamıyor.
+- [x] Mood/prompt scope değişiminde kaybolmuyor.
+- [x] QA-003 countdown süresi geçiş animasyonuyla gecikmiyor.
 
 **Kanıt:** Master QA-014 manuel matrisi, iki istemcili test, Web/Android ekran görüntüsü.
 
