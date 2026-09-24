@@ -1268,6 +1268,19 @@ async function resolveReportSubject(reportedId, conversationId, messageId, media
         : { messageId: null, mediaId: null, mediaStatus: null };
 }
 
+async function auditAutomaticBan({ reportedId, banHours, source, score = null, reporterCount = null }) {
+    try {
+        await pool.query(
+            `INSERT INTO admin_action_audit
+              (actor_admin, action_type, entity_type, entity_id, payload)
+             VALUES ('system', 'auto_ban', 'user', $1, $2::jsonb)`,
+            [reportedId, JSON.stringify({ source, ban_hours: banHours, score, reporter_count: reporterCount, policy_version: 'wave11-v1' })]
+        );
+    } catch (error) {
+        console.error('Auto-ban audit insert failed:', { reportedId, source, code: error?.code || 'AUDIT_INSERT_FAILED' });
+    }
+}
+
 async function logReport(reporterId, reportedId, conversationId, reason, evidence = {}) {
     const cleanReason = String(reason || '').trim().slice(0, 800);
     const cleanConversationId = conversationId || null;
@@ -1317,6 +1330,7 @@ async function logReport(reporterId, reportedId, conversationId, reason, evidenc
                 'INSERT INTO bans (user_id, ban_type, ban_until, reason, created_by) VALUES ($1, $2, NOW() + INTERVAL \'24 hours\', $3, $4)',
                 [reportedId, 'temp', 'Auto-Ban: Too many reports (3 unique in 24h)', 'system']
             );
+            await auditAutomaticBan({ reportedId, banHours: 24, source: 'report_fallback_threshold', reporterCount: parseInt(reports24h.rows[0].cnt, 10) });
             return { banned: true };
         }
 
@@ -2907,11 +2921,18 @@ wss.on('connection', (ws, req) => {
                 try {
                     const consumed = await consumeImage({ pool, mediaId: data.mediaId, receiverId: clientDataFetch.dbUserId });
                     if (!consumed.ok) {
+                        trackBehaviorEvent({
+                            eventName: 'media_fetch_result', userId: clientDataFetch.dbUserId, clientId: ws.clientId,
+                            deviceId: clientDataFetch.deviceId || null, platform: clientDataFetch.platform || null,
+                            metadata: { result: consumed.code, status: consumed.status || 'unavailable', revision: consumed.revision || null }
+                        });
                         return sendJson(ws, {
                             type: 'image_error',
                             code: consumed.code,
                             mediaId: data.mediaId,
-                            mediaStatus: consumed.code === 'MEDIA_ALREADY_CONSUMED' ? 'consumed' : 'expired',
+                            mediaStatus: consumed.status || (consumed.code === 'MEDIA_ALREADY_CONSUMED' ? 'consumed' : 'unavailable'),
+                            revision: consumed.revision || null,
+                            retryable: consumed.code === 'MEDIA_UNAVAILABLE',
                             message: t(resolveWsLang(ws), 'ws.MEDIA_EXPIRED', {}, 'Photo is no longer available.')
                         });
                     }
@@ -2922,6 +2943,11 @@ wss.on('connection', (ws, req) => {
                         contentType: consumed.content_type,
                         mediaStatus: 'consumed',
                         revision: consumed.revision
+                    });
+                    trackBehaviorEvent({
+                        eventName: 'media_fetch_result', userId: clientDataFetch.dbUserId, clientId: ws.clientId,
+                        deviceId: clientDataFetch.deviceId || null, platform: clientDataFetch.platform || null,
+                        metadata: { result: 'consumed', status: 'consumed', revision: consumed.revision }
                     });
                 } catch (e) {
                     console.error('fetch_image error', e);
@@ -2949,6 +2975,11 @@ wss.on('connection', (ws, req) => {
 
                     const v = validateImageDataUrl(data.imageData);
                     if (!v.ok) {
+                        trackBehaviorEvent({
+                            eventName: 'media_validation_rejected', userId: distSenderId, clientId: ws.clientId,
+                            deviceId: clientData.deviceId || null, platform: clientData.platform || null,
+                            metadata: { reason_code: v.code || 'INVALID_IMAGE' }
+                        });
                         sendError(ws, v.code || 'INVALID_IMAGE', null, { clientMsgId });
                         sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
                         break;
@@ -2983,6 +3014,12 @@ wss.on('connection', (ws, req) => {
                         });
                         const dMediaId = persisted.mediaId;
                         const serverMessageId = persisted.serverMessageId;
+                        trackBehaviorEvent({
+                            eventName: 'media_upload_result', userId: distSenderId, clientId: ws.clientId,
+                            deviceId: clientData.deviceId || null, platform: clientData.platform || null,
+                            conversationId: dConvId,
+                            metadata: { result: persisted.duplicate ? 'duplicate' : 'available', status: persisted.mediaStatus, revision: persisted.revision }
+                        });
                         if (persisted.duplicate) {
                             sendJson(ws, {
                                 type: 'direct_message_ack',
@@ -2991,7 +3028,9 @@ wss.on('connection', (ws, req) => {
                                 serverMessageId,
                                 conversationId: persisted.conversationId,
                                 mediaId: dMediaId,
-                                mediaStatus: 'available'
+                                mediaStatus: persisted.mediaStatus,
+                                revision: persisted.revision,
+                                expiresAt: persisted.expiresAt
                             });
                             break;
                         }
@@ -3015,6 +3054,9 @@ wss.on('connection', (ws, req) => {
                                 msgType: 'image',
                                 mediaId: dMediaId,
                                 mediaStatus: 'available',
+                                revision: persisted.revision,
+                                expiresAt: persisted.expiresAt,
+                                serverMessageId,
                                 text: localizedPhotoText,
                                 conversationId: dConvId,
                                 deliveryId: imageDeliveryId,
@@ -3067,6 +3109,8 @@ wss.on('connection', (ws, req) => {
                             type: 'image_sent',
                             mediaId: dMediaId,
                             mediaStatus: 'available',
+                            revision: persisted.revision,
+                            expiresAt: persisted.expiresAt,
                             targetUserId: distTargetUserId,
                             clientMsgId
                         });
@@ -3078,7 +3122,9 @@ wss.on('connection', (ws, req) => {
                             serverMessageId,
                             conversationId: dConvId,
                             mediaId: dMediaId,
-                            mediaStatus: 'available'
+                            mediaStatus: persisted.mediaStatus,
+                            revision: persisted.revision,
+                            expiresAt: persisted.expiresAt
                         });
                     } catch (e) {
                         console.error('direct_image_send error', e);
@@ -3136,6 +3182,12 @@ wss.on('connection', (ws, req) => {
                         evidenceAvailability: 'metadata_only',
                         duplicate: !!reportResult.duplicate,
                         message: t(resolveWsLang(ws), 'ws.REPORT_OK', {}, 'Your report has been sent.')
+                    });
+                    trackBehaviorEvent({
+                        eventName: 'report_submitted', userId: clientData.dbUserId, clientId: ws.clientId,
+                        deviceId: clientData.deviceId || null, platform: clientData.platform || null,
+                        conversationId: conversationIdHint,
+                        metadata: { result: reportResult.duplicate ? 'duplicate' : 'recorded', reason_category: reasonCategory, evidence_availability: 'metadata_only' }
                     });
                 }
                 break;
@@ -3426,6 +3478,7 @@ const handleReport = async ({
                 'INSERT INTO bans (user_id, ban_type, ban_until, reason, created_by) VALUES ($1, $2, $3, $4, $5)',
                 [reportedId, 'system', banUntil, `Auto-Ban: Score ${score24h.toFixed(1)}, History ${pastBans}`, 'auto']
             );
+            await auditAutomaticBan({ reportedId, banHours, source: 'weighted_report_threshold', score: score24h, reporterCount: reporters24h });
 
             // Kick User
             const reportTargetClientData = reportedClientId ? activeClients.get(reportedClientId) : null;

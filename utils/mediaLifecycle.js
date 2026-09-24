@@ -67,13 +67,13 @@ const inspectImage = (buffer) => {
 const validateImageDataUrl = (dataUrl) => {
     if (typeof dataUrl !== 'string') return { ok: false, code: 'INVALID_IMAGE' };
     const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
-    if (!match || match[2].length % 4 !== 0) return { ok: false, code: 'UNSUPPORTED_MEDIA_TYPE' };
+    if (!match || match[2].length % 4 !== 0) return { ok: false, code: 'MEDIA_INVALID_TYPE' };
     let buffer;
     try { buffer = Buffer.from(match[2], 'base64'); } catch { return { ok: false, code: 'INVALID_IMAGE' }; }
     if (!buffer.length || buffer.length > MAX_MEDIA_BYTES) return { ok: false, code: 'MEDIA_TOO_LARGE' };
     if (buffer.toString('base64') !== match[2]) return { ok: false, code: 'INVALID_IMAGE' };
     const inspected = inspectImage(buffer);
-    if (!inspected || inspected.contentType !== match[1]) return { ok: false, code: 'MEDIA_TYPE_MISMATCH' };
+    if (!inspected || inspected.contentType !== match[1]) return { ok: false, code: 'MEDIA_INVALID_TYPE' };
     const { width, height } = inspected;
     if (!width || !height || width > MAX_MEDIA_WIDTH || height > MAX_MEDIA_HEIGHT || width * height > MAX_MEDIA_PIXELS) return { ok: false, code: 'MEDIA_DIMENSIONS_EXCEEDED' };
     const sanitized = inspected.contentType === 'image/jpeg' ? stripJpegExif(buffer) : buffer;
@@ -94,23 +94,23 @@ const persistDirectImage = async ({ pool, senderId, receiverId, conversationId, 
     try {
         await client.query('BEGIN');
         const existing = await client.query(
-            'SELECT m.id,m.conversation_id,m.media_id,em.content_fingerprint FROM messages m LEFT JOIN ephemeral_media em ON em.id=m.media_id WHERE m.sender_id=$1 AND m.client_msg_id=$2 LIMIT 1',
+            'SELECT m.id,m.conversation_id,m.media_id,em.receiver_id,em.content_fingerprint,em.status,em.revision,em.expires_at FROM messages m LEFT JOIN ephemeral_media em ON em.id=m.media_id WHERE m.sender_id=$1 AND m.client_msg_id=$2 LIMIT 1',
             [senderId, clientMsgId]
         );
         if (existing.rows.length) {
             const row = existing.rows[0];
-            if (!row.media_id || row.content_fingerprint !== validated.fingerprint) {
+            if (!row.media_id || row.receiver_id !== receiverId || row.content_fingerprint !== validated.fingerprint) {
                 const error = new Error('Idempotency key reused with different media.');
                 error.code = 'IDEMPOTENCY_CONFLICT';
                 throw error;
             }
             await client.query('COMMIT');
-            return { duplicate: true, mediaId: row.media_id, serverMessageId: row.id, conversationId: row.conversation_id };
+            return { duplicate: true, mediaId: row.media_id, serverMessageId: row.id, conversationId: row.conversation_id, mediaStatus: row.status, revision: row.revision, expiresAt: row.expires_at };
         }
         const media = await client.query(
             `INSERT INTO ephemeral_media
               (sender_id,receiver_id,conversation_id,client_msg_id,media_data,content_type,byte_size,width,height,content_fingerprint,status,expires_at,policy_version)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'available',NOW() + ($11::text || ' days')::interval,$12) RETURNING id`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'available',NOW() + ($11::text || ' days')::interval,$12) RETURNING id,expires_at,revision`,
             [senderId, receiverId, conversationId, clientMsgId, imageData, validated.contentType, validated.byteSize, validated.width, validated.height, validated.fingerprint, MEDIA_TTL_DAYS, MEDIA_POLICY_VERSION]
         );
         const message = await client.query(
@@ -120,17 +120,17 @@ const persistDirectImage = async ({ pool, senderId, receiverId, conversationId, 
         );
         await client.query('UPDATE ephemeral_media SET message_id=$2 WHERE id=$1', [media.rows[0].id, message.rows[0].id]);
         await client.query('COMMIT');
-        return { duplicate: false, mediaId: media.rows[0].id, serverMessageId: message.rows[0].id, conversationId };
+        return { duplicate: false, mediaId: media.rows[0].id, serverMessageId: message.rows[0].id, conversationId, mediaStatus: 'available', revision: media.rows[0].revision, expiresAt: media.rows[0].expires_at };
     } catch (error) {
         await client.query('ROLLBACK');
         if (error?.code === '23505') {
             const replay = await pool.query(
-                'SELECT m.id,m.conversation_id,m.media_id,em.content_fingerprint FROM messages m LEFT JOIN ephemeral_media em ON em.id=m.media_id WHERE m.sender_id=$1 AND m.client_msg_id=$2 LIMIT 1',
+                'SELECT m.id,m.conversation_id,m.media_id,em.receiver_id,em.content_fingerprint,em.status,em.revision,em.expires_at FROM messages m LEFT JOIN ephemeral_media em ON em.id=m.media_id WHERE m.sender_id=$1 AND m.client_msg_id=$2 LIMIT 1',
                 [senderId, clientMsgId]
             );
-            if (replay.rows.length && replay.rows[0].media_id && replay.rows[0].content_fingerprint === validated.fingerprint) {
+            if (replay.rows.length && replay.rows[0].media_id && replay.rows[0].receiver_id === receiverId && replay.rows[0].content_fingerprint === validated.fingerprint) {
                 const row = replay.rows[0];
-                return { duplicate: true, mediaId: row.media_id, serverMessageId: row.id, conversationId: row.conversation_id };
+                return { duplicate: true, mediaId: row.media_id, serverMessageId: row.id, conversationId: row.conversation_id, mediaStatus: row.status, revision: row.revision, expiresAt: row.expires_at };
             }
             if (replay.rows.length) error.code = 'IDEMPOTENCY_CONFLICT';
         }
@@ -154,11 +154,12 @@ const consumeImage = async ({ pool, mediaId, receiverId }) => {
         [mediaId, receiverId]
     );
     if (result.rows.length) return { ok: true, ...result.rows[0] };
-    const state = await pool.query('SELECT status,expires_at FROM ephemeral_media WHERE id=$1 AND receiver_id=$2', [mediaId, receiverId]);
+    const state = await pool.query('SELECT status,expires_at,revision FROM ephemeral_media WHERE id=$1 AND receiver_id=$2', [mediaId, receiverId]);
     if (!state.rows.length) return { ok: false, code: 'MEDIA_NOT_FOUND' };
     const row = state.rows[0];
-    if (row.status === 'available' && new Date(row.expires_at).getTime() <= Date.now()) return { ok: false, code: 'MEDIA_EXPIRED' };
-    return { ok: false, code: row.status === 'consumed' ? 'MEDIA_ALREADY_CONSUMED' : 'MEDIA_UNAVAILABLE' };
+    if (row.status === 'available' && new Date(row.expires_at).getTime() <= Date.now()) return { ok: false, code: 'MEDIA_EXPIRED', status: 'expired', revision: row.revision };
+    if (row.status === 'quarantined') return { ok: false, code: 'MEDIA_QUARANTINED', status: 'quarantined', revision: row.revision };
+    return { ok: false, code: row.status === 'consumed' ? 'MEDIA_ALREADY_CONSUMED' : 'MEDIA_UNAVAILABLE', status: row.status, revision: row.revision };
 };
 
 const cleanupExpiredMedia = async ({ pool, dryRun = true, batchSize = CLEANUP_BATCH_SIZE } = {}) => {
@@ -176,10 +177,10 @@ const cleanupExpiredMedia = async ({ pool, dryRun = true, batchSize = CLEANUP_BA
            SELECT id FROM ephemeral_media
            WHERE expires_at<=NOW() AND status='available'
            ORDER BY expires_at LIMIT $1 FOR UPDATE SKIP LOCKED
-         )
+         ), lock AS (SELECT pg_try_advisory_xact_lock(118011) AS acquired)
          UPDATE ephemeral_media em
          SET status='expired',media_data=NULL,purged_at=NOW(),revision=revision+1
-         FROM candidates WHERE em.id=candidates.id RETURNING em.id`,
+         FROM candidates,lock WHERE lock.acquired AND em.id=candidates.id RETURNING em.id`,
         [limit]
     );
     return { dryRun: false, affected: result.rowCount || 0 };

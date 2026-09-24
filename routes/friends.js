@@ -375,7 +375,7 @@ router.get('/history/:friendId', async (req, res) => {
     try {
         const msgRes = await pool.query(`
             SELECT m.id, m.conversation_id, m.sender_id, m.client_msg_id, m.text, m.msg_type, m.created_at, m.is_read, m.media_id,
-                   em.status AS media_status, em.expires_at AS media_expires_at
+                   em.status AS media_status, em.expires_at AS media_expires_at, em.revision AS media_revision
             FROM messages m
             JOIN conversations c ON m.conversation_id = c.id
             LEFT JOIN ephemeral_media em ON em.id = m.media_id
@@ -403,6 +403,8 @@ router.get('/history/:friendId', async (req, res) => {
                 conversationId: msg.conversation_id,
                 mediaId: msg.media_id,
                 mediaStatus: mediaExpired && mediaStatus === 'available' ? 'expired' : mediaStatus,
+                mediaRevision: msg.media_revision,
+                mediaExpiresAt: msg.media_expires_at,
                 mediaExpired,
                 createdAt: msg.created_at,
                 timestamp: new Date(msg.created_at).getTime(),
