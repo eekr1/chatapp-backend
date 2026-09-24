@@ -38,7 +38,21 @@ const EVENT_SCHEMAS = {
     joinQueue: {
         protocolVersion: optional((value) => value === 1),
         searchId: optional(isUuid),
-        commandId: optional(isUuid)
+        commandId: optional(isUuid),
+        scope: optional((value) => value === 'GLOBAL' || value === 'COUNTRY')
+    },
+    changeMatchScope: {
+        protocolVersion: field((value) => value === 1),
+        fromSearchId: field(isUuid),
+        searchId: field(isUuid),
+        commandId: field(isUuid),
+        scope: field((value) => value === 'GLOBAL' || value === 'COUNTRY')
+    },
+    countryFallbackAction: {
+        protocolVersion: field((value) => value === 1),
+        searchId: field(isUuid),
+        commandId: field(isUuid),
+        action: field((value) => value === 'continue' || value === 'dismiss')
     },
     matchDecision: { matchId: field(isUuid), decision: field((value) => value === 'accept' || value === 'reject') },
     message: { roomId: field(isUuid), text: field((value) => isString(value, { min: 1, max: CHAT_MESSAGE_MAX_LENGTH, trim: true })) },

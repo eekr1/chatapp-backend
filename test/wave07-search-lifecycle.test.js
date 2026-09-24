@@ -56,14 +56,15 @@ test('recovery rebind keeps the same search identity', () => {
     assert.equal(lifecycle.getByConnection('new').searchId, id(1));
 });
 
-test('Wave 07 websocket commands are strict and carry no scope, country, mood or prompt', () => {
+test('Wave 07 websocket lifecycle identity remains strict after scope extension', () => {
     assert.equal(validateWsEvent({ type: 'joinQueue', protocolVersion: 1, searchId: id(1), commandId: id(2) }).ok, true);
     assert.equal(validateWsEvent({ type: 'leaveQueue', protocolVersion: 1, searchId: id(1), commandId: id(2), reason: 'user_cancelled' }).ok, true);
-    assert.equal(validateWsEvent({ type: 'joinQueue', protocolVersion: 1, searchId: id(1), commandId: id(2), scope: 'COUNTRY' }).code, 'UNEXPECTED_FIELD');
+    assert.equal(validateWsEvent({ type: 'joinQueue', protocolVersion: 1, searchId: id(1), commandId: id(2), scope: 'COUNTRY' }).ok, true);
+    assert.equal(validateWsEvent({ type: 'joinQueue', protocolVersion: 1, searchId: id(1), commandId: id(2), countryCode: 'TR' }).code, 'UNEXPECTED_FIELD');
     assert.equal(validateWsEvent({ type: 'joinQueue', searchId: id(1) }).code, 'INVALID_INPUT');
 });
 
-test('integration source emits identified queue/offer/cancel and no Wave 08 scope', () => {
+test('integration source still emits identified queue/offer/cancel after Wave 08', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
     const lifecycleSource = fs.readFileSync(path.join(__dirname, '..', 'utils', 'searchLifecycle.js'), 'utf8');
     assert.match(source, /matchSearchLifecycleV1/);
@@ -73,5 +74,5 @@ test('integration source emits identified queue/offer/cancel and no Wave 08 scop
     assert.match(source, /currentPeerIndex/);
     assert.match(source, /match_offer_waiting'.*searchId/);
     assert.match(lifecycleSource, /type: 'queue_left'/);
-    assert.doesNotMatch(source, /effectiveMatchScope|preferredMatchScope|country_fallback_available/);
+    assert.match(source, /effectiveMatchScope|country_fallback_available/);
 });

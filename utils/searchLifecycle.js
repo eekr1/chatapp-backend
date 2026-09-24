@@ -11,12 +11,15 @@ const createSearchLifecycle = ({
     now = () => Date.now(),
     setTimer = (fn, ms) => setTimeout(fn, ms),
     clearTimer = (timer) => clearTimeout(timer),
-    onPhase = () => {}
+    onPhase = () => {},
+    onFallback = () => {},
+    fallbackDelayMs = 30000
 } = {}) => {
     const byUser = new Map();
     const byConnection = new Map();
     const commandResults = new Map();
     const timers = new Map();
+    const fallbackTimers = new Map();
 
     const envelope = (record, extra = {}) => ({
         protocolVersion: PROTOCOL_VERSION,
@@ -29,6 +32,12 @@ const createSearchLifecycle = ({
         timingPolicyVersion: TIMING_POLICY_VERSION,
         tierThresholdsMs: TIER_THRESHOLDS_MS,
         searchRevision: record.revision,
+        requestedScope: record.requestedScope,
+        effectiveMatchScope: record.effectiveMatchScope,
+        country: record.country,
+        scopePolicyVersion: record.scopePolicyVersion,
+        fallbackEligibleAt: record.fallbackEligibleAt,
+        fallbackStatus: record.fallbackStatus,
         ...extra
     });
 
@@ -52,13 +61,35 @@ const createSearchLifecycle = ({
         timers.set(record.searchId, timer);
     };
 
+    const clearFallbackTimer = (searchId) => {
+        const timer = fallbackTimers.get(searchId);
+        if (timer) clearTimer(timer);
+        fallbackTimers.delete(searchId);
+    };
+
+    const scheduleFallback = (record) => {
+        clearFallbackTimer(record.searchId);
+        if (record.effectiveMatchScope !== 'COUNTRY' || record.fallbackStatus !== 'hidden') return;
+        const due = Math.max(0, new Date(record.fallbackEligibleAt).getTime() - now());
+        const timer = setTimer(() => {
+            const current = byUser.get(record.userId);
+            if (!current || current.searchId !== record.searchId || !['queued', 'extended'].includes(current.phase)
+                || current.fallbackStatus !== 'hidden') return;
+            current.fallbackStatus = 'eligible';
+            current.updatedAt = iso(now());
+            current.revision += 1;
+            onFallback(current, envelope(current, { type: 'country_fallback_available' }));
+        }, due);
+        fallbackTimers.set(record.searchId, timer);
+    };
+
     const rememberCommand = (userId, commandId, result) => {
         if (!commandId) return;
         commandResults.set(`${userId}:${commandId}`, result);
         if (commandResults.size > 1000) commandResults.delete(commandResults.keys().next().value);
     };
 
-    const begin = ({ userId, connectionId, searchId = randomUUID(), commandId = randomUUID() }) => {
+    const begin = ({ userId, connectionId, searchId = randomUUID(), commandId = randomUUID(), scopeContext = {} }) => {
         const existingCommand = commandResults.get(`${userId}:${commandId}`);
         if (existingCommand) return { ...existingCommand, replayed: true };
         const current = byUser.get(userId);
@@ -76,11 +107,21 @@ const createSearchLifecycle = ({
         const record = {
             userId, connectionId, searchId, phase: 'queued', queueAttempt: 1,
             searchStartedAt: timestamp, queuedAt: timestamp, createdAt: timestamp, updatedAt: timestamp,
-            revision: 1, terminalReason: null
+            revision: 1, terminalReason: null,
+            requestedScope: scopeContext.requestedScope || 'GLOBAL',
+            effectiveMatchScope: scopeContext.effectiveScope || 'GLOBAL',
+            country: scopeContext.country || null,
+            queueKey: scopeContext.queueKey || 'match:global',
+            scopePolicyVersion: scopeContext.countryPolicyVersion || 'match-country-v1',
+            fallbackEligibleAt: scopeContext.effectiveScope === 'COUNTRY'
+                ? iso(now() + fallbackDelayMs)
+                : null,
+            fallbackStatus: 'hidden'
         };
         byUser.set(userId, record);
         byConnection.set(connectionId, record);
         scheduleExtended(record);
+        scheduleFallback(record);
         const result = { kind: 'accepted', record, event: envelope(record, { type: 'queued', commandId, replayed: false }) };
         rememberCommand(userId, commandId, result);
         return result;
@@ -95,6 +136,7 @@ const createSearchLifecycle = ({
         record.updatedAt = record.queuedAt;
         record.revision += 1;
         scheduleExtended(record);
+        scheduleFallback(record);
         return { record, event: envelope(record, { type: 'queued', replayed: false, reasonCode: 'requeue' }) };
     };
 
@@ -102,6 +144,7 @@ const createSearchLifecycle = ({
         const record = byConnection.get(connectionId);
         if (!record || !ACTIVE_PHASES.has(record.phase)) return null;
         clearExtendedTimer(record.searchId);
+        clearFallbackTimer(record.searchId);
         record.phase = 'offer';
         record.updatedAt = iso(now());
         record.revision += 1;
@@ -118,6 +161,7 @@ const createSearchLifecycle = ({
             return result;
         }
         clearExtendedTimer(record.searchId);
+        clearFallbackTimer(record.searchId);
         record.phase = 'cancelled';
         record.terminalReason = reason;
         record.updatedAt = iso(now());
@@ -131,6 +175,7 @@ const createSearchLifecycle = ({
         const record = byConnection.get(connectionId);
         if (!record) return null;
         clearExtendedTimer(record.searchId);
+        clearFallbackTimer(record.searchId);
         if (ACTIVE_PHASES.has(record.phase)) {
             record.phase = 'cancelled';
             record.terminalReason = reason;
@@ -150,8 +195,68 @@ const createSearchLifecycle = ({
         return record;
     };
 
+    const replace = ({ userId, connectionId, fromSearchId, searchId, commandId = randomUUID(), scopeContext = {} }) => {
+        const existingCommand = commandResults.get(`${userId}:${commandId}`);
+        if (existingCommand) return { ...existingCommand, replayed: true };
+        const current = byConnection.get(connectionId) || byUser.get(userId);
+        if (!current || current.connectionId !== connectionId || current.searchId !== fromSearchId || !ACTIVE_PHASES.has(current.phase)) {
+            const result = {
+                kind: 'stale',
+                record: current || null,
+                event: current
+                    ? envelope(current, { type: 'match_scope_change_failed', commandId, errorCode: 'STALE_SEARCH', retryable: false })
+                    : { type: 'match_scope_change_failed', protocolVersion: PROTOCOL_VERSION, commandId, errorCode: 'SEARCH_NOT_ACTIVE', retryable: false, serverNow: iso(now()) }
+            };
+            rememberCommand(userId, commandId, result);
+            return result;
+        }
+        clearExtendedTimer(current.searchId);
+        clearFallbackTimer(current.searchId);
+        current.phase = 'cancelled';
+        current.terminalReason = 'scope_changed';
+        current.updatedAt = iso(now());
+        current.revision += 1;
+        const timestamp = iso(now());
+        const record = {
+            userId, connectionId, searchId, phase: 'queued', queueAttempt: 1,
+            searchStartedAt: timestamp, queuedAt: timestamp, createdAt: timestamp, updatedAt: timestamp,
+            revision: current.revision + 1, terminalReason: null,
+            requestedScope: scopeContext.requestedScope || 'GLOBAL',
+            effectiveMatchScope: scopeContext.effectiveScope || 'GLOBAL',
+            country: scopeContext.country || null,
+            queueKey: scopeContext.queueKey || 'match:global',
+            scopePolicyVersion: scopeContext.countryPolicyVersion || 'match-country-v1',
+            fallbackEligibleAt: scopeContext.effectiveScope === 'COUNTRY' ? iso(now() + fallbackDelayMs) : null,
+            fallbackStatus: 'hidden'
+        };
+        byUser.set(userId, record);
+        byConnection.set(connectionId, record);
+        scheduleExtended(record);
+        scheduleFallback(record);
+        const result = {
+            kind: 'accepted',
+            previous: current,
+            record,
+            event: envelope(record, { type: 'queued', commandId, replayed: false, reasonCode: 'scope_changed' })
+        };
+        rememberCommand(userId, commandId, result);
+        return result;
+    };
+
+    const recordFallbackAction = ({ connectionId, searchId, action }) => {
+        const record = byConnection.get(connectionId);
+        if (!record || record.searchId !== searchId || record.effectiveMatchScope !== 'COUNTRY'
+            || !['queued', 'extended'].includes(record.phase)
+            || !['eligible', 'visible'].includes(record.fallbackStatus)) return null;
+        record.fallbackStatus = 'declined';
+        record.updatedAt = iso(now());
+        record.revision += 1;
+        clearFallbackTimer(record.searchId);
+        return envelope(record, { type: 'country_fallback_ack', action });
+    };
+
     return {
-        begin, requeue, markOffer, cancel, terminate, rebind,
+        begin, requeue, markOffer, cancel, terminate, rebind, replace, recordFallbackAction,
         getByConnection: (connectionId) => byConnection.get(connectionId) || null,
         getByUser: (userId) => byUser.get(userId) || null,
         envelope,

@@ -36,6 +36,12 @@ const { createPresenceService } = require('./utils/presenceService');
 const { onUserRuntimeTermination } = require('./utils/userRuntimeTermination');
 const { rebindTransientParticipant, resolveTransientSnapshot } = require('./utils/transientRecovery');
 const { createSearchLifecycle } = require('./utils/searchLifecycle');
+const {
+    assertMatchScopeTopology,
+    getFallbackDelayMs,
+    matchScopesCapability,
+    resolveCanonicalMatchScope
+} = require('./utils/matchScope');
 logger.installSafeConsole();
 
 // Global State (Only Transients)
@@ -598,7 +604,8 @@ const recentRooms = new Map();
 // Helpers
 const REVISION_EVENTS = new Set([
     'queued', 'match_offer', 'match_offer_peer_accepted', 'match_offer_waiting',
-    'match_offer_closed', 'search_phase', 'queue_left', 'matched', 'ended', 'presence_update', 'friend_refresh'
+    'match_offer_closed', 'search_phase', 'queue_left', 'matched', 'ended', 'presence_update', 'friend_refresh',
+    'country_fallback_available', 'country_fallback_ack', 'match_scope_change_failed'
 ]);
 const sendJson = (ws, data) => {
     const lease = recoveryRegistry.getByConnection(ws?.clientId);
@@ -615,12 +622,35 @@ const sendJson = (ws, data) => {
 };
 
 const searchLifecycle = createSearchLifecycle({
+    fallbackDelayMs: getFallbackDelayMs(process.env),
     onPhase: (record, event) => {
         waitingQueue = waitingQueue.map((item) => item.searchId === record.searchId
             ? { ...item, phase: record.phase, searchRevision: record.revision }
             : item);
         const client = activeClients.get(record.connectionId);
         if (client?.ws?.readyState === WebSocket.OPEN) sendJson(client.ws, event);
+    },
+    onFallback: (record, event) => {
+        waitingQueue = waitingQueue.map((item) => item.searchId === record.searchId
+            ? { ...item, fallbackStatus: record.fallbackStatus, searchRevision: record.revision }
+            : item);
+        const client = activeClients.get(record.connectionId);
+        if (client?.ws?.readyState === WebSocket.OPEN) {
+            sendJson(client.ws, event);
+            trackBehaviorEvent({
+                eventName: 'match_country_fallback_shown',
+                userId: client.dbUserId,
+                clientId: record.connectionId,
+                deviceId: client.deviceId || null,
+                platform: client.platform || null,
+                metadata: {
+                    search_id: record.searchId,
+                    effective_scope: record.effectiveMatchScope,
+                    country_code: record.country?.code || null,
+                    queue_attempt: record.queueAttempt
+                }
+            });
+        }
     }
 });
 
@@ -1305,8 +1335,8 @@ const createRoom = (roomId, conversationId, userA, userB, matchId = null, trigge
     userRoomMap.set(userA.clientId, roomId);
     userRoomMap.set(userB.clientId, roomId);
 
-    sendJson(userA.ws, { type: 'matched', roomId, searchId: userA.searchId, queueAttempt: userA.queueAttempt, searchRevision: userA.searchRevision, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
-    sendJson(userB.ws, { type: 'matched', roomId, searchId: userB.searchId, queueAttempt: userB.queueAttempt, searchRevision: userB.searchRevision, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
+    sendJson(userA.ws, { type: 'matched', roomId, searchId: userA.searchId, queueAttempt: userA.queueAttempt, searchRevision: userA.searchRevision, effectiveMatchScope: userA.effectiveMatchScope, country: userA.country, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
+    sendJson(userB.ws, { type: 'matched', roomId, searchId: userB.searchId, queueAttempt: userB.queueAttempt, searchRevision: userB.searchRevision, effectiveMatchScope: userB.effectiveMatchScope, country: userB.country, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
 
     trackBehaviorEvent({
         eventName: 'chat_started',
@@ -1318,7 +1348,10 @@ const createRoom = (roomId, conversationId, userA, userB, matchId = null, trigge
         conversationId,
         metadata: {
             peer_user_id: userB.dbUserId || null,
-            trigger
+            trigger,
+            effective_scope: userA.effectiveMatchScope,
+            country_code: userA.country?.code || null,
+            search_id: userA.searchId
         }
     });
     trackBehaviorEvent({
@@ -1331,7 +1364,10 @@ const createRoom = (roomId, conversationId, userA, userB, matchId = null, trigge
         conversationId,
         metadata: {
             peer_user_id: userA.dbUserId || null,
-            trigger
+            trigger,
+            effective_scope: userB.effectiveMatchScope,
+            country_code: userB.country?.code || null,
+            search_id: userB.searchId
         }
     });
 };
@@ -1443,7 +1479,9 @@ const finalizePendingMatchIfReady = async (matchId, options = {}) => {
             platform: live.platform || null,
             searchId: participant.searchId,
             queueAttempt: participant.queueAttempt,
-            searchRevision: participant.searchRevision
+            searchRevision: participant.searchRevision,
+            effectiveMatchScope: participant.effectiveMatchScope,
+            country: participant.country
         };
     }).filter(Boolean);
 
@@ -1489,6 +1527,8 @@ const createPendingMatch = (userA, userB) => {
                 searchId: userAOffer.searchId,
                 queueAttempt: userAOffer.queueAttempt,
                 searchRevision: userAOffer.searchRevision,
+                effectiveMatchScope: userAOffer.effectiveMatchScope,
+                country: userAOffer.country,
                 decision: 'pending'
             },
             {
@@ -1500,6 +1540,8 @@ const createPendingMatch = (userA, userB) => {
                 searchId: userBOffer.searchId,
                 queueAttempt: userBOffer.queueAttempt,
                 searchRevision: userBOffer.searchRevision,
+                effectiveMatchScope: userBOffer.effectiveMatchScope,
+                country: userBOffer.country,
                 decision: 'pending'
             }
         ],
@@ -1522,6 +1564,8 @@ const createPendingMatch = (userA, userB) => {
             searchId: participant.searchId,
             queueAttempt: participant.queueAttempt,
             searchRevision: participant.searchRevision,
+            effectiveMatchScope: participant.effectiveMatchScope,
+            country: participant.country,
             serverNow: new Date().toISOString(),
             peerNickname: peer.nickname,
             peerUsername: peer.username,
@@ -1540,7 +1584,10 @@ const createPendingMatch = (userA, userB) => {
                 peer_user_id: peer.dbUserId || null,
                 timeout_ms: MATCH_CONFIRM_TIMEOUT_MS,
                 search_id: participant.searchId,
-                queue_attempt: participant.queueAttempt
+                queue_attempt: participant.queueAttempt,
+                effective_scope: participant.effectiveMatchScope,
+                country_code: participant.country?.code || null,
+                wait_ms: Math.max(0, Date.now() - new Date(searchLifecycle.getByConnection(participant.clientId)?.queuedAt || Date.now()).getTime())
             }
         });
     });
@@ -1650,27 +1697,82 @@ const joinQueue = async (ws, options = {}) => {
         return sendError(ws, 'NO_NICKNAME');
     }
 
+    let scopeContext = null;
+    if (!options.requeue) {
+        try {
+            scopeContext = await resolveCanonicalMatchScope({
+                pool,
+                userId: clientData.dbUserId,
+                requestedScope: options.scope || 'GLOBAL',
+                locale: resolveWsLang(ws)
+            });
+        } catch (error) {
+            console.warn('match scope resolution failed', { code: error?.code || 'MATCH_SCOPE_LOOKUP_FAILED' });
+            return sendError(ws, 'SERVER_ERROR');
+        }
+        if (!scopeContext.ok) {
+            return sendJson(ws, {
+                type: options.replaceFrom ? 'match_scope_change_failed' : 'search_error',
+                protocolVersion: 1,
+                searchId: options.searchId || null,
+                commandId: options.commandId || null,
+                errorCode: scopeContext.code,
+                code: scopeContext.code,
+                retryable: false,
+                requestedScope: scopeContext.requestedScope,
+                serverNow: new Date().toISOString()
+            });
+        }
+    }
+
     let lifecycleResult;
     if (options.requeue) {
         const requeued = searchLifecycle.requeue({ connectionId: ws.clientId });
         if (!requeued) return sendError(ws, 'SEARCH_NOT_ACTIVE');
         lifecycleResult = { kind: 'accepted', ...requeued };
+    } else if (options.replaceFrom) {
+        lifecycleResult = searchLifecycle.replace({
+            userId: clientData.dbUserId,
+            connectionId: ws.clientId,
+            fromSearchId: options.replaceFrom,
+            searchId: options.searchId,
+            commandId: options.commandId,
+            scopeContext
+        });
     } else {
         lifecycleResult = searchLifecycle.begin({
             userId: clientData.dbUserId,
             connectionId: ws.clientId,
             searchId: options.searchId,
-            commandId: options.commandId
+            commandId: options.commandId,
+            scopeContext
         });
     }
     sendJson(ws, lifecycleResult.event);
-    if (lifecycleResult.kind === 'conflict' || lifecycleResult.kind === 'replay') return lifecycleResult;
+    if (lifecycleResult.kind === 'conflict' || lifecycleResult.kind === 'replay' || lifecycleResult.kind === 'stale') return lifecycleResult;
     const searchRecord = lifecycleResult.record;
     const isCurrentQueueSearch = () => {
         const current = searchLifecycle.getByConnection(ws.clientId);
         return current === searchRecord && ['queued', 'extended'].includes(current.phase);
     };
 
+    if (!options.requeue) {
+        trackBehaviorEvent({
+            eventName: 'match_scope_selected',
+            userId: clientData.dbUserId,
+            clientId: ws.clientId,
+            deviceId: clientData.deviceId || null,
+            platform: clientData.platform || null,
+            metadata: {
+                event_version: 1,
+                search_id: searchRecord.searchId,
+                requested_scope: searchRecord.requestedScope,
+                effective_scope: searchRecord.effectiveMatchScope,
+                country_code: searchRecord.country?.code || null,
+                trigger
+            }
+        });
+    }
     trackBehaviorEvent({
         eventName: 'match_search_started',
         userId: clientData.dbUserId,
@@ -1680,7 +1782,8 @@ const joinQueue = async (ws, options = {}) => {
         metadata: {
             trigger,
             search_id: searchRecord.searchId,
-            queue_attempt: searchRecord.queueAttempt
+            queue_attempt: searchRecord.queueAttempt,
+            requested_scope: searchRecord.requestedScope
         }
     });
     trackBehaviorEvent({
@@ -1692,7 +1795,9 @@ const joinQueue = async (ws, options = {}) => {
         metadata: {
             trigger,
             search_id: searchRecord.searchId,
-            queue_attempt: searchRecord.queueAttempt
+            queue_attempt: searchRecord.queueAttempt,
+            effective_scope: searchRecord.effectiveMatchScope,
+            country_code: searchRecord.country?.code || null
         }
     });
 
@@ -1740,7 +1845,14 @@ const joinQueue = async (ws, options = {}) => {
         searchStartedAt: searchRecord.searchStartedAt,
         queuedAt: searchRecord.queuedAt,
         phase: searchRecord.phase,
-        searchRevision: searchRecord.revision
+        searchRevision: searchRecord.revision,
+        requestedScope: searchRecord.requestedScope,
+        effectiveMatchScope: searchRecord.effectiveMatchScope,
+        country: searchRecord.country,
+        queueKey: searchRecord.queueKey,
+        scopePolicyVersion: searchRecord.scopePolicyVersion,
+        fallbackEligibleAt: searchRecord.fallbackEligibleAt,
+        fallbackStatus: searchRecord.fallbackStatus
     };
 
     if (waitingQueue.length > 0) {
@@ -1749,7 +1861,7 @@ const joinQueue = async (ws, options = {}) => {
 
         for (let i = 0; i < waitingQueue.length; i++) {
             const p = waitingQueue[i];
-            if (!p || p.clientId === me.clientId) continue;
+            if (!p || p.clientId === me.clientId || p.queueKey !== me.queueKey) continue;
 
             const blocked = await checkBlock(me.dbUserId, p.dbUserId);
             if (!isCurrentQueueSearch()) return lifecycleResult;
@@ -2092,9 +2204,33 @@ wss.on('connection', (ws, req) => {
                 }
             });
 
-            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1', 'matchSearchLifecycleV1'];
+            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1', 'matchSearchLifecycleV1', 'matchScopesV1'];
             if (realtimeConfig.recoveryEnabled) capabilities.push('recovery-v1');
-            sendJson(ws, { type: 'welcome', nickname: dbUser.nickname, lang: requestedLang, capabilities });
+            let countryState = null;
+            try {
+                countryState = await resolveCanonicalMatchScope({ pool, userId: dbUser.id, requestedScope: 'COUNTRY', locale: requestedLang });
+            } catch {
+                countryState = { ok: false, code: 'MATCH_COUNTRY_UNAVAILABLE' };
+            }
+            sendJson(ws, {
+                type: 'welcome',
+                nickname: dbUser.nickname,
+                lang: requestedLang,
+                capabilities,
+                matchScopes: matchScopesCapability(countryState)
+            });
+            trackBehaviorEvent({
+                eventName: 'match_scope_selector_seen',
+                userId: dbUser.id,
+                clientId: ws.clientId,
+                deviceId: deviceId || 'unknown',
+                platform: context.platform,
+                metadata: {
+                    event_version: 1,
+                    country_available: Boolean(countryState?.ok),
+                    default_scope: 'GLOBAL'
+                }
+            });
             let unread = { friends: [], system: 0, revision: 0 };
             try {
                 unread = await loadUnreadSnapshot(dbUser.id);
@@ -2147,8 +2283,80 @@ wss.on('connection', (ws, req) => {
                 await joinQueue(ws, {
                     trigger: 'manual',
                     searchId: data.searchId,
-                    commandId: data.commandId
+                    commandId: data.commandId,
+                    scope: data.scope || 'GLOBAL'
                 });
+                break;
+
+            case 'changeMatchScope':
+                trackBehaviorEvent({
+                    eventName: 'match_scope_change_started',
+                    userId: clientData.dbUserId,
+                    clientId: ws.clientId,
+                    deviceId: clientData.deviceId || null,
+                    platform: clientData.platform || null,
+                    metadata: { search_id: data.fromSearchId, requested_scope: data.scope }
+                });
+                {
+                    const changed = await joinQueue(ws, {
+                        trigger: 'scope_change',
+                        replaceFrom: data.fromSearchId,
+                        searchId: data.searchId,
+                        commandId: data.commandId,
+                        scope: data.scope
+                    });
+                    trackBehaviorEvent({
+                        eventName: 'match_scope_change_result',
+                        userId: clientData.dbUserId,
+                        clientId: ws.clientId,
+                        deviceId: clientData.deviceId || null,
+                        platform: clientData.platform || null,
+                        metadata: {
+                            search_id: data.searchId,
+                            requested_scope: data.scope,
+                            result: changed?.kind || 'rejected'
+                        }
+                    });
+                    if (changed?.kind === 'accepted' && changed.previous?.fallbackStatus === 'eligible') {
+                        trackBehaviorEvent({
+                            eventName: 'match_country_fallback_action',
+                            userId: clientData.dbUserId,
+                            clientId: ws.clientId,
+                            deviceId: clientData.deviceId || null,
+                            platform: clientData.platform || null,
+                            metadata: {
+                                event_version: 1,
+                                search_id: data.fromSearchId,
+                                action: 'global',
+                                effective_scope: 'COUNTRY',
+                                country_code: changed.previous.country?.code || null
+                            }
+                        });
+                    }
+                }
+                break;
+
+            case 'countryFallbackAction':
+                {
+                    const fallbackEvent = searchLifecycle.recordFallbackAction({
+                        connectionId: ws.clientId,
+                        searchId: data.searchId,
+                        action: data.action
+                    });
+                    if (!fallbackEvent) {
+                        sendError(ws, 'STALE_SEARCH');
+                        break;
+                    }
+                    sendJson(ws, fallbackEvent);
+                    trackBehaviorEvent({
+                        eventName: 'match_country_fallback_action',
+                        userId: clientData.dbUserId,
+                        clientId: ws.clientId,
+                        deviceId: clientData.deviceId || null,
+                        platform: clientData.platform || null,
+                        metadata: { event_version: 1, search_id: data.searchId, action: data.action, effective_scope: 'COUNTRY' }
+                    });
+                }
                 break;
 
             case 'matchDecision':
@@ -3125,6 +3333,7 @@ if (fs.existsSync(frontendIndexPath)) {
 
 const startServer = async () => {
     try {
+        assertMatchScopeTopology(realtimeConfig);
         await ensureTables();
         startNotificationScheduler();
         server.listen(port, () => {

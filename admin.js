@@ -2123,6 +2123,74 @@ router.get('/analytics/overview', async (req, res) => {
     }
 });
 
+router.get('/analytics/match-scopes', async (req, res) => {
+    const window = resolveAnalyticsWindow(req.query || {});
+    const minimumCountryUsers = 20;
+    try {
+        const [scopeResult, countryResult] = await Promise.all([
+            pool.query(
+                `SELECT
+                    COALESCE(NULLIF(metadata->>'effective_scope', ''), NULLIF(metadata->>'requested_scope', ''), 'UNKNOWN') AS scope,
+                    COUNT(*) FILTER (WHERE event_name = 'match_search_started')::bigint AS searches,
+                    COUNT(*) FILTER (WHERE event_name = 'match_offer_received')::bigint AS offers,
+                    COUNT(*) FILTER (WHERE event_name = 'chat_started')::bigint AS chats_started,
+                    COUNT(*) FILTER (WHERE event_name = 'match_country_fallback_shown')::bigint AS fallback_shown,
+                    COUNT(*) FILTER (WHERE event_name = 'match_country_fallback_action' AND metadata->>'action' = 'global')::bigint AS fallback_global,
+                    COUNT(*) FILTER (WHERE event_name = 'match_country_fallback_action' AND metadata->>'action' = 'continue')::bigint AS fallback_continued,
+                    percentile_cont(0.5) WITHIN GROUP (
+                        ORDER BY NULLIF(metadata->>'wait_ms', '')::numeric
+                    ) FILTER (WHERE event_name = 'match_offer_received') AS median_wait_ms
+                 FROM behavior_events
+                 WHERE created_at >= $1 AND created_at < $2
+                   AND event_name IN (
+                     'match_search_started', 'match_offer_received', 'chat_started',
+                     'match_country_fallback_shown', 'match_country_fallback_action'
+                   )
+                 GROUP BY 1
+                 ORDER BY 1`,
+                [window.from, window.to]
+            ),
+            pool.query(
+                `SELECT
+                    metadata->>'country_code' AS country_code,
+                    COUNT(DISTINCT user_id)::bigint AS unique_users,
+                    COUNT(*) FILTER (WHERE event_name = 'match_search_started')::bigint AS searches,
+                    COUNT(*) FILTER (WHERE event_name = 'match_offer_received')::bigint AS offers
+                 FROM behavior_events
+                 WHERE created_at >= $1 AND created_at < $2
+                   AND metadata->>'effective_scope' = 'COUNTRY'
+                   AND metadata->>'country_code' ~ '^[A-Z]{2}$'
+                 GROUP BY 1
+                 HAVING COUNT(DISTINCT user_id) >= $3
+                 ORDER BY 1`,
+                [window.from, window.to, minimumCountryUsers]
+            )
+        ]);
+        return res.json({
+            schemaVersion: 1,
+            source: 'behavior_events',
+            generatedAt: new Date().toISOString(),
+            window: {
+                from: window.from.toISOString(),
+                to: window.to.toISOString(),
+                hours: window.hours
+            },
+            privacy: {
+                countryMinimumUniqueUsers: minimumCountryUsers,
+                lowVolumeCountries: 'suppressed',
+                userDrilldown: false
+            },
+            scopes: scopeResult.rows || [],
+            countryCohorts: countryResult.rows || []
+        });
+    } catch {
+        return res.status(503).json({
+            error: 'Match scope analytics are temporarily unavailable.',
+            errorCode: 'MATCH_SCOPE_ANALYTICS_UNAVAILABLE'
+        });
+    }
+});
+
 router.get('/analytics/funnel', async (req, res) => {
     const window = resolveAnalyticsWindow(req.query || {});
     const platform = normalizeAnalyticsPlatform(req.query.platform);
