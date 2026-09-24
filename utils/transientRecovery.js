@@ -9,9 +9,11 @@ const rebindTransientParticipant = ({
     if (matchId) {
         const pending = pendingMatches.get(matchId);
         if (pending) {
-            pending.users = pending.users.map((participant) => participant.clientId === previousConnectionId
+            const reboundParticipants = pending.users.map((participant) => participant.clientId === previousConnectionId
                 ? { ...participant, clientId: connectionId, ws }
                 : participant);
+            pending.users = reboundParticipants;
+            pending.participants = reboundParticipants;
         }
         userPendingMatchMap.delete(previousConnectionId);
         userPendingMatchMap.set(connectionId, matchId);
@@ -67,16 +69,20 @@ const resolveTransientSnapshot = ({
             protocolVersion: 1,
             searchId: participant?.searchId || null,
             queueAttempt: participant?.queueAttempt || 1,
-            phase: 'offer',
+            phase: pending.status || 'offered',
+            matchRevision: pending.revision || 1,
+            matchStatus: pending.status || 'offered',
             searchRevision: participant?.searchRevision || 1,
             effectiveMatchScope: participant?.effectiveMatchScope || 'GLOBAL',
             country: participant?.country || null,
             decision: participant?.decision || 'pending',
+            decisionCommandId: participant?.decisionCommandId || null,
+            peerAccepted: peer?.decision === 'accepted',
+            offeredAt: pending.offeredAt,
             autoAcceptAt: pending.autoAcceptAt,
+            serverNow: new Date().toISOString(),
             timeoutMs: pending.timeoutMs,
-            peerNickname: peer?.nickname || null,
-            peerUsername: peer?.username || null,
-            peerId: peer?.dbUserId || null
+            peerPublicLabel: String(peer?.username || peer?.nickname || '').trim().slice(0, 40) || 'Anonymous'
         };
     }
     const roomId = userRoomMap.get(connectionId);

@@ -752,6 +752,17 @@ const migrations = Object.freeze([
       CREATE INDEX IF NOT EXISTS idx_support_reports_record_status_updated
         ON support_reports(record_status, updated_at DESC);
     `
+  }),
+  Object.freeze({
+    version: '004',
+    name: 'wave09_match_conversation_identity',
+    sql: `
+      ALTER TABLE conversations
+        ADD COLUMN IF NOT EXISTS match_id UUID;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_match_id_unique
+        ON conversations(match_id)
+        WHERE match_id IS NOT NULL;
+    `
   })
 ]);
 

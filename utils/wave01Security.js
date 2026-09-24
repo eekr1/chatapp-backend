@@ -54,7 +54,18 @@ const EVENT_SCHEMAS = {
         commandId: field(isUuid),
         action: field((value) => value === 'continue' || value === 'dismiss')
     },
-    matchDecision: { matchId: field(isUuid), decision: field((value) => value === 'accept' || value === 'reject') },
+    matchDecision: {
+        matchId: field(isUuid),
+        decision: field((value) => value === 'accept' || value === 'pass' || value === 'reject'),
+        protocolVersion: optional((value) => value === 1),
+        searchId: optional(isUuid),
+        commandId: optional(isUuid)
+    },
+    matchOfferTelemetry: {
+        matchId: field(isUuid),
+        searchId: field(isUuid),
+        eventName: field((value) => value === 'match_offer_rendered')
+    },
     message: { roomId: field(isUuid), text: field((value) => isString(value, { min: 1, max: CHAT_MESSAGE_MAX_LENGTH, trim: true })) },
     direct_message: {
         targetUserId: field(isUuid),
@@ -107,6 +118,11 @@ const validateWsEvent = (payload) => {
         const lifecycleFields = ['protocolVersion', 'searchId', 'commandId'];
         const count = lifecycleFields.filter((name) => Object.prototype.hasOwnProperty.call(payload, name)).length;
         if (count !== 0 && count !== lifecycleFields.length) return { ok: false, code: 'INVALID_INPUT' };
+    }
+    if (payload.type === 'matchDecision') {
+        const identityFields = ['protocolVersion', 'searchId', 'commandId'];
+        const count = identityFields.filter((name) => Object.prototype.hasOwnProperty.call(payload, name)).length;
+        if (count !== 0 && count !== identityFields.length) return { ok: false, code: 'INVALID_INPUT' };
     }
     return { ok: true, event: payload };
 };

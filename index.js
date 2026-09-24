@@ -42,6 +42,14 @@ const {
     matchScopesCapability,
     resolveCanonicalMatchScope
 } = require('./utils/matchScope');
+const {
+    applyDeadline,
+    applyDecision,
+    closePendingMatch,
+    completePendingMatch,
+    createPendingMatchRecord,
+    markOfferRendered
+} = require('./utils/pendingMatch');
 logger.installSafeConsole();
 
 // Global State (Only Transients)
@@ -604,7 +612,7 @@ const recentRooms = new Map();
 // Helpers
 const REVISION_EVENTS = new Set([
     'queued', 'match_offer', 'match_offer_peer_accepted', 'match_offer_waiting',
-    'match_offer_closed', 'search_phase', 'queue_left', 'matched', 'ended', 'presence_update', 'friend_refresh',
+    'match_decision_result', 'match_finalizing', 'match_offer_closed', 'search_phase', 'queue_left', 'matched', 'ended', 'presence_update', 'friend_refresh',
     'country_fallback_available', 'country_fallback_ack', 'match_scope_change_failed'
 ]);
 const sendJson = (ws, data) => {
@@ -1312,6 +1320,19 @@ async function logReport(reporterId, reportedId, conversationId, reason) {
     }
 }
 
+async function createConversationForMatch(matchId, userAId, userBId) {
+    const newId = uuidv4();
+    const result = await pool.query(
+        `INSERT INTO conversations (id, user_a_id, user_b_id, match_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (match_id) WHERE match_id IS NOT NULL
+         DO UPDATE SET match_id = EXCLUDED.match_id
+         RETURNING id`,
+        [newId, userAId, userBId, matchId]
+    );
+    return result.rows[0].id;
+}
+
 
 // --- Main Logic ---
 
@@ -1329,14 +1350,15 @@ const createRoom = (roomId, conversationId, userA, userB, matchId = null, trigge
             [userA.clientId]: userA.ws,
             [userB.clientId]: userB.ws
         },
-        conversationId: conversationId
+        conversationId: conversationId,
+        matchId
     });
 
     userRoomMap.set(userA.clientId, roomId);
     userRoomMap.set(userB.clientId, roomId);
 
-    sendJson(userA.ws, { type: 'matched', roomId, searchId: userA.searchId, queueAttempt: userA.queueAttempt, searchRevision: userA.searchRevision, effectiveMatchScope: userA.effectiveMatchScope, country: userA.country, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
-    sendJson(userB.ws, { type: 'matched', roomId, searchId: userB.searchId, queueAttempt: userB.queueAttempt, searchRevision: userB.searchRevision, effectiveMatchScope: userB.effectiveMatchScope, country: userB.country, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
+    sendJson(userA.ws, { type: 'matched', matchId, roomId, searchId: userA.searchId, queueAttempt: userA.queueAttempt, searchRevision: userA.searchRevision, effectiveMatchScope: userA.effectiveMatchScope, country: userA.country, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
+    sendJson(userB.ws, { type: 'matched', matchId, roomId, searchId: userB.searchId, queueAttempt: userB.queueAttempt, searchRevision: userB.searchRevision, effectiveMatchScope: userB.effectiveMatchScope, country: userB.country, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
 
     trackBehaviorEvent({
         eventName: 'chat_started',
@@ -1388,6 +1410,24 @@ const getPendingMatchForClient = (clientId) => {
     return { matchId, pending, participantIndex };
 };
 
+const pendingEvent = (pending, participant, type, extra = {}) => ({
+    type,
+    protocolVersion: 1,
+    matchId: pending.id,
+    matchRevision: pending.revision,
+    matchStatus: pending.status,
+    searchId: participant.searchId,
+    queueAttempt: participant.queueAttempt,
+    searchRevision: participant.searchRevision,
+    effectiveMatchScope: participant.effectiveMatchScope,
+    country: participant.country,
+    offeredAt: pending.offeredAt,
+    autoAcceptAt: pending.autoAcceptAt,
+    timingPolicyVersion: 'pending-match-timing-v1',
+    serverNow: new Date().toISOString(),
+    ...extra
+});
+
 const clearPendingMatchById = (matchId) => {
     const pending = pendingMatches.get(matchId);
     if (!pending) return null;
@@ -1417,8 +1457,15 @@ const cancelPendingMatchById = (
         requeuePeers = true
     } = {}
 ) => {
-    const pending = clearPendingMatchById(matchId);
+    const pending = pendingMatches.get(matchId);
     if (!pending) return false;
+    const transition = pending.status === 'closed'
+        ? { kind: 'closed' }
+        : closePendingMatch(pending, actorReason || peerReason || 'cancelled', {
+            allowFinalizing: pending.status === 'finalizing' && !pending.finalizationPromise
+        });
+    if (transition.kind !== 'closed') return false;
+    clearPendingMatchById(matchId);
 
     pending.users.forEach((participant) => {
         const ws = activeClients.get(participant.clientId)?.ws || participant.ws;
@@ -1428,12 +1475,20 @@ const cancelPendingMatchById = (
         const reason = isActor ? actorReason : peerReason;
         if (!reason) return;
 
-        sendJson(ws, {
-            type: 'match_offer_closed',
-            reason,
-            searchId: participant.searchId || null,
-            queueAttempt: participant.queueAttempt || null,
-            searchRevision: participant.searchRevision || null
+        sendJson(ws, pendingEvent(pending, participant, 'match_offer_closed', { reason }));
+        trackBehaviorEvent({
+            eventName: 'match_offer_closed',
+            userId: participant.dbUserId,
+            clientId: participant.clientId,
+            deviceId: activeClients.get(participant.clientId)?.deviceId || null,
+            platform: activeClients.get(participant.clientId)?.platform || null,
+            matchId,
+            metadata: {
+                event_version: 1,
+                search_id: participant.searchId,
+                effective_scope: participant.effectiveMatchScope,
+                reason
+            }
         });
     });
 
@@ -1452,72 +1507,118 @@ const cancelPendingMatchForClient = (clientId, options = {}) => {
     return cancelPendingMatchById(context.matchId, { actorClientId: clientId, ...options });
 };
 
-const finalizePendingMatchIfReady = async (matchId, options = {}) => {
+const finalizePendingMatchIfReady = (matchId, options = {}) => {
     const trigger = String(options?.trigger || 'manual').trim() || 'manual';
     const pending = pendingMatches.get(matchId);
-    if (!pending || pending.finalized) return false;
-    if (!pending.users.every((u) => u.decision === 'accepted')) return false;
+    if (!pending || pending.status !== 'finalizing') return Promise.resolve(false);
+    if (pending.finalizationPromise) return pending.finalizationPromise;
 
     const waitingForRecovery = pending.users.some((participant) => {
         const live = activeClients.get(participant.clientId);
         if (live?.ws?.readyState === WebSocket.OPEN) return false;
         return Boolean(recoveryRegistry.getByConnection(participant.clientId)?.detached);
     });
-    if (waitingForRecovery) return false;
+    if (waitingForRecovery) return Promise.resolve(false);
 
-    pending.finalized = true;
-    const participants = pending.users.map((participant) => {
-        const live = activeClients.get(participant.clientId);
-        if (!live?.ws || live.ws.readyState !== WebSocket.OPEN) return null;
-        return {
-            clientId: participant.clientId,
-            ws: live.ws,
-            nickname: live.nickname || participant.nickname,
-            username: live.username || participant.username,
-            dbUserId: live.dbUserId || participant.dbUserId,
-            deviceId: live.deviceId || null,
-            platform: live.platform || null,
-            searchId: participant.searchId,
-            queueAttempt: participant.queueAttempt,
-            searchRevision: participant.searchRevision,
-            effectiveMatchScope: participant.effectiveMatchScope,
-            country: participant.country
-        };
-    }).filter(Boolean);
+    pending.finalizationPromise = (async () => {
+        const participants = pending.users.map((participant) => {
+            const live = activeClients.get(participant.clientId);
+            if (!live?.ws || live.ws.readyState !== WebSocket.OPEN) return null;
+            return {
+                clientId: participant.clientId,
+                ws: live.ws,
+                nickname: live.nickname || participant.nickname,
+                username: live.username || participant.username,
+                dbUserId: live.dbUserId || participant.dbUserId,
+                deviceId: live.deviceId || null,
+                platform: live.platform || null,
+                searchId: participant.searchId,
+                queueAttempt: participant.queueAttempt,
+                searchRevision: participant.searchRevision,
+                effectiveMatchScope: participant.effectiveMatchScope,
+                country: participant.country
+            };
+        }).filter(Boolean);
 
-    clearPendingMatchById(matchId);
+        if (participants.length !== 2) {
+            closePendingMatch(pending, 'participant_unavailable', { allowFinalizing: true });
+            pending.users.forEach((participant) => {
+                const live = activeClients.get(participant.clientId);
+                if (live?.ws?.readyState === WebSocket.OPEN) {
+                    sendJson(live.ws, pendingEvent(pending, participant, 'match_offer_closed', { reason: 'peer_unavailable' }));
+                }
+            });
+            clearPendingMatchById(matchId);
+            participants.forEach((participant) => queueClientForRematch(participant.clientId, 'match_finalize_retry'));
+            return false;
+        }
 
-    if (participants.length !== 2) {
-        participants.forEach((participant) => queueClientForRematch(participant.clientId, 'match_finalize_retry'));
-        return false;
-    }
-
-    let conversationId = null;
-    try {
-        conversationId = await createConversation(participants[0].dbUserId, participants[1].dbUserId);
-    } catch (e) {
-        participants.forEach((participant) => {
-            sendError(participant.ws, 'DB_ERROR');
-            queueClientForRematch(participant.clientId, 'conversation_error_requeue');
+        pending.users.forEach((participant) => {
+            const client = activeClients.get(participant.clientId);
+            if (client?.ws?.readyState === WebSocket.OPEN) {
+                sendJson(client.ws, pendingEvent(pending, participant, 'match_finalizing'));
+            }
         });
-        return false;
-    }
+        trackBehaviorEvent({
+            eventName: 'match_finalization_started',
+            matchId,
+            metadata: { event_version: 1, trigger }
+        });
 
-    const roomId = uuidv4();
-    createRoom(roomId, conversationId, participants[0], participants[1], matchId, trigger);
-    participants.forEach((participant) => searchLifecycle.terminate(participant.clientId, 'matched'));
-    return true;
+        let conversationId = null;
+        try {
+            conversationId = await createConversationForMatch(matchId, participants[0].dbUserId, participants[1].dbUserId);
+        } catch (e) {
+            closePendingMatch(pending, 'conversation_error', { allowFinalizing: true });
+            clearPendingMatchById(matchId);
+            participants.forEach((participant) => {
+                sendJson(participant.ws, pendingEvent(pending, participant, 'match_offer_closed', { reason: 'conversation_error' }));
+                queueClientForRematch(participant.clientId, 'conversation_error_requeue');
+            });
+            trackBehaviorEvent({
+                eventName: 'match_finalization_result',
+                matchId,
+                metadata: { event_version: 1, trigger, result: 'conversation_error' }
+            });
+            return false;
+        }
+
+        completePendingMatch(pending, { conversationId });
+        const roomId = uuidv4();
+        createRoom(roomId, conversationId, participants[0], participants[1], matchId, trigger);
+        clearPendingMatchById(matchId);
+        participants.forEach((participant) => searchLifecycle.terminate(participant.clientId, 'matched'));
+        trackBehaviorEvent({
+            eventName: 'match_finalization_result',
+            matchId,
+            conversationId,
+            metadata: { event_version: 1, trigger, result: 'completed' }
+        });
+        return true;
+    })();
+    return pending.finalizationPromise;
 };
 
 const createPendingMatch = (userA, userB) => {
     const matchId = uuidv4();
-    const autoAcceptAt = Date.now() + MATCH_CONFIRM_TIMEOUT_MS;
+    const offeredAt = Date.now();
+    const autoAcceptAt = offeredAt + MATCH_CONFIRM_TIMEOUT_MS;
     const userAOffer = searchLifecycle.markOffer(userA.clientId);
     const userBOffer = searchLifecycle.markOffer(userB.clientId);
-    if (!userAOffer || !userBOffer) return null;
-    const pending = {
+    if (!userAOffer || !userBOffer) {
+        [[userA, userAOffer], [userB, userBOffer]].forEach(([user, offer]) => {
+            if (!offer) return;
+            const restored = searchLifecycle.requeue({ connectionId: user.clientId });
+            if (restored && user.ws?.readyState === WebSocket.OPEN) sendJson(user.ws, restored.event);
+        });
+        return null;
+    }
+    const pending = createPendingMatchRecord({
         id: matchId,
-        users: [
+        offeredAt,
+        autoAcceptAt,
+        timeoutMs: MATCH_CONFIRM_TIMEOUT_MS,
+        participants: [
             {
                 clientId: userA.clientId,
                 ws: userA.ws,
@@ -1528,8 +1629,7 @@ const createPendingMatch = (userA, userB) => {
                 queueAttempt: userAOffer.queueAttempt,
                 searchRevision: userAOffer.searchRevision,
                 effectiveMatchScope: userAOffer.effectiveMatchScope,
-                country: userAOffer.country,
-                decision: 'pending'
+                country: userAOffer.country
             },
             {
                 clientId: userB.clientId,
@@ -1541,15 +1641,10 @@ const createPendingMatch = (userA, userB) => {
                 queueAttempt: userBOffer.queueAttempt,
                 searchRevision: userBOffer.searchRevision,
                 effectiveMatchScope: userBOffer.effectiveMatchScope,
-                country: userBOffer.country,
-                decision: 'pending'
+                country: userBOffer.country
             }
-        ],
-        autoAcceptAt,
-        timeoutMs: MATCH_CONFIRM_TIMEOUT_MS,
-        timer: null,
-        finalized: false
-    };
+        ]
+    });
 
     pendingMatches.set(matchId, pending);
     pending.users.forEach((participant) => userPendingMatchMap.set(participant.clientId, matchId));
@@ -1557,22 +1652,11 @@ const createPendingMatch = (userA, userB) => {
     pending.users.forEach((participant) => {
         const peer = pending.users.find((u) => u.clientId !== participant.clientId);
         if (!peer || participant.ws.readyState !== WebSocket.OPEN) return;
-        sendJson(participant.ws, {
-            type: 'match_offer',
-            protocolVersion: 1,
-            matchId,
-            searchId: participant.searchId,
-            queueAttempt: participant.queueAttempt,
-            searchRevision: participant.searchRevision,
-            effectiveMatchScope: participant.effectiveMatchScope,
-            country: participant.country,
-            serverNow: new Date().toISOString(),
-            peerNickname: peer.nickname,
-            peerUsername: peer.username,
-            peerId: peer.dbUserId,
-            autoAcceptAt,
+        const peerPublicLabel = String(peer.username || peer.nickname || '').trim().slice(0, 40) || 'Anonymous';
+        sendJson(participant.ws, pendingEvent(pending, participant, 'match_offer', {
+            peerPublicLabel,
             timeoutMs: MATCH_CONFIRM_TIMEOUT_MS
-        });
+        }));
         trackBehaviorEvent({
             eventName: 'match_offer_received',
             userId: participant.dbUserId,
@@ -1581,7 +1665,6 @@ const createPendingMatch = (userA, userB) => {
             platform: activeClients.get(participant.clientId)?.platform || null,
             matchId,
             metadata: {
-                peer_user_id: peer.dbUserId || null,
                 timeout_ms: MATCH_CONFIRM_TIMEOUT_MS,
                 search_id: participant.searchId,
                 queue_attempt: participant.queueAttempt,
@@ -1595,21 +1678,24 @@ const createPendingMatch = (userA, userB) => {
     pending.timer = setTimeout(() => {
         const current = pendingMatches.get(matchId);
         if (!current) return;
-        current.users.forEach((participant) => {
-            if (participant.decision === 'pending') {
-                participant.decision = 'accepted';
-                const live = activeClients.get(participant.clientId);
-                trackBehaviorEvent({
-                    eventName: 'match_auto_accept',
-                    userId: participant.dbUserId,
-                    clientId: participant.clientId,
-                    deviceId: live?.deviceId || null,
-                    platform: live?.platform || null,
-                    matchId,
-                    metadata: {
-                        timeout_ms: MATCH_CONFIRM_TIMEOUT_MS
-                    }
-                });
+        const deadline = applyDeadline(current);
+        deadline.changed.forEach((participant) => {
+            const live = activeClients.get(participant.clientId);
+            trackBehaviorEvent({
+                eventName: 'match_auto_accept_applied',
+                userId: participant.dbUserId,
+                clientId: participant.clientId,
+                deviceId: live?.deviceId || null,
+                platform: live?.platform || null,
+                matchId,
+                metadata: { event_version: 1, timeout_ms: MATCH_CONFIRM_TIMEOUT_MS, search_id: participant.searchId }
+            });
+            if (live?.ws?.readyState === WebSocket.OPEN) {
+                sendJson(live.ws, pendingEvent(current, participant, 'match_decision_result', {
+                    decision: 'accept',
+                    decisionSource: 'auto',
+                    result: 'accepted'
+                }));
             }
         });
         finalizePendingMatchIfReady(matchId, { trigger: 'auto_accept' }).catch((e) => {
@@ -1624,55 +1710,74 @@ const createPendingMatch = (userA, userB) => {
     }, MATCH_CONFIRM_TIMEOUT_MS + 25);
 };
 
-const applyMatchDecision = async (ws, providedMatchId, decision) => {
+const applyMatchDecision = async (ws, providedMatchId, decision, identity = {}) => {
     const context = getPendingMatchForClient(ws.clientId);
-    if (!context) return;
+    if (!context) return sendError(ws, 'STALE_MATCH');
 
     const { matchId, pending, participantIndex } = context;
-    if (providedMatchId && providedMatchId !== matchId) return;
+    if (providedMatchId && providedMatchId !== matchId) {
+        return sendError(ws, 'STALE_MATCH');
+    }
 
     const participant = pending.users[participantIndex];
     if (!participant) return;
 
-    if (decision === 'accept') {
-        participant.decision = 'accepted';
-        const actor = activeClients.get(ws.clientId);
-        trackBehaviorEvent({
-            eventName: 'match_decision_accept',
-            userId: participant.dbUserId,
-            clientId: ws.clientId,
-            deviceId: actor?.deviceId || null,
-            platform: actor?.platform || null,
-            matchId,
-            metadata: {
-                decision: 'accept'
-            }
-        });
-        sendJson(ws, { type: 'match_offer_waiting', searchId: participant.searchId, queueAttempt: participant.queueAttempt, searchRevision: participant.searchRevision });
-        const peer = pending.users.find((u) => u.clientId !== ws.clientId);
-        if (peer && peer.decision === 'pending') {
-            const peerWs = activeClients.get(peer.clientId)?.ws || peer.ws;
-            if (peerWs && peerWs.readyState === WebSocket.OPEN) {
-                sendJson(peerWs, { type: 'match_offer_peer_accepted', searchId: peer.searchId, queueAttempt: peer.queueAttempt, searchRevision: peer.searchRevision });
-            }
-        }
-        await finalizePendingMatchIfReady(matchId, { trigger: 'manual_accept' });
-        return;
-    }
-
-    participant.decision = 'rejected';
     const actor = activeClients.get(ws.clientId);
+    const normalizedDecision = decision === 'reject' ? 'pass' : decision;
+    const commandId = identity.commandId || `legacy:${ws.clientId}:${matchId}:${normalizedDecision}`;
+    const providedSearchId = identity.searchId || participant.searchId;
+    const outcome = applyDecision(pending, {
+        participantId: ws.clientId,
+        decision: normalizedDecision,
+        commandId,
+        searchId: providedSearchId
+    });
+    sendJson(ws, pendingEvent(pending, participant, 'match_decision_result', {
+        commandId,
+        decision: normalizedDecision,
+        result: outcome.kind,
+        decisionSource: 'manual',
+        replayed: Boolean(outcome.replayed)
+    }));
+    if (outcome.replayed || ['stale', 'conflict', 'terminal', 'already_decided'].includes(outcome.kind)) return outcome;
+
     trackBehaviorEvent({
-        eventName: 'match_decision_reject',
+        eventName: 'match_decision_submitted',
         userId: participant.dbUserId,
         clientId: ws.clientId,
         deviceId: actor?.deviceId || null,
         platform: actor?.platform || null,
         matchId,
         metadata: {
-            decision: 'reject'
+            event_version: 1,
+            decision: normalizedDecision,
+            command_id: commandId,
+            search_id: participant.searchId,
+            effective_scope: participant.effectiveMatchScope
         }
     });
+    trackBehaviorEvent({
+        eventName: 'match_decision_result',
+        userId: participant.dbUserId,
+        clientId: ws.clientId,
+        deviceId: actor?.deviceId || null,
+        platform: actor?.platform || null,
+        matchId,
+        metadata: { event_version: 1, decision: normalizedDecision, result: outcome.kind }
+    });
+
+    if (normalizedDecision === 'accept') {
+        const peer = pending.users.find((u) => u.clientId !== ws.clientId);
+        if (peer && peer.decision === 'pending') {
+            const peerWs = activeClients.get(peer.clientId)?.ws || peer.ws;
+            if (peerWs && peerWs.readyState === WebSocket.OPEN) {
+                sendJson(peerWs, pendingEvent(pending, peer, 'match_offer_peer_accepted'));
+            }
+        }
+        if (outcome.kind === 'finalize') await finalizePendingMatchIfReady(matchId, { trigger: 'manual_accept' });
+        return outcome;
+    }
+
     const first = pending.users[0] || null;
     const second = pending.users[1] || null;
     if (first?.dbUserId && second?.dbUserId) {
@@ -1680,11 +1785,12 @@ const applyMatchDecision = async (ws, providedMatchId, decision) => {
     }
     cancelPendingMatchById(matchId, {
         actorClientId: ws.clientId,
-        actorReason: null,
-        peerReason: 'peer_rejected',
+        actorReason: 'self_passed',
+        peerReason: 'peer_passed',
         requeueActor: true,
         requeuePeers: true
     });
+    return outcome;
 };
 
 const joinQueue = async (ws, options = {}) => {
@@ -2164,10 +2270,20 @@ wss.on('connection', (ws, req) => {
                 rebindTransientState(recovery.previousConnectionId, ws.clientId, ws);
                 const reboundPending = getPendingMatchForClient(ws.clientId);
                 if (reboundPending && Date.now() >= reboundPending.pending.autoAcceptAt) {
-                    reboundPending.pending.users.forEach((participant) => {
-                        if (participant.decision === 'pending') participant.decision = 'accepted';
+                    const deadline = applyDeadline(reboundPending.pending);
+                    deadline.changed.forEach((participant) => {
+                        const live = activeClients.get(participant.clientId);
+                        if (live?.ws?.readyState === WebSocket.OPEN) {
+                            sendJson(live.ws, pendingEvent(reboundPending.pending, participant, 'match_decision_result', {
+                                decision: 'accept',
+                                decisionSource: 'auto',
+                                result: 'accepted'
+                            }));
+                        }
                     });
-                    await finalizePendingMatchIfReady(reboundPending.matchId, { trigger: 'recovery_deadline' });
+                }
+                if (reboundPending?.pending?.status === 'finalizing') {
+                    await finalizePendingMatchIfReady(reboundPending.matchId, { trigger: 'recovery_resume' });
                 }
             }
             if (previousClient?.ws && previousClient.ws !== ws) {
@@ -2204,7 +2320,7 @@ wss.on('connection', (ws, req) => {
                 }
             });
 
-            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1', 'matchSearchLifecycleV1', 'matchScopesV1'];
+            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1', 'matchSearchLifecycleV1', 'matchScopesV1', 'pendingMatchV1'];
             if (realtimeConfig.recoveryEnabled) capabilities.push('recovery-v1');
             let countryState = null;
             try {
@@ -2363,12 +2479,41 @@ wss.on('connection', (ws, req) => {
                 {
                     const decision = toText(data.decision, '').trim().toLowerCase();
                     const matchId = toText(data.matchId, '').trim();
-                    if (decision !== 'accept' && decision !== 'reject') {
+                    if (decision !== 'accept' && decision !== 'pass' && decision !== 'reject') {
                         const lang = resolveWsLang(ws);
                         sendError(ws, 'INVALID_INPUT', t(lang, 'errors.INVALID_INPUT', {}, 'Invalid request.'));
                         break;
                     }
-                    await applyMatchDecision(ws, matchId, decision);
+                    await applyMatchDecision(ws, matchId, decision, {
+                        commandId: data.commandId,
+                        searchId: data.searchId
+                    });
+                }
+                break;
+
+            case 'matchOfferTelemetry':
+                {
+                    const context = getPendingMatchForClient(ws.clientId);
+                    const participant = context?.pending?.users?.[context.participantIndex] || null;
+                    if (!context || data.matchId !== context.matchId || data.searchId !== participant?.searchId) {
+                        sendError(ws, 'STALE_MATCH');
+                        break;
+                    }
+                    if (markOfferRendered(context.pending, ws.clientId)) {
+                        trackBehaviorEvent({
+                            eventName: 'match_offer_rendered',
+                            userId: participant.dbUserId,
+                            clientId: ws.clientId,
+                            deviceId: clientData.deviceId || null,
+                            platform: clientData.platform || null,
+                            matchId: context.matchId,
+                            metadata: {
+                                event_version: 1,
+                                search_id: participant.searchId,
+                                effective_scope: participant.effectiveMatchScope
+                            }
+                        });
+                    }
                 }
                 break;
 

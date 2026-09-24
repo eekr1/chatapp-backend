@@ -64,7 +64,7 @@ test('Wave 07 websocket lifecycle identity remains strict after scope extension'
     assert.equal(validateWsEvent({ type: 'joinQueue', searchId: id(1) }).code, 'INVALID_INPUT');
 });
 
-test('integration source still emits identified queue/offer/cancel after Wave 08', () => {
+test('integration source still emits identified queue/offer/cancel through the Wave 09 pending protocol', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
     const lifecycleSource = fs.readFileSync(path.join(__dirname, '..', 'utils', 'searchLifecycle.js'), 'utf8');
     assert.match(source, /matchSearchLifecycleV1/);
@@ -72,7 +72,8 @@ test('integration source still emits identified queue/offer/cancel after Wave 08
     assert.match(source, /searchLifecycle\.cancel/);
     assert.match(source, /isCurrentQueueSearch/);
     assert.match(source, /currentPeerIndex/);
-    assert.match(source, /match_offer_waiting'.*searchId/);
+    assert.match(source, /pendingEvent\(pending, participant, 'match_decision_result'/);
+    assert.match(source, /searchId: participant\.searchId/);
     assert.match(lifecycleSource, /type: 'queue_left'/);
     assert.match(source, /effectiveMatchScope|country_fallback_available/);
 });
