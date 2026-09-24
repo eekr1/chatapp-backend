@@ -374,12 +374,12 @@ router.get('/history/:friendId', async (req, res) => {
 
     try {
         const msgRes = await pool.query(`
-            SELECT m.id, m.sender_id, m.client_msg_id, m.text, m.msg_type, m.created_at, m.is_read, m.media_id
+            SELECT m.id, m.conversation_id, m.sender_id, m.client_msg_id, m.text, m.msg_type, m.created_at, m.is_read, m.media_id
             FROM messages m
             JOIN conversations c ON m.conversation_id = c.id
             WHERE ((c.user_a_id = $1 AND c.user_b_id = $2) OR (c.user_a_id = $2 AND c.user_b_id = $1))
             AND m.msg_type IN ('direct', 'image')
-            ORDER BY m.created_at ASC
+            ORDER BY m.created_at ASC, m.id ASC
         `, [myId, friendId]);
 
         if (process.env.NODE_ENV !== 'production') {
@@ -397,6 +397,8 @@ router.get('/history/:friendId', async (req, res) => {
                 text: msg.text,
                 msgType: msg.msg_type,
                 clientMsgId: msg.client_msg_id,
+                serverMessageId: msg.id,
+                conversationId: msg.conversation_id,
                 mediaId: msg.media_id,
                 mediaExpired,
                 createdAt: msg.created_at,

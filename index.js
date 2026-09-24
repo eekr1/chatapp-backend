@@ -50,6 +50,13 @@ const {
     createPendingMatchRecord,
     markOfferRendered
 } = require('./utils/pendingMatch');
+const {
+    buildDirectMessageAck,
+    buildDirectMessageFailure,
+    persistDirectMessage,
+    resolveDirectConversation,
+    validateDirectText
+} = require('./utils/directMessage');
 logger.installSafeConsole();
 
 // Global State (Only Transients)
@@ -2156,7 +2163,10 @@ wss.on('connection', (ws, req) => {
         const validation = validateWsEvent(data);
         if (!validation.ok) {
             const isHandshake = data && data.type === 'hello_ack';
-            sendError(ws, isHandshake ? 'AUTH_ERROR' : validation.code);
+            const isDirectMessage = data && data.type === 'direct_message';
+            sendError(ws, isHandshake ? 'AUTH_ERROR' : (isDirectMessage ? 'MESSAGE_INVALID' : validation.code), null, {
+                ...(isDirectMessage && data.clientMsgId ? { clientMsgId: data.clientMsgId, retryable: false } : {})
+            });
             if (isHandshake) ws.close(1008, 'Authentication required');
             return;
         }
@@ -2170,7 +2180,11 @@ wss.on('connection', (ws, req) => {
         const actorRate = wsAbuseLimiter.consume(actorKey, eventCost);
         if (!localRate.allowed || !actorRate.allowed) {
             const retryAfterMs = Math.max(localRate.retryAfterMs, actorRate.retryAfterMs);
-            sendError(ws, 'RATE_LIMITED', null, { retryAfterMs, policy: 'ws-event' });
+            sendError(ws, 'RATE_LIMITED', null, {
+                retryAfterMs,
+                policy: 'ws-event',
+                ...(data.type === 'direct_message' ? { clientMsgId: data.clientMsgId } : {})
+            });
             return;
         }
 
@@ -2551,19 +2565,21 @@ wss.on('connection', (ws, req) => {
             case 'direct_message':
                 {
                     const dmTargetUserId = data.targetUserId;
-                    const dmText = toText(data.text, '').trim();
                     const clientMsgId = toClientMsgId(data.clientMsgId);
                     const dmSenderId = clientData.dbUserId;
+                    const textValidation = validateDirectText(data.text);
 
-                    if (!dmTargetUserId || !dmText) {
-                        sendError(ws, 'INVALID_MESSAGE_REQUEST', null, { clientMsgId: clientMsgId || undefined });
-                        sendJson(ws, { type: 'direct_message_ack', clientMsgId: clientMsgId || null, status: 'failed' });
+                    if (!dmTargetUserId || !textValidation.ok) {
+                        const errorCode = textValidation.code || 'MESSAGE_INVALID';
+                        sendError(ws, errorCode, null, { clientMsgId: clientMsgId || undefined, retryable: false });
+                        sendJson(ws, buildDirectMessageFailure({ clientMsgId, errorCode, retryable: false }));
                         break;
                     }
+                    const dmText = textValidation.text;
 
                     if (!clientMsgId) {
-                        sendError(ws, 'INVALID_MESSAGE_ID');
-                        sendJson(ws, { type: 'direct_message_ack', clientMsgId: null, status: 'failed' });
+                        sendError(ws, 'MESSAGE_INVALID', null, { retryable: false });
+                        sendJson(ws, buildDirectMessageFailure({ errorCode: 'MESSAGE_INVALID', retryable: false }));
                         break;
                     }
 
@@ -2573,91 +2589,94 @@ wss.on('connection', (ws, req) => {
                             [dmSenderId, dmTargetUserId]
                         );
                         if (fCheck.rows.length === 0) {
-                            sendError(ws, 'NOT_FRIEND', null, { clientMsgId });
-                            sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                            sendError(ws, 'NOT_FRIEND', null, { clientMsgId, retryable: false });
+                            sendJson(ws, buildDirectMessageFailure({ clientMsgId, errorCode: 'NOT_FRIEND', retryable: false }));
                             break;
                         }
                     } catch (e) {
                         console.error('direct_message friendship check error:', e.message);
-                        sendError(ws, 'FRIENDSHIP_CHECK_FAILED', null, { clientMsgId });
-                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        sendError(ws, 'MESSAGE_RESULT_UNKNOWN', null, { clientMsgId, retryable: true });
+                        sendJson(ws, buildDirectMessageFailure({ clientMsgId, errorCode: 'MESSAGE_RESULT_UNKNOWN', retryable: true }));
                         break;
                     }
 
                     let convId = null;
                     try {
-                        convId = await findOrCreatePersistentConversation(dmSenderId, dmTargetUserId);
+                        convId = await resolveDirectConversation({
+                            pool,
+                            senderId: dmSenderId,
+                            targetUserId: dmTargetUserId,
+                            conversationId: uuidv4()
+                        });
                     } catch (e) {
                         console.error('direct_message conversation error:', e.message);
-                        sendError(ws, 'CONVERSATION_CREATE_FAILED', null, { clientMsgId });
-                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        sendError(ws, 'MESSAGE_PERSIST_RETRYABLE', null, { clientMsgId, retryable: true });
+                        sendJson(ws, buildDirectMessageFailure({ clientMsgId, errorCode: 'MESSAGE_PERSIST_RETRYABLE', retryable: true }));
                         break;
                     }
 
                     if (!convId) {
-                        sendError(ws, 'CONVERSATION_CREATE_FAILED', null, { clientMsgId });
-                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        sendError(ws, 'MESSAGE_PERSIST_RETRYABLE', null, { clientMsgId, retryable: true });
+                        sendJson(ws, buildDirectMessageFailure({ clientMsgId, errorCode: 'MESSAGE_PERSIST_RETRYABLE', retryable: true }));
                         break;
                     }
 
-                    let persistedMessageId = null;
-                    let isDuplicate = false;
+                    let persistResult = null;
                     try {
-                        const existing = await pool.query(
-                            'SELECT id, conversation_id FROM messages WHERE sender_id = $1 AND client_msg_id = $2 LIMIT 1',
-                            [dmSenderId, clientMsgId]
-                        );
-                        if (existing.rows.length > 0) {
-                            isDuplicate = true;
-                            persistedMessageId = existing.rows[0].id;
-                            convId = existing.rows[0].conversation_id || convId;
-                        } else {
-                            const ins = await pool.query(
-                                'INSERT INTO messages (conversation_id, sender_id, client_msg_id, text, msg_type) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-                                [convId, dmSenderId, clientMsgId, dmText, 'direct']
-                            );
-                            persistedMessageId = ins.rows[0].id;
-                        }
+                        persistResult = await persistDirectMessage({
+                            pool,
+                            conversationId: convId,
+                            senderId: dmSenderId,
+                            clientMsgId,
+                            text: dmText,
+                            messageId: uuidv4()
+                        });
                     } catch (e) {
                         console.error('direct_message persist error:', e.message);
-                        sendError(ws, 'MESSAGE_PERSIST_FAILED', null, { clientMsgId });
-                        sendJson(ws, { type: 'direct_message_ack', clientMsgId, status: 'failed' });
+                        sendError(ws, 'MESSAGE_RESULT_UNKNOWN', null, { clientMsgId, retryable: true });
+                        sendJson(ws, buildDirectMessageFailure({ clientMsgId, errorCode: 'MESSAGE_RESULT_UNKNOWN', retryable: true }));
                         break;
                     }
 
-                    if (isDuplicate) {
-                        sendJson(ws, {
-                            type: 'direct_message_ack',
-                            clientMsgId,
-                            status: 'duplicate',
-                            serverMessageId: persistedMessageId,
-                            conversationId: convId
-                        });
+                    if (persistResult.kind === 'conflict') {
+                        sendError(ws, 'MESSAGE_ID_CONFLICT', null, { clientMsgId, retryable: false });
+                        sendJson(ws, buildDirectMessageFailure({ clientMsgId, errorCode: 'MESSAGE_ID_CONFLICT', retryable: false }));
                         break;
                     }
 
+                    const canonicalAck = buildDirectMessageAck({ clientMsgId, result: persistResult });
+                    sendJson(ws, canonicalAck);
+                    if (persistResult.kind === 'replayed') break;
+
+                    convId = persistResult.row.conversation_id;
                     const dmDeliveryId = uuidv4();
-
+                    const dmEvent = {
+                        type: 'direct_message',
+                        protocolVersion: 1,
+                        fromUsername: clientData.username,
+                        fromNickname: clientData.nickname,
+                        fromUserId: dmSenderId,
+                        targetUserId: dmTargetUserId,
+                        msgType: 'direct',
+                        text: dmText,
+                        serverMessageId: persistResult.row.id,
+                        conversationId: convId,
+                        createdAt: persistResult.row.created_at,
+                        deliveryId: dmDeliveryId,
+                        clientMsgId
+                    };
                     let dmTargetClient = null;
-                    for (const [, cData] of activeClients) {
+                    for (const [clientId, cData] of activeClients) {
                         if (cData.dbUserId === dmTargetUserId) {
-                            dmTargetClient = cData;
-                            break;
+                            dmTargetClient = dmTargetClient || cData;
+                            sendJson(cData.ws, dmEvent);
+                        } else if (cData.dbUserId === dmSenderId && clientId !== ws.clientId) {
+                            sendJson(cData.ws, {
+                                ...dmEvent,
+                                fromUsername: clientData.username,
+                                fromNickname: clientData.nickname
+                            });
                         }
-                    }
-
-                    if (dmTargetClient) {
-                        sendJson(dmTargetClient.ws, {
-                            type: 'direct_message',
-                            fromUsername: clientData.username,
-                            fromNickname: clientData.nickname,
-                            fromUserId: dmSenderId,
-                            msgType: 'direct',
-                            text: dmText,
-                            conversationId: convId || null,
-                            deliveryId: dmDeliveryId,
-                            clientMsgId
-                        });
                     }
 
                     const dmPushDebounce = shouldDebouncePush({
@@ -2701,35 +2720,25 @@ wss.on('connection', (ws, req) => {
                         }).catch((e) => console.error('direct_message push error:', e.message));
                     }
 
-                    sendJson(ws, {
-                        type: 'direct_message_ack',
-                        clientMsgId,
-                        status: 'sent',
-                        serverMessageId: persistedMessageId,
-                        conversationId: convId
-                    });
                 }
                 break;
 
             case 'typing':
             case 'stop_typing':
                 if (data.targetUserId) {
-                    // Friend Typing
-                    let tClient = null;
-                    for (const [cid, cData] of activeClients) {
-                        if (cData.dbUserId === data.targetUserId) {
-                            tClient = cData;
-                            break;
+                    const typingFriendship = await pool.query(
+                        'SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_user_id=$2) OR (user_id=$2 AND friend_user_id=$1)) AND status=\'accepted\'',
+                        [clientData.dbUserId, data.targetUserId]
+                    ).catch(() => ({ rows: [] }));
+                    if (typingFriendship.rows.length > 0) {
+                        for (const [, cData] of activeClients) {
+                            if (cData.dbUserId === data.targetUserId) {
+                                sendJson(cData.ws, {
+                                    type: data.type,
+                                    fromUserId: clientData.dbUserId
+                                });
+                            }
                         }
-                    }
-                    if (tClient) {
-                        console.log(`[DEBUG] Relay typing event '${data.type}' from ${clientData.nickname} to ${tClient.nickname}`);
-                        sendJson(tClient.ws, {
-                            type: data.type,
-                            fromUserId: clientData.dbUserId
-                        });
-                    } else {
-                        console.log(`[DEBUG] Typing target ${data.targetUserId} not found/online.`);
                     }
                 } else {
                     // Anon Typing

@@ -15,6 +15,13 @@ const isString = (value, { min = 0, max = Number.MAX_SAFE_INTEGER, trim = false 
     const candidate = trim ? value.trim() : value;
     return candidate.length >= min && candidate.length <= max;
 };
+const isDirectText = (value) => {
+    if (typeof value !== 'string') return false;
+    const normalized = value.normalize('NFC').trim();
+    return Array.from(normalized).length >= 1
+        && Array.from(normalized).length <= CHAT_MESSAGE_MAX_LENGTH
+        && Buffer.byteLength(normalized, 'utf8') <= 8000;
+};
 
 const field = (check, required = true) => ({ check, required });
 const optional = (check) => field(check, false);
@@ -68,9 +75,10 @@ const EVENT_SCHEMAS = {
     },
     message: { roomId: field(isUuid), text: field((value) => isString(value, { min: 1, max: CHAT_MESSAGE_MAX_LENGTH, trim: true })) },
     direct_message: {
+        protocolVersion: optional((value) => value === 1),
         targetUserId: field(isUuid),
-        text: field((value) => isString(value, { min: 1, max: CHAT_MESSAGE_MAX_LENGTH, trim: true })),
-        clientMsgId: field((value) => isString(value, { min: 1, max: 120, trim: true }))
+        text: field(isDirectText),
+        clientMsgId: field(isUuid)
     },
     typing: { targetUserId: optional(isUuid) },
     stop_typing: { targetUserId: optional(isUuid) },
