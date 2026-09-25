@@ -80,7 +80,7 @@ Her yuzey once su sorulari cevaplar:
 
 ## Plan belge yönlendirmesi
 
-> 2026-09-25 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–15 ve Wave 17–18 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır. Wave 16 PAS kaydı DEFERRED / ROADMAP / COMMITTED olarak kapandı; Wave 19 başlatılmamıştır.
+> 2026-09-25 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–15 ve Wave 17–18 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır. Wave 16 PAS kaydı DEFERRED / ROADMAP / COMMITTED olarak kapandı. Wave 19 otomatik regresyon ve release-provenance safhası yürütüldü; kullanıcı talimatıyla manuel acceptance ertelendiği için SALE RELEASE FREEZE ilan edilmedi.
 
 | Plan | Canonical dosya | Birincil sahiplik |
 |---|---|---|
@@ -107,7 +107,7 @@ Her yuzey once su sorulari cevaplar:
 | Wave 16 Planı — Deferred / Roadmap / committed | [`waves/TALKX_WAVE_16.md`](waves/TALKX_WAVE_16.md) | Wave 04 baseline yeterliliği doğrulandı; B-OBS-002 ve C-REL-001'in ingestion, redaction, grouping/rollup ve gelişmiş Release Health kapsamı Post-acquisition Roadmap'te açık korundu |
 | Wave 17 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_17.md`](waves/TALKX_WAVE_17.md) | Sale minimumu: frontend lint/build/test, backend syntax/core/critical test, live-target ve zero-test guard, high-severity audit ve iki repoda basit SHA-pinned GitHub CI; enterprise matris Roadmap'te açık |
 | Wave 18 Planı — Auto-verified / committed / manual QA deferred | [waves/TALKX_WAVE_18.md](waves/TALKX_WAVE_18.md) | Yalnız Wave 18 C-MOB-001 ve A-MOB-001; `1.0.6`/code 8 release manifesti, clean Capacitor sync, full-tree hash, production config/merged-manifest audit, ephemeral internal imzalı AAB ve temel back/lifecycle/network kapıları; cihaz/store QA Wave 19'a ertelendi |
-| Wave 19 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_19.md`](waves/TALKX_WAVE_19.md) | Yalnız Wave 19 C-QA-001; bütünleşik admin/operasyon/release QA, release candidate freeze, evidence reconciliation, manuel matris, kullanıcı onayı ve terminal durma noktası |
+| Wave 19 Planı — Otomatik regresyon doğrulandı / manuel acceptance ve freeze ertelendi | [`waves/TALKX_WAVE_19.md`](waves/TALKX_WAVE_19.md) | Yalnız Wave 19 C-QA-001; iki repo kalite kapıları, hedefli admin/API/data/audit/legal/notification testleri, CI provenance, stable-ID kapsaması ve Android internal RC yeniden doğrulandı; gerçek cihaz/admin görsel QA, staging/production kontrolleri ve final kullanıcı onayı açık kaldı |
 
 Belge rolleri:
 

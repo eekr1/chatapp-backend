@@ -3,7 +3,7 @@
 > Bu belge yalnız Wave 19 için hazırlanmış uygulama planıdır.
 > Canonical kapsam Plan C `C-QA-001` maddesidir.
 > Ana ilke: önceki wavelerin kanıtlarını tek release adayı üzerinde birleştir; admin, operasyon, Web, backend ve Android gerçeğini kaynak/veri/zaman/yetki zinciriyle doğrula; kullanıcı onayı olmadan canlı veya geri döndürülemez işlem yapma.
-> Plan hazırdır. Wave 19 aktif değildir, Wave 01–18 kapanmamıştır ve uygulama başlamamıştır. Wave 19 canonical haritadaki son wave'dir; Wave 20 veya yeni ürün dönemi burada planlanmaz, hazırlanmaz ya da başlatılmaz.
+> Wave 19'un otomatik regresyon/provenance safhası 2026-09-25 tarihinde uygulandı. Kullanıcının açık talimatıyla manuel QA ertelendi; final kullanıcı onayı ve SALE RELEASE FREEZE verilmedi. Wave 19 canonical haritadaki son wave'dir; Wave 20 veya yeni ürün dönemi burada planlanmaz, hazırlanmaz ya da başlatılmaz.
 
 ## 1. Durum ve yürütme sınırı
 
@@ -11,13 +11,13 @@
 - **Wave adı:** Bütünleşik admin, operasyon ve release QA kapanışı
 - **Plan katılımı:** Plan C
 - **Canonical kapsam:** `C-QA-001`
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Otomatik safha uygulandı; manuel acceptance/freeze açık
+- **Wave durumu:** Otomatik regresyon doğrulandı / manuel QA ertelendi
+- **Uygulama durumu:** Otomatik kanıt ve provenance kaydı tamamlandı; final QA kapanmadı
+- **Uygulama yetkisi:** 2026-09-25 tarihinde açıkça verildi; manuel QA ayrıca ertelendi
 - **Giriş kapısı:** Wave 18 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık "Wave 19'u başlat" talimatı
-- **Mevcut blokaj:** Wave 01–18'in Sale Release sonuçları committed değil; Wave 19 uygulanamaz
-- **Önceki wave:** Wave 18 — planı hazır, aktif değil
+- **Mevcut blokaj:** Final acceptance için gerçek cihaz/admin görsel QA, staging/provider/source read-back, operasyon provası ve açık kullanıcı onayı eksik
+- **Önceki wave:** Wave 18 — backend `70fb308c28ead4eb837b378e48e821b7367b4bc8`, frontend `0cdc68303177bd076bc4c5832f26731b2e900f8e`; origin ile eşit ve CI başarılı
 - **Sonraki wave:** Yok — Wave 19 mevcut canonical haritanın terminal wave'idir
 - **Terminal sınır:** Fikir Parkı, yeni özellik veya yeni ürün dönemi ayrı karar ve ayrı planlama ister
 
@@ -71,7 +71,7 @@ Wave 19 sonunda tek bir release adayı için:
 - Deployment, DB, provider, legal ve Android artifact durumu aktivasyonda yeniden okunur.
 - Checklist'ler kanıtsız işaretlenmez.
 
-Wave 19 yalnız Wave 01–18 canonical sırada uygulanıp QA-kapalı ve kullanıcı onaylıysa; result'lar exact commit/ortam/artifact'a bağlıysa; Wave 18 Android/release handoff'u geldiyse; canonical belgelerde çelişki kalmadıysa ve kullanıcı açıkça Wave 19'u başlattıysa aktive edilir. Eksik predecessor kanıtı Wave 19 içinde varsayılmaz; ilgili wave'e dönen blokajdır.
+Sale Release override altında Wave 19, Wave 01–18 canonical sırada uygulanıp AUTO-VERIFIED / COMMITTED / MANUAL-QA-DEFERRED veya PAS/roadmap kayıtlarıyla izlenebilir olduğunda; Wave 18 Android/release handoff'u geldiğinde ve kullanıcı açıkça Wave 19'u başlattığında aktive edilir. QA-kapalı ve kullanıcı onaylı olma şartı final SALE RELEASE FREEZE kapısıdır; aktivasyon ön koşulu değildir. Eksik predecessor commit/provenance Wave 19 içinde varsayılmaz; ilgili wave'e dönen blokajdır.
 
 Başlangıç snapshot'ı repo/branch/SHA/dirty özetini; Web/backend/admin/Android sürümlerini; environment, URL, DB/schema/migration head'i; CI/artifact/signing referanslarını; legal/provider/analytics sürümlerini; predecessor onaylarını ve canlı yetki sınırını kaydeder.
 
@@ -411,15 +411,63 @@ Wave 19 yürütüldüğünde en az:
 
 Kriter yalnız kanıtla `[x]` olur. Genel yeşil CI, toplam test sayısı, tek screenshot veya tek cihaz smoke'u kendi başına release-ready kanıtı değildir.
 
-## 23. Terminal durma kuralı
+## 23. Wave 19 otomatik yürütme sonucu — 2026-09-25
 
-Wave 18 QA kapanışı ve kullanıcının açık Wave 19 başlatma talimatı birlikte gelene kadar:
+### 23.1 Başlangıç ve candidate
 
-- Wave 19 için test, build, sync, deploy, migration, provider, canlı ortam veya ürün kodu değişikliği yapılmaz.
-- Wave 19 `Aktif` işaretlenmez; yalnız `Hazır — aktif değil` kalır.
+- Backend ve frontend ayrı `sale-release` branch'lerinde clean başladı; fetch sonrası HEAD ve `origin/sale-release` birebir eşitti.
+- Wave 18 backend commit'i `70fb308c28ead4eb837b378e48e821b7367b4bc8`, GitHub Actions run `36137526201`; frontend commit'i `0cdc68303177bd076bc4c5832f26731b2e900f8e`, run `36136987458`. İki run da `success`.
+- Runtime release kimliği `talkx-1.0.6-8`; frontend package `1.0.6`, Android versionCode `8`, application ID `com.talkx.app`, environment `production`, channel `internal`, backend runtime baseline `b5b3807356ca565315ce99b9eac4d566bd17ad80`.
+- Backend baseline sonrasındaki Wave 18/19 farkları yalnız canonical `Plans/` kanıt dokümantasyonudur; runtime kodu değiştirilmedi. Frontend Wave 19'da tracked dosya değişmedi.
+- 67 stable ID canonical tablolardan Plan A `20`, Plan B `25`, Plan C `22` olarak benzersiz sayıldı; Wave Map 67/67 ID'yi kapsıyor.
+
+### 23.2 Otomatik kanıt registry
+
+| Evidence | Kapsam | Komut/kanıt | Sonuç |
+|---|---|---|---|
+| W19-BE-QUALITY | Backend syntax/core/critical/audit | `npm run quality:all` | PASS — syntax 66 dosya; core 101/101; critical 54/54; high/critical audit 0; 8 moderate mevcut advisory açık |
+| W19-BE-TARGET | Auth/API/data/audit/legal/notification/admin fixture | `node --test test/wave02-platform.test.js test/wave04-operations.test.js test/wave06-data-lifecycle.test.js test/wave12-legal-account.test.js test/wave13-locale-notification.test.js test/wave14-sale-overview.test.js test/wave15-admin-operations.test.js` | PASS — 52/52 |
+| W19-FE-QUALITY | Client regresyon/lint/build/audit | `npm run quality:all` | PASS — core 50/50; critical 42/42; lint ve Vite production build; audit 0 |
+| W19-CI-BASE | Wave 18 immutable source CI | GitHub Actions read-back | PASS — backend run `36137526201`, frontend run `36136987458`, exact SHA, completed/success |
+| W19-STABLE | Stable-ID coverage | Canonical plan tabloları ↔ Wave Map token karşılaştırması | PASS — 67 benzersiz / 67 mapped / 0 missing |
+| W19-SECRET | Tracked filename + private-key/token signature taraması | `git ls-files`, `git grep -Il -E ...`; değerler loglanmadı | PASS — backend service-account dosyası ve Android artifact ignored; signature match yok; tracked frontend `.env` yalnız `VITE_API_URL`/`VITE_WS_URL` public config anahtarlarını taşıyor |
+| W19-ANDROID | Clean Web build, Capacitor sync, asset/config/manifest/signing/AAB | `npm run mobile:release:package` | PASS — Gradle 341 task; mapping upload `SKIPPED`; 18 asset; merged-manifest allowlist; internal AAB imzalı |
+
+Android kanıtı: asset-tree SHA-256 `860a50127d164c7a0a8f7d2ca5b2088f518df178f67af77d7f3c989c5f0221a9`; ignored local artifact `artifacts/talkx-1.0.6-8-internal.aab`, 9,653,441 byte, SHA-256 `90216b676bad466379e4efffb99f943b8252c41b3776e994b394c845cec6bccd`; ephemeral internal sertifika SHA-256 `AD:C4:FA:2C:4C:A5:D5:59:46:E1:34:42:4F:7F:0D:64:C1:A0:F3:A1:09:92:A8:DA:A5:65:0C:CF:93:C1:74:93`. Bu sertifika Play upload key değildir; artifact Play'e yüklenmedi.
+
+### 23.3 Otomatik kapı değerlendirmesi
+
+- Admin auth/rate-limit, API/error/schema kaynak sözleşmesi, fixture data summary/source ayrımları, hassas değer maskeleme ve bounded admin mutation kaynak testleri geçti.
+- Admin browser smoke, tam rol × kaynak × aksiyon matrisi, staging notification dry-run, legal staging publish/rollback, gerçek provider analytics rollup ve Release Health controlled event çalıştırılmadı. Bunların bir bölümü manuel/staging yetkisi, Release Health bütünü ise Wave 16 Roadmap kapsamı gerektiriyor; `PASS` sayılmadı.
+- CI tabanı exact Wave 18 SHA'larında başarılıdır. Wave 19 backend dokümantasyon commit'inin CI sonucu push sonrası ayrıca read-back edilir; frontend candidate değişmedi.
+- Production DB/schema, Render config/restart/deploy, gerçek notification send, legal publish, moderation mutation, backup/restore, Firebase config/event ve Play Console işlemi yapılmadı.
+
+### 23.4 Ertelenen manuel acceptance
+
+- Master §13 Web/frontend uçtan uca akışları ve iki-client gerçek tarayıcı turu.
+- Master §14 ile QA-004–013/015–017 admin desktop/mobile, a11y, low/no/stale/partial/failure, mask/reveal/copy ve destructive confirmation matrisi.
+- Master §15 Android temiz kurulum/update, min/mid/current API-WebView, back, lifecycle, ağ, push, kamera/galeri, process death ve deep-link matrisi.
+- Staging/provider/source read-back; izole backup/restore ile rollback/forward-fix provası; store/Data Safety/legal insan incelemesi.
+- Final defect/istisna kararı ve kullanıcının açık Sale Acceptance onayı.
+
+Bu maddeler kanıtlanmadan C-QA-001'in altı canonical checkbox'ı açık kalır ve **SALE RELEASE FREEZE ilan edilmez**. Kullanıcının “manuel QA'yı ertele” talimatı bu maddeleri tamamlanmış veya risk kabul edilmiş saymaz.
+
+### 23.5 Dosya/commit sınırı ve terminal sonuç
+
+- Wave 19 ürün kodu, dependency, migration, runtime config veya frontend tracked dosyası değiştirmedi.
+- Yalnız backend canonical plan/result belgeleri senkronize edildi; bu nedenle frontend Wave 19 commit'i oluşturulmadı.
+- Wave 20, Fikir Parkı veya yeni ürün dönemi başlatılmadı.
+- Otomatik regresyon sonucu yeşildir; final Sale Acceptance QA ve release freeze **ertelenmiş/açık** durumdadır.
+
+## 24. Terminal durma kuralı
+
+Wave 19 otomatik kanıt commit'i push edildikten sonra:
+
+- Yeni açık kullanıcı talimatı olmadan manuel QA, deploy, migration, provider, canlı ortam veya ürün kodu değişikliği yapılmaz.
+- Wave 19 aktif bırakılmaz; otomatik regresyon doğrulandı / manuel acceptance ve freeze ertelendi durumunda kalır.
 - Canonical `[ ]` maddeler kanıtsız kapatılmaz.
 - Predecessor kanıtı source/config/artifact eşliği olmadan geçerli sayılmaz.
 - Production/destructive işlem genel QA talimatından yetki türetmez.
 - Wave 20, Fikir Parkı veya yeni ürün dönemi planlanmaz, hazırlanmaz ya da uygulanmaz.
 
-Wave 19 QA kapanışı ve kullanıcı onayından sonra yürütme terminal durumda durur. Bundan sonraki her çalışma yeni ve açık bir kullanıcı kararı ister.
+Wave 19 otomatik safhası terminal durma noktasına ulaştı. Manuel QA/freeze devamı dahil bundan sonraki her çalışma yeni ve açık bir kullanıcı kararı ister.

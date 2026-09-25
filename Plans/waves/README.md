@@ -24,25 +24,25 @@
 
 | Wave | Dosya | Plan katılımı | Hazırlık | Aktivasyon |
 |---:|---|---|---|---|
-| 01 | `TALKX_WAVE_01.md` | Plan A + Plan B + Plan C | Hazır | Aktif değil |
-| 02 | `TALKX_WAVE_02.md` | Plan B + Plan C | Hazır | Aktif değil |
-| 03 | `TALKX_WAVE_03.md` | Plan A | Hazır | Aktif değil |
-| 04 | `TALKX_WAVE_04.md` | Plan B + Plan C | Hazır | Aktif değil |
-| 05 | `TALKX_WAVE_05.md` | Plan B + Plan A | Hazır | Aktif değil |
+| 01 | `TALKX_WAVE_01.md` | Plan A + Plan B + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
+| 02 | `TALKX_WAVE_02.md` | Plan B + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
+| 03 | `TALKX_WAVE_03.md` | Plan A | Uygulandı | Auto-verified / committed / QA deferred |
+| 04 | `TALKX_WAVE_04.md` | Plan B + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
+| 05 | `TALKX_WAVE_05.md` | Plan B + Plan A | Uygulandı | Auto-verified / committed / QA deferred |
 | 06 | `TALKX_WAVE_06.md` | Plan B + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
-| 07 | `TALKX_WAVE_07.md` | Plan B + Plan A | Hazır | Aktif değil |
-| 08 | `TALKX_WAVE_08.md` | Plan B + Plan A + Plan C | Hazır | Aktif değil |
-| 09 | `TALKX_WAVE_09.md` | Plan B + Plan A | Hazır | Aktif değil |
-| 10 | `TALKX_WAVE_10.md` | Plan B + Plan A | Hazır | Aktif değil |
-| 11 | `TALKX_WAVE_11.md` | Plan B + Plan C + Plan A | Hazır | Aktif değil |
-| 12 | `TALKX_WAVE_12.md` | Plan C + Plan B + Plan A | Hazır | Aktif değil |
-| 13 | `TALKX_WAVE_13.md` | Plan B + Plan A + Plan C | Hazır | Aktif değil |
-| 14 | `TALKX_WAVE_14.md` | Plan B + Plan C | Hazır | Aktif değil |
-| 15 | `TALKX_WAVE_15.md` | Plan C | Hazır | Aktif değil |
-| 16 | `TALKX_WAVE_16.md` | Plan B + Plan C | Hazır | Aktif değil |
-| 17 | `TALKX_WAVE_17.md` | Plan A + Plan B + Plan C | Hazır | Aktif değil |
-| 18 | `TALKX_WAVE_18.md` | Plan C + Plan A | Hazır | Aktif değil |
-| 19 | `TALKX_WAVE_19.md` | Plan C | Hazır | Aktif değil |
+| 07 | `TALKX_WAVE_07.md` | Plan B + Plan A | Uygulandı | Auto-verified / committed / QA deferred |
+| 08 | `TALKX_WAVE_08.md` | Plan B + Plan A + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
+| 09 | `TALKX_WAVE_09.md` | Plan B + Plan A | Uygulandı | Auto-verified / committed / QA deferred |
+| 10 | `TALKX_WAVE_10.md` | Plan B + Plan A | Uygulandı | Auto-verified / committed / QA deferred |
+| 11 | `TALKX_WAVE_11.md` | Plan B + Plan C + Plan A | Uygulandı | Auto-verified / committed / QA deferred |
+| 12 | `TALKX_WAVE_12.md` | Plan C + Plan B + Plan A | Uygulandı | Auto-verified / committed / QA deferred |
+| 13 | `TALKX_WAVE_13.md` | Plan B + Plan A + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
+| 14 | `TALKX_WAVE_14.md` | Plan B + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
+| 15 | `TALKX_WAVE_15.md` | Plan C | Uygulandı | Auto-verified / committed / QA deferred |
+| 16 | `TALKX_WAVE_16.md` | Plan B + Plan C | PAS kaydı uygulandı | Deferred / Roadmap / committed |
+| 17 | `TALKX_WAVE_17.md` | Plan A + Plan B + Plan C | Uygulandı | Auto-verified / committed / QA deferred |
+| 18 | `TALKX_WAVE_18.md` | Plan C + Plan A | Uygulandı | Auto-verified / committed / QA deferred |
+| 19 | `TALKX_WAVE_19.md` | Plan C | Otomatik safha uygulandı | Auto regression verified / manual acceptance & freeze deferred |
 
 Boş şablon veya placeholder wave dosyaları oluşturulmaz. Her wave dosyası, kullanıcı o wave'in yazılmasını açıkça istediğinde hazırlanır ve o dosya tamamlandıktan sonra durulur.
 
@@ -75,4 +75,4 @@ Boş şablon veya placeholder wave dosyaları oluşturulmaz. Her wave dosyası, 
 
 ## Mevcut durma noktası
 
-Wave 01–06 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır. Wave 07–19 hazır fakat aktif değildir; hiçbir wave aktif değildir. Sonraki uygulama adımı yalnız açık **“Wave 07'yi başlat”** talimatıdır.
+Wave 01–15 ve Wave 17–18 Sale Release kapsamları auto-verified/committed/manual-QA-deferred; Wave 16 PAS kaydı Deferred/Roadmap/committed durumundadır. Wave 19 otomatik regresyon/provenance safhası uygulanmış, manuel Sale Acceptance QA ve freeze ertelenmiştir. Hiçbir wave aktif değildir; Wave 20 yoktur ve yeni ürün dönemi başlatılmamıştır.
