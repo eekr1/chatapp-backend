@@ -2,7 +2,7 @@
 
 > Plan A/B/C içindeki 67 stable uygulama maddesini bağımlılık sırasına göre wave'lere yönlendiren canonical yürütme haritası.
 > Bu belge plan ayrıntısını tekrar etmez; ayrıntının otoritesi ilgili Plan A/B/C maddesidir.
-> Harita ile Wave 01–19 planları hazırdır. Wave 01–15 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 16 PAS kaydı DEFERRED / ROADMAP / COMMITTED, Wave 17 minimum kalite/CI kapsamı auto-verified/committed/manual-QA-deferred olarak 2026-09-25 tarihinde kapandı; Wave 18–19 başlatılmadı.
+> Harita ile Wave 01–19 planları hazırdır. Wave 01–15 ve Wave 17–18 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 16 PAS kaydı DEFERRED / ROADMAP / COMMITTED; Wave 19 başlatılmadı.
 
 > **Sale Release override:** Bu harita, Master Backlog ile Plan A/B/C'deki uzun vadeli kararları değiştirmez. Satış öncesinde hangi parçanın uygulanacağını, hangi parçanın küçültüldüğünü ve hangisinin **Post-acquisition Roadmap / Deferred** olarak korunacağını belirler. Bir wave dosyasındaki eski kapanış veya manuel QA dili bu override ile çelişirse bu harita geçerlidir.
 
@@ -25,8 +25,8 @@ Wave yeni ürün kararı veya mimari üretmez. Çelişkide uygulama durur; önce
 - **Wave Map durumu:** Hazır
 - **Aktif wave:** Yok
 - **Hazırlanmış Wave Planları:** `waves/TALKX_WAVE_01.md`, `waves/TALKX_WAVE_02.md`, `waves/TALKX_WAVE_03.md`, `waves/TALKX_WAVE_04.md`, `waves/TALKX_WAVE_05.md`, `waves/TALKX_WAVE_06.md`, `waves/TALKX_WAVE_07.md`, `waves/TALKX_WAVE_08.md`, `waves/TALKX_WAVE_09.md`, `waves/TALKX_WAVE_10.md`, `waves/TALKX_WAVE_11.md`, `waves/TALKX_WAVE_12.md`, `waves/TALKX_WAVE_13.md`, `waves/TALKX_WAVE_14.md`, `waves/TALKX_WAVE_15.md`, `waves/TALKX_WAVE_16.md`, `waves/TALKX_WAVE_17.md`, `waves/TALKX_WAVE_18.md` ve `waves/TALKX_WAVE_19.md` — on dokuz plan da aktif değil
-- **Uygulama durumu:** Wave 01–15 ve Wave 17 auto-verified/committed/manual-QA-deferred; Wave 16 PAS/roadmap committed.
-- **İlk yürütme adayı:** Wave 18 — yalnız ayrı açık kullanıcı talimatıyla
+- **Uygulama durumu:** Wave 01–15 ve Wave 17–18 auto-verified/committed/manual-QA-deferred; Wave 16 PAS/roadmap committed.
+- **İlk yürütme adayı:** Wave 19 — yalnız ayrı açık kullanıcı talimatıyla; bu kayıt Wave 19'u başlatmaz
 - **Wave 01 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
 - **Wave 02 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
 - **Wave 03 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
@@ -37,9 +37,10 @@ Wave yeni ürün kararı veya mimari üretmez. Çelişkide uygulama durur; önce
 - **Wave 08–15 yetkileri:** Açık kullanıcı talimatlarıyla verildi; yalnız ilgili Sale Release kapsamları yürütüldü ve commitlendi
 - **Wave 16 yetkisi:** 2026-09-25 tarihinde yalnız PAS/roadmap kaydı için verildi; ürün implementasyonu yapılmadı
 - **Wave 17 yetkisi:** 2026-09-25 tarihinde verildi ve yalnız küçültülmüş Sale Release kalite/CI kapsamı yürütüldü
-- **Sonraki işlem:** Dur; Wave 18 için ayrı açık başlangıç talimatını bekle
+- **Wave 18 yetkisi:** 2026-09-25 tarihinde verildi; yalnız Android internal RC/release zinciri ve temel WebView davranış eşliği yürütüldü, Play/production işlemi yapılmadı
+- **Sonraki işlem:** Dur; Wave 19 için ayrı açık başlangıç talimatını bekle
 
-Wave 18 ve sonrası yalnız hazırlanmış plandır; aktivasyon veya uygulama anlamına gelmez.
+Wave 19 yalnız hazırlanmış plandır; aktivasyon veya uygulama anlamına gelmez.
 
 ## 3. Değişmez yürütme kuralları
 
@@ -144,7 +145,7 @@ Roadmap'e taşınan stable ID ve kabul kriterleri silinmez. Canonical Plan A/B/C
 | 15 | Profil ve uygulama raporu operasyon ekranları | C-ADMIN-004 → C-ADMIN-005 → C-ADMIN-006 | Liste/detay/rapor yetki ve veri durumlarıyla doğrulandı | Auto-verified / commit & QA deferred |
 | 16 | QA-016 Release Health PAS kaydı | B-OBS-002 → C-REL-001 | Wave 04 baseline yeterliliği doğrulandı; tam kapsam roadmap'te açık | Deferred / Roadmap / committed |
 | 17 | Client/backend test kapıları ve ortak CI zinciri | A-QA-001 → B-QA-001 → C-CI-001 | Lint/test/build/audit kapıları tekrar üretilebilir | Auto-verified / commit & QA deferred |
-| 18 | Android release zinciri ve WebView davranış eşliği | C-MOB-001 → A-MOB-001 | Version/build/signing/sync ve cihaz davranışı kanıtlı | Bekliyor |
+| 18 | Android release zinciri ve WebView davranış eşliği | C-MOB-001 → A-MOB-001 | Version/build/signing/sync ve temel davranış kapıları kanıtlı; cihaz/store QA Wave 19'a ertelendi | Auto-verified / commit & QA deferred |
 | 19 | Bütünleşik admin, operasyon ve release QA kapanışı | C-QA-001 | QA matrisi, manuel kanıt ve kullanıcı onayı tamam | Bekliyor |
 
 ## 6.1 Plan katılım ve sahiplik matrisi
@@ -279,4 +280,4 @@ Yeni kanıt bir bağımlılığın yanlış olduğunu gösterirse wave durur; il
 
 Bu harita ancak 67 stable ID tam ve benzersiz dağıtılmış, bütün bağımlılıklar ileri/aynı-wave sırasıyla uyumlu, QA-001–017 sahiplikleri korunmuş, QA-017 sırası Master ile uyumlu ve riskli işlem sınırları görünür olduğunda hazırdır.
 
-**Mevcut sonuç:** Wave Map hazırdır. Wave 01–05 Sale Release kapsamları auto-verified/committed olup manuel QA Checkpoint A / Wave 19'a ertelenmiştir. Aktif wave yoktur ve Wave 06 başlatılmamıştır.
+**Mevcut sonuç:** Wave Map hazırdır. Wave 01–15 ve Wave 17–18 Sale Release kapsamları auto-verified/committed/manual-QA-deferred, Wave 16 PAS kaydı committed durumdadır. Aktif wave yoktur; Wave 19 başlatılmamıştır.

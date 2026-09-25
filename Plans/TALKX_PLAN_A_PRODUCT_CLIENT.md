@@ -2,7 +2,7 @@
 
 > TalkX kullanıcı ürününün, Web frontend'in ve Android WebView deneyiminin canonical uygulama planı.
 > Kaynak envanter: `docs/TALKX_MASTER_BACKLOG.md`.
-> Bu plan hazırdır; hiçbir uygulama wave'i başlamamıştır.
+> Wave 01–18 Sale Release yürütmesi tamamlandı; Wave 19 başlamadı.
 
 ## 1. Belge rolü ve otorite
 
@@ -23,10 +23,10 @@ Otorite sırası:
 ## 2. Plan durumu ve sınırı
 
 - **Plan durumu:** Hazır
-- **Uygulama durumu:** Başlamadı
+- **Uygulama durumu:** Wave 01–18 Sale kapsamı yürütüldü; manuel/device QA Wave 19'a ertelendi
 - **Wave Map durumu:** Hazır
-- **Hazırlanmış Wave Planları:** Wave 01 — `waves/TALKX_WAVE_01.md`; Wave 02 — `waves/TALKX_WAVE_02.md`; Wave 03 — `waves/TALKX_WAVE_03.md`; Wave 04 — `waves/TALKX_WAVE_04.md`; Wave 05 — `waves/TALKX_WAVE_05.md`; Wave 06 — `waves/TALKX_WAVE_06.md`; Wave 07 — `waves/TALKX_WAVE_07.md`; Wave 08 — `waves/TALKX_WAVE_08.md`; Wave 09 — `waves/TALKX_WAVE_09.md`; Wave 10 — `waves/TALKX_WAVE_10.md`; Wave 11 — `waves/TALKX_WAVE_11.md`; Wave 12 — `waves/TALKX_WAVE_12.md`; Wave 13 — `waves/TALKX_WAVE_13.md`; Wave 14 — `waves/TALKX_WAVE_14.md`; Wave 15 — `waves/TALKX_WAVE_15.md`; Wave 16 — `waves/TALKX_WAVE_16.md`; Wave 17 — `waves/TALKX_WAVE_17.md`; Wave 18 — `waves/TALKX_WAVE_18.md`; Wave 19 — `waves/TALKX_WAVE_19.md` — on dokuz plan da hazır, aktif değil
-- **Uygulama wave'i:** Başlamadı
+- **Hazırlanmış Wave Planları:** Wave 01 — `waves/TALKX_WAVE_01.md`; Wave 02 — `waves/TALKX_WAVE_02.md`; Wave 03 — `waves/TALKX_WAVE_03.md`; Wave 04 — `waves/TALKX_WAVE_04.md`; Wave 05 — `waves/TALKX_WAVE_05.md`; Wave 06 — `waves/TALKX_WAVE_06.md`; Wave 07 — `waves/TALKX_WAVE_07.md`; Wave 08 — `waves/TALKX_WAVE_08.md`; Wave 09 — `waves/TALKX_WAVE_09.md`; Wave 10 — `waves/TALKX_WAVE_10.md`; Wave 11 — `waves/TALKX_WAVE_11.md`; Wave 12 — `waves/TALKX_WAVE_12.md`; Wave 13 — `waves/TALKX_WAVE_13.md`; Wave 14 — `waves/TALKX_WAVE_14.md`; Wave 15 — `waves/TALKX_WAVE_15.md`; Wave 16 — `waves/TALKX_WAVE_16.md`; Wave 17 — `waves/TALKX_WAVE_17.md`; Wave 18 — `waves/TALKX_WAVE_18.md`; Wave 19 — `waves/TALKX_WAVE_19.md` — Wave 01–18 kapalı, Wave 19 hazır fakat aktif değil
+- **Uygulama wave'i:** Yok; Wave 18 kapandı, Wave 19 başlatılmadı
 - **Birincil alan:** Product / UI-UX / Web frontend / Android WebView kullanıcı akışları
 - **Ana repo alanı:** `chatapp-frontend/`
 - **Bağlı planlar:** Plan B — Platform, Realtime & Data; Plan C — Admin, Trust & Release
@@ -605,10 +605,12 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 **Kabul kriterleri:**
 
 - [ ] Aynı release'te Web ve Android ana akışları eşdeğer.
-- [ ] Back tuşu aktif sohbet/offer/search state'ini güvenli kapatıyor.
+- [x] Back tuşu aktif sohbet/offer/search state'ini güvenli kapatıyor. — `resolveBackAction` önceliği ve tek native listener Wave 18 kritik testinde doğrulandı; cihaz matrisi Wave 19'da.
 - [ ] Background dönüşü stale UI göstermiyor.
 - [ ] İzin reddi kontrollü fallback veriyor.
 - [ ] C-MOB-001 release/version sonucu kullanıcı yüzeyiyle eşleşiyor.
+
+> **Wave 18 Sale kanıtı (2026-09-25):** `appStateChange` ile foreground recovery ve browser online/offline sinyalleri mevcut duplicate socket korumasına bağlandı; push/media/back kaynak sözleşmeleri 50/50 core ve 42/42 critical test içinde geçti. Gerçek cihaz, process-death, permission, push tap, camera return ve WebView matrisi §23/Checkpoint C/Wave 19'a ertelendi; bu nedenle kalan uçtan uca kriterler kanıtsız kapatılmadı.
 
 ## 25. A-QA-001 — Client kalite ve kanıt kapıları
 

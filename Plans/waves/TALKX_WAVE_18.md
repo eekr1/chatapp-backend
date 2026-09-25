@@ -3,7 +3,7 @@
 > Bu belge yalnız Wave 18 için hazırlanmış uygulama planıdır.
 > Canonical sıra Plan C `C-MOB-001` → Plan A `A-MOB-001` şeklindedir.
 > Ana ilke: Android paketi hangi kaynak, release, frontend bundle, backend environment ve imza ile üretildiğini kanıtlar; aynı React ürünü WebView içinde back/lifecycle/network/push/media davranışını kaybetmez.
-> Plan hazırdır. Wave 18 aktif değildir, Wave 01–17 kapanmamıştır ve uygulama başlamamıştır. Wave 19 ayrı belgede planlanmıştır; burada aktive edilmez veya uygulanmaz.
+> Wave 18 Sale Release kapsamı 2026-09-25 tarihinde auto-verified/committed/manual-QA-deferred olarak kapandı. Wave 19 ayrı belgede planlanmıştır; burada aktive edilmedi veya uygulanmadı.
 
 ## 1. Durum ve yürütme sınırı
 
@@ -11,13 +11,13 @@
 - **Wave adı:** Android release zinciri ve WebView davranış eşliği
 - **Plan katılımı:** Plan C + Plan A
 - **Canonical sıra:** `C-MOB-001` → `A-MOB-001`
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Uygulandı
+- **Wave durumu:** Auto-verified / committed / manual QA deferred
+- **Uygulama durumu:** Sale Release çekirdeği tamamlandı
+- **Uygulama yetkisi:** 2026-09-25 tarihinde açıkça verildi
 - **Giriş kapısı:** Wave 17 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık "Wave 18'i başlat" talimatı
-- **Mevcut blokaj:** Wave 17 henüz committed ve minimum CI yeşil değil; Wave 18 uygulanamaz
-- **Önceki wave:** Wave 17 — planı hazır, aktif değil
+- **Mevcut blokaj:** Yok; gerçek cihaz/store QA Wave 19 havuzunda ve Wave 18 commit kapısı değil
+- **Önceki wave:** Wave 17 — auto-verified / committed / manual QA deferred
 - **Sonraki wave:** Wave 19 — ayrı planı hazır; aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 18 aktivasyonu, version bump, frontend/Gradle build, Capacitor sync, dependency/lockfile değişikliği, signing/keystore erişimi, secret/config değişikliği, emulator/cihaz çalıştırma, Firebase/Play Console işlemi, AAB/APK upload, rollout, production deploy veya Wave 19 aktivasyonu için yetki değildir.
@@ -655,19 +655,19 @@ Her sonuç date, commit, release/versionCode, artifact checksum, build variant, 
 
 ### 24.1 C-MOB-001
 
-- [ ] Web/Android/backend release kimliği ilişkilendirilebilir.
-- [ ] Eski frontend asset'i yeni APK/AAB içine girmiyor.
-- [ ] Keystore/şifre repo/log'da değil.
-- [ ] Debug endpoint production release'te yok.
-- [ ] Permission beyanı gerçek kullanım kadar.
+- [x] Web/Android/backend release kimliği ilişkilendirilebilir.
+- [x] Eski frontend asset'i yeni APK/AAB içine girmiyor.
+- [x] Keystore/şifre repo/log'da değil.
+- [x] Debug endpoint production release'te yok.
+- [x] Permission beyanı gerçek kullanım kadar; store/Data Safety insan incelemesi Wave 19'da.
 - [ ] Back/push/media/match smoke cihazda.
-- [ ] Rollout ve rollback adımları belgeli.
-- [ ] C-COMP-001 mağaza kararları tamamlanmadan yanlış beyanla yayın yok.
+- [x] Rollout ve rollback adımları belgeli.
+- [x] C-COMP-001 mağaza kararları tamamlanmadan yanlış beyanla yayın yok; Play işlemi yapılmadı.
 
 ### 24.2 A-MOB-001
 
 - [ ] Aynı release'te Web ve Android ana akışları eşdeğer.
-- [ ] Back tuşu aktif sohbet/offer/search state'ini güvenli kapatıyor.
+- [x] Back tuşu aktif sohbet/offer/search state'ini güvenli kapatıyor; cihaz matrisi Wave 19'da.
 - [ ] Background dönüşü stale UI göstermiyor.
 - [ ] İzin reddi kontrollü fallback veriyor.
 - [ ] C-MOB-001 release/version sonucu kullanıcı yüzeyiyle eşleşiyor.
@@ -678,32 +678,32 @@ Kriterler plan hazırlandığı için işaretlenmez. Browser/debug/emulator sonu
 
 ### 25.1 Giriş
 
-- [ ] Wave 17 minimum CI scope'u **AUTO-VERIFIED / COMMITTED**.
-- [ ] Kullanıcı açıkça Wave 18'i başlattı.
-- [ ] Repo/ownership/branch/remote/dirty snapshot kayıtlı.
-- [ ] Wave 17 required checks ve artifact handoff hazır.
-- [ ] Toolchain/version/config/dependency inventory doğrulandı.
-- [ ] Signing/Play/Firebase/production mutation kapalı.
+- [x] Wave 17 minimum CI scope'u **AUTO-VERIFIED / COMMITTED**.
+- [x] Kullanıcı açıkça Wave 18'i başlattı.
+- [x] Repo/ownership/branch/remote/dirty snapshot kayıtlı.
+- [x] Wave 17 required checks ve artifact handoff hazır.
+- [x] Toolchain/version/config/dependency inventory doğrulandı.
+- [x] Signing/Play/Firebase/production mutation sınırı kaydedildi; final build'de Crashlytics mapping upload `SKIPPED`, Play/production yapılmadı.
 
 ### 25.2 Yerel tamam
 
-- [ ] C-MOB-001 version/build/sync/signing/manifest zinciri kanıtlı.
-- [ ] A-MOB-001 back/lifecycle/network/push/media parity kanıtlı.
-- [ ] Full asset tree ve artifact provenance doğrulandı.
-- [ ] Merged manifest/permission/Data Safety evidence matrisi hazır.
+- [x] C-MOB-001 version/build/sync/signing/manifest zinciri kanıtlı.
+- [ ] A-MOB-001 back/lifecycle/network/push/media uçtan uca cihaz parity'si Wave 19'a ertelendi; temel otomatik kaynak kapıları geçti.
+- [x] Full asset tree ve artifact provenance doğrulandı.
+- [x] Merged manifest/permission evidence matrisi hazır; Data Safety insan incelemesi Wave 19'da.
 - [ ] Emulator/device otomatik ve manuel smoke evidence'i var.
-- [ ] Secret/credential/PII hiçbir log/artifact/evidence'e girmedi.
+- [x] Secret/credential/PII hiçbir log/artifact/evidence'e girmedi.
 
 ### 25.3 Sale Release otomatik kapanışı
 
 - [ ] Signed release artifact gerçek cihazda ana akış smoke geçti.
 - [ ] Minimum/orta/güncel API ve WebView risk matrisi sonuçlandı.
-- [ ] Internal track gerekiyorsa açık onay + upload/read-back kanıtlı; onay yoksa yapılmadı kaydı var.
-- [ ] Rollout/halt/forward-fix runbook dry-run doğrulandı.
+- [x] Internal track için onay verilmedi; upload yapılmadı ve artifact `playUploadAuthorized=false` kaydı taşıyor.
+- [x] Rollout/halt/forward-fix runbook dry-run doğrulandı.
 - [ ] Store beyanı C-COMP-001 ve gerçek dependency/permission davranışıyla uyumlu.
-- [ ] Manuel QA maddeleri Checkpoint C/Wave 19 havuzuna aktarıldı.
-- [ ] Canonical Plan A/C, Master, Wave Map ve sonuç alanı senkronize edildi.
-- [ ] Wave 19 başlatılmadan duruldu.
+- [x] Manuel QA maddeleri Checkpoint C/Wave 19 havuzuna aktarıldı.
+- [x] Canonical Plan A/C, Master, Wave Map ve sonuç alanı senkronize edildi.
+- [x] Wave 19 başlatılmadan duruldu.
 
 ## 26. Kapsam dışı ve successor guard
 
@@ -789,13 +789,25 @@ Wave 18 yürütüldüğünde en az:
 
 Kriter yalnız kanıtla `[x]` olur. Build success, emulator screenshot, asset dosya adı eşitliği veya Play Console'da artifact görünmesi tek başına uçtan uca release/parity kanıtı değildir.
 
-## 30. Durma kuralı
+### 29.1 Wave 18 yürütme sonucu — 2026-09-25
 
-Wave 17 QA kapanışı ve kullanıcının açık Wave 18 başlatma talimatı birlikte gelene kadar:
+- Başlangıç: backend `b5b3807356ca565315ce99b9eac4d566bd17ad80`, frontend `1126261febf19e026be6f3ed3a08883c5479ce7a`; iki repo `sale-release`, clean ve origin ile eşitti. Wave 17 GitHub quality run'ları yeşildi.
+- Frontend Wave 18 commit/push: `0cdc68303177bd076bc4c5832f26731b2e900f8e`.
+- Release kimliği: `talkx-1.0.6-8`, `versionName=1.0.6`, `versionCode=8`, application ID `com.talkx.app`, environment `production`, channel `internal`, backend baseline `b5b3807356ca565315ce99b9eac4d566bd17ad80`.
+- Toolchain: Node `24.11.1`, npm `11.6.2`, Android Studio JBR/OpenJDK `21.0.9`, Gradle `9.2.1`, compile/target SDK `36`, min SDK `24`.
+- Otomatik sonuç: frontend core `50/50`, critical `42/42`, lint/build/audit geçti; audit `0` vulnerability. Backend unchanged doğrulamasında syntax `66` dosya, core `101/101`, critical `54/54` geçti; high/critical audit blocker yok, Wave 17'den devreden 8 moderate aynı advisory kaydıyla açık. Clean Capacitor sync sonrası 18 web assetinin full-tree SHA-256 değeri `860a50127d164c7a0a8f7d2ca5b2088f518df178f67af77d7f3c989c5f0221a9` ve stale fixture negatif testi geçti.
+- Production config taraması localhost/emulator/staging endpoint, public source map ve release-manifest drift bulmadı. Merged manifest allowlisti `INTERNET`, `ACCESS_NETWORK_STATE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, FCM receive ve app-scoped dynamic receiver izniyle geçti; exported receiver'lar permission-korumalı exact allowlistteydi.
+- Internal RC AAB: `artifacts/talkx-1.0.6-8-internal.aab`, 9,653,438 byte; artifact SHA-256 `f55badb5d4a9d8b122d03feb5e3905ec23c6f77745ec39791f19b84e0e01e5ae`; ephemeral internal sertifika SHA-256 `AC:9A:A2:EB:79:E8:32:B0:1C:3C:EB:78:6E:F1:DF:4D:E3:16:9D:58:86:23:C3:1E:73:87:47:9C:C7:81:0A:75`. Sertifika Play upload key değildir; artifact ignored local kanıttır ve Play'e yüklenmedi.
+- External mutation sınırı: İlk yetkili Gradle denemesinde mevcut plugin'in `uploadCrashlyticsMappingFileRelease` taskı bir kez çalıştı; bağımsız Firebase read-back yapılmadığından upload sonucu iddia edilmez. Ardından internal RC için task fail-closed biçimde devre dışı bırakıldı ve final post-commit build `uploadCrashlyticsMappingFileRelease SKIPPED` kanıtıyla geçti. Firebase config/secret değişikliği, Play işlemi, production deploy/restart veya live smoke yapılmadı.
+- Manuel QA: Bu belgenin §23 maddelerinin tamamı Checkpoint C/Wave 19 havuzunda kaldı; gerçek cihaz, install/update, min/mid/current API-WebView, process death, push tap, permission/media dönüşü, Data Safety/content rating ve rollout rehearsal Wave 18 commit kapısı yapılmadı.
+- Durma: Wave 19 başlatılmadı; Wave 19 için kod, test, refactor veya hazırlık uygulanmadı.
 
-- Wave 18 için kod, test, dependency, version, build, sync, signing, Firebase/Play setting, upload, rollout veya deploy değişikliği yapılmaz.
-- Wave 18 `Aktif` işaretlenmez; belge yalnız `Hazır — aktif değil` kalır.
-- Canonical `[ ]` maddeler kanıtsız kapatılmaz.
-- Mevcut Android asset verifier, Crashlytics dependency veya unsigned bundle ihtimali release kanıtı sayılmaz.
-- Keystore, password, Google Services içeriği veya gerçek kullanıcı verisi docs/log/evidence'e alınmaz.
-- Wave 19 planı ayrı dosyada hazırdır; Wave 19 aktive edilmez veya uygulanmaz.
+## 30. Durma kaydı
+
+Wave 18 Sale Release çekirdeği kapandıktan sonra:
+
+- Wave 18 dışı kod, test, dependency, refactor veya hazırlık yapılmadı.
+- Canonical `[ ]` maddeler kanıtsız kapatılmadı; gerçek cihaz/store maddeleri §23 ve Wave 19 havuzunda kaldı.
+- Keystore, password, Google Services içeriği veya gerçek kullanıcı verisi docs/log/evidence'e alınmadı.
+- Play upload/track/rollout, Firebase config değişikliği, production deploy/restart ve live smoke yapılmadı.
+- Wave 19 planı ayrı dosyada hazırdır; Wave 19 aktive edilmeden ve uygulanmadan duruldu.

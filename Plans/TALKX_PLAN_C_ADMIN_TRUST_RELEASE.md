@@ -2,7 +2,7 @@
 
 > TalkX admin paneli, güven/moderasyon, global uyum, analitik, release ve operasyon işlerinin canonical uygulama planı.
 > Kaynak envanter: `docs/TALKX_MASTER_BACKLOG.md`.
-> Bu plan hazırdır; hiçbir uygulama wave'i başlamamıştır.
+> Wave 01–18 Sale Release yürütmesi tamamlandı; Wave 19 başlamadı.
 
 ## 1. Belge rolü ve otorite
 
@@ -23,12 +23,12 @@ Admin ihtiyacı kullanıcı ürün kimliğini sessizce değiştiremez. Canlı ve
 ## 2. Plan durumu ve sınırı
 
 - **Plan durumu:** Hazır
-- **Uygulama durumu:** Başlamadı
+- **Uygulama durumu:** Wave 01–18 Sale kapsamı yürütüldü; manuel/device/store QA Wave 19'a ertelendi
 - **Wave Map durumu:** Hazır
-- **Hazırlanmış Wave Planları:** Wave 01 — `waves/TALKX_WAVE_01.md`; Wave 02 — `waves/TALKX_WAVE_02.md`; Wave 03 — `waves/TALKX_WAVE_03.md`; Wave 04 — `waves/TALKX_WAVE_04.md`; Wave 05 — `waves/TALKX_WAVE_05.md`; Wave 06 — `waves/TALKX_WAVE_06.md`; Wave 07 — `waves/TALKX_WAVE_07.md`; Wave 08 — `waves/TALKX_WAVE_08.md`; Wave 09 — `waves/TALKX_WAVE_09.md`; Wave 10 — `waves/TALKX_WAVE_10.md`; Wave 11 — `waves/TALKX_WAVE_11.md`; Wave 12 — `waves/TALKX_WAVE_12.md`; Wave 13 — `waves/TALKX_WAVE_13.md`; Wave 14 — `waves/TALKX_WAVE_14.md`; Wave 15 — `waves/TALKX_WAVE_15.md`; Wave 16 — `waves/TALKX_WAVE_16.md`; Wave 17 — `waves/TALKX_WAVE_17.md`; Wave 18 — `waves/TALKX_WAVE_18.md`; Wave 19 — `waves/TALKX_WAVE_19.md` — on dokuz plan da hazır, aktif değil
-- **Uygulama wave'i:** Başlamadı
+- **Hazırlanmış Wave Planları:** Wave 01 — `waves/TALKX_WAVE_01.md`; Wave 02 — `waves/TALKX_WAVE_02.md`; Wave 03 — `waves/TALKX_WAVE_03.md`; Wave 04 — `waves/TALKX_WAVE_04.md`; Wave 05 — `waves/TALKX_WAVE_05.md`; Wave 06 — `waves/TALKX_WAVE_06.md`; Wave 07 — `waves/TALKX_WAVE_07.md`; Wave 08 — `waves/TALKX_WAVE_08.md`; Wave 09 — `waves/TALKX_WAVE_09.md`; Wave 10 — `waves/TALKX_WAVE_10.md`; Wave 11 — `waves/TALKX_WAVE_11.md`; Wave 12 — `waves/TALKX_WAVE_12.md`; Wave 13 — `waves/TALKX_WAVE_13.md`; Wave 14 — `waves/TALKX_WAVE_14.md`; Wave 15 — `waves/TALKX_WAVE_15.md`; Wave 16 — `waves/TALKX_WAVE_16.md`; Wave 17 — `waves/TALKX_WAVE_17.md`; Wave 18 — `waves/TALKX_WAVE_18.md`; Wave 19 — `waves/TALKX_WAVE_19.md` — Wave 01–18 kapalı, Wave 19 hazır fakat aktif değil
+- **Uygulama wave'i:** Yok; Wave 18 kapandı, Wave 19 başlatılmadı
 - **Birincil alan:** Admin / Trust & Safety / Moderasyon / Analytics / Legal / Release / Android dağıtım / Operasyon
-- **Ana repo alanları:** `chatapp-backend/admin.js`, `chatapp-backend/admin.html`, repo kökü, `android/` ve ilgili docs/runbook
+- **Ana repo alanları:** `chatapp-backend/admin.js`, `chatapp-backend/admin.html`, canonical `chatapp-frontend/android/` ve ilgili canonical Plans/runbook belgeleri; workspace root `android/` ve `Plans/` kaynak değildir
 - **Bağlı planlar:** Plan A — Product & Client Experience; Plan B — Platform, Realtime & Data
 
 Bu plan:
@@ -696,14 +696,16 @@ Wave 17 Sale Release override kanıtı 2026-09-25 tarihinde iki repoda `quality:
 
 **Kabul kriterleri:**
 
-- [ ] Web/Android/backend release kimliği ilişkilendirilebilir.
-- [ ] Eski frontend asset'i yeni APK/AAB içine girmiyor.
-- [ ] Keystore/şifre repo/log'da değil.
-- [ ] Debug endpoint production release'te yok.
-- [ ] Permission beyanı gerçek kullanım kadar.
+- [x] Web/Android/backend release kimliği ilişkilendirilebilir. — `talkx-1.0.6-8`, frontend `0cdc68303177bd076bc4c5832f26731b2e900f8e`, backend baseline `b5b3807356ca565315ce99b9eac4d566bd17ad80`.
+- [x] Eski frontend asset'i yeni APK/AAB içine girmiyor. — Clean sync sonrası 18 dosyalık full-tree SHA-256 `860a50127d164c7a0a8f7d2ca5b2088f518df178f67af77d7f3c989c5f0221a9`; stale fixture negatif testi geçti.
+- [x] Keystore/şifre repo/log'da değil. — Ephemeral internal RC PKCS12 temp alanda üretildi, password yalnız process env ile taşındı ve `finally` cleanup uygulandı.
+- [x] Debug endpoint production release'te yok. — Localhost/emulator fallback kaldırıldı; production URL/source-map/staging taraması geçti.
+- [x] Permission beyanı gerçek kullanım kadar. — Release merged manifest exact permission ve exported-component allowlistinden geçti; store/Data Safety insan incelemesi Wave 19'da.
 - [ ] Back/push/media/match smoke cihazda.
-- [ ] Rollout ve rollback adımları belgeli.
-- [ ] C-COMP-001 mağaza kararları tamamlanmadan yanlış beyanla yayın yok.
+- [x] Rollout ve rollback adımları belgeli. — Internal RC halt/forward-fix runbook'u eklendi; production rollout komutu yok.
+- [x] C-COMP-001 mağaza kararları tamamlanmadan yanlış beyanla yayın yok. — Play upload/track/listing/rollout yapılmadı; `playUploadAuthorized=false`.
+
+> **Wave 18 Sale kanıtı (2026-09-25):** `1.0.6`/versionCode 8 release manifesti, clean Vite build/Capacitor sync, Gradle/R8/lint release build, merged-manifest audit ve ephemeral internal imzalı AAB doğrulandı. Final artifact `f55badb5d4a9d8b122d03feb5e3905ec23c6f77745ec39791f19b84e0e01e5ae`, internal sertifika SHA-256 `AC:9A:A2:EB:79:E8:32:B0:1C:3C:EB:78:6E:F1:DF:4D:E3:16:9D:58:86:23:C3:1E:73:87:47:9C:C7:81:0A:75`. Bu ephemeral sertifika Play upload key değildir. Cihaz smoke ve store beyanları Wave 19'a ertelendi.
 
 ## 25. C-OPS-001 — Canlı servis, config ve deploy runbook
 
