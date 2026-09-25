@@ -832,6 +832,33 @@ const migrations = Object.freeze([
         ON legal_acceptances(release_id,accepted_at DESC)
         WHERE release_id IS NOT NULL;
     `
+  }),
+  Object.freeze({
+    version: '007',
+    name: 'wave13_push_device_locale',
+    sql: `
+      ALTER TABLE push_devices
+        ADD COLUMN IF NOT EXISTS locale TEXT,
+        ADD COLUMN IF NOT EXISTS locale_updated_at TIMESTAMPTZ;
+      UPDATE push_devices pd
+      SET locale = COALESCE(pd.locale, p.locale, 'en'),
+          locale_updated_at = COALESCE(pd.locale_updated_at, pd.updated_at, NOW())
+      FROM profiles p
+      WHERE p.user_id = pd.user_id
+        AND pd.locale IS NULL;
+      UPDATE push_devices
+      SET locale = 'en',
+          locale_updated_at = COALESCE(locale_updated_at, updated_at, NOW())
+      WHERE locale IS NULL OR locale NOT IN ('tr', 'en');
+      ALTER TABLE push_devices
+        DROP CONSTRAINT IF EXISTS push_devices_locale_check;
+      ALTER TABLE push_devices
+        ADD CONSTRAINT push_devices_locale_check
+        CHECK (locale IS NULL OR locale IN ('tr', 'en'));
+      CREATE INDEX IF NOT EXISTS idx_push_devices_active_locale
+        ON push_devices(locale,is_active)
+        WHERE is_active = TRUE;
+    `
   })
 ]);
 

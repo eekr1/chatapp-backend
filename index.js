@@ -20,6 +20,7 @@ const friendsRoutes = require('./routes/friends');
 const pushRoutes = require('./routes/push');
 const supportRoutes = require('./routes/support');
 const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
+const { resolveDeliveryLocale, selectLocalizedPayload } = require('./utils/notificationLocale');
 const { shouldDebouncePush } = require('./utils/pushDebounce');
 const { fetchLegalSettings } = require('./utils/legalContent');
 const { buildLegalRelease, calculateLegalStatus, legalStatusPayload } = require('./utils/legalAcceptance');
@@ -836,8 +837,55 @@ const buildPushLogMeta = (source, pushResult = {}, extra = {}) => ({
     projectIdUsed: pushResult.projectIdUsed || null,
     errorSummary: pushResult.errorSummary || {},
     errorSamples: Array.isArray(pushResult.errorSamples) ? pushResult.errorSamples.slice(0, 5) : [],
+    localeSummary: pushResult.localeSummary || {},
     ...extra
 });
+
+const mergePushResults = (parts = []) => {
+    const merged = {
+        enabled: false,
+        tokenCount: 0,
+        sentCount: 0,
+        failureCount: 0,
+        invalidTokens: [],
+        errorSummary: {},
+        errorSamples: [],
+        localeSummary: {},
+        firebaseEnabled: false,
+        initError: null,
+        projectIdUsed: null
+    };
+    for (const part of parts) {
+        const result = part?.result || {};
+        merged.enabled = merged.enabled || Boolean(result.enabled);
+        merged.firebaseEnabled = merged.firebaseEnabled || Boolean(result.firebaseEnabled);
+        merged.tokenCount += Number(result.tokenCount) || 0;
+        merged.sentCount += Number(result.sentCount) || 0;
+        merged.failureCount += Number(result.failureCount) || 0;
+        merged.invalidTokens.push(...(result.invalidTokens || []));
+        merged.projectIdUsed = merged.projectIdUsed || result.projectIdUsed || null;
+        merged.initError = merged.initError || result.initError || null;
+        for (const [code, count] of Object.entries(result.errorSummary || {})) {
+            merged.errorSummary[code] = (merged.errorSummary[code] || 0) + (Number(count) || 0);
+        }
+        merged.errorSamples.push(...(result.errorSamples || []));
+        const localeKey = part?.locale || 'en';
+        const current = merged.localeSummary[localeKey] || {
+            tokenCount: 0,
+            sentCount: 0,
+            failureCount: 0,
+            fallbackCount: 0
+        };
+        current.tokenCount += Number(result.tokenCount) || 0;
+        current.sentCount += Number(result.sentCount) || 0;
+        current.failureCount += Number(result.failureCount) || 0;
+        if (part?.source === 'fallback') current.fallbackCount += Number(result.tokenCount) || 0;
+        merged.localeSummary[localeKey] = current;
+    }
+    merged.invalidTokens = Array.from(new Set(merged.invalidTokens));
+    merged.errorSamples = merged.errorSamples.slice(0, 5);
+    return merged;
+};
 
 const logPushDelivery = async ({
     deliveryId = null,
@@ -926,14 +974,41 @@ const sendPushToUser = async (userId, payload = {}, options = {}) => {
 
     try {
         const tokenRes = await pool.query(
-            `SELECT DISTINCT ON (COALESCE(NULLIF(device_id, ''), ('user:' || user_id::text))) push_token
-             FROM push_devices
-             WHERE user_id = $1 AND is_active = TRUE
-             ORDER BY COALESCE(NULLIF(device_id, ''), ('user:' || user_id::text)), updated_at DESC`,
+            `SELECT DISTINCT ON (COALESCE(NULLIF(pd.device_id, ''), ('user:' || pd.user_id::text)))
+                    pd.push_token, pd.locale AS device_locale, p.locale AS profile_locale
+             FROM push_devices pd
+             LEFT JOIN profiles p ON p.user_id = pd.user_id
+             WHERE pd.user_id = $1 AND pd.is_active = TRUE
+             ORDER BY COALESCE(NULLIF(pd.device_id, ''), ('user:' || pd.user_id::text)), pd.updated_at DESC`,
             [userId]
         );
-        const tokens = tokenRes.rows.map(r => r.push_token).filter(Boolean);
-        const result = await sendPushToTokens(tokens, pushPayload);
+        const groups = new Map();
+        for (const row of tokenRes.rows) {
+            if (!row.push_token) continue;
+            const resolution = resolveDeliveryLocale({
+                deviceLocale: row.device_locale,
+                profileLocale: row.profile_locale
+            });
+            const groupKey = `${resolution.locale}:${resolution.source}:${resolution.fallbackReason || ''}`;
+            if (!groups.has(groupKey)) groups.set(groupKey, { ...resolution, tokens: [] });
+            groups.get(groupKey).tokens.push(row.push_token);
+        }
+        const parts = [];
+        for (const group of groups.values()) {
+            const localized = selectLocalizedPayload(options.payloadByLocale, group);
+            const selectedPayload = localized || {
+                ...pushPayload,
+                data: {
+                    ...(pushPayload.data || {}),
+                    renderLocale: group.locale,
+                    localeSource: group.source,
+                    ...(group.fallbackReason ? { fallbackReason: group.fallbackReason } : {})
+                }
+            };
+            const result = await sendPushToTokens(group.tokens, selectedPayload);
+            parts.push({ locale: group.locale, source: group.source, result });
+        }
+        const result = mergePushResults(parts);
         if (result.invalidTokens && result.invalidTokens.length) {
             disableInvalidPushTokens(result.invalidTokens);
         }
@@ -3074,6 +3149,7 @@ wss.on('connection', (ws, req) => {
                         const localizedPhotoText = t(dTargetLang, 'ws.PHOTO_SENT', {}, 'Photo sent');
                         const imageDeliveryId = uuidv4();
                         for (const dTargetClient of dTargetClients) {
+                            const clientPhotoText = t(resolveWsLang(dTargetClient.ws), 'ws.PHOTO_SENT', {}, 'Sent a photo');
                             sendJson(dTargetClient.ws, {
                                 type: 'direct_message',
                                 fromUserId: distSenderId,
@@ -3085,7 +3161,7 @@ wss.on('connection', (ws, req) => {
                                 revision: persisted.revision,
                                 expiresAt: persisted.expiresAt,
                                 serverMessageId,
-                                text: localizedPhotoText,
+                                text: clientPhotoText,
                                 conversationId: dConvId,
                                 deliveryId: imageDeliveryId,
                                 clientMsgId
@@ -3108,7 +3184,7 @@ wss.on('connection', (ws, req) => {
                                 debounce: imagePushDebounce
                             });
                         } else {
-                            sendPushToUser(distTargetUserId, {
+                            const imagePushBase = {
                                 title: clientData.nickname || clientData.username || t(dTargetLang, 'ws.NEW_MESSAGE', {}, 'New message'),
                                 body: localizedPhotoText,
                                 ttlSeconds: 3600,
@@ -3127,9 +3203,23 @@ wss.on('connection', (ws, req) => {
                                     clientMsgId,
                                     channelId: PUSH_CHANNEL_IDS.messages
                                 }
-                            }, {
+                            };
+                            const imagePayloadForLocale = (locale) => ({
+                                ...imagePushBase,
+                                title: clientData.nickname || clientData.username || t(locale, 'ws.NEW_MESSAGE', {}, 'New message'),
+                                body: t(locale, 'ws.PHOTO_SENT', {}, 'Sent a photo'),
+                                data: {
+                                    ...imagePushBase.data,
+                                    text: t(locale, 'ws.PHOTO_SENT', {}, 'Sent a photo')
+                                }
+                            });
+                            sendPushToUser(distTargetUserId, imagePushBase, {
                                 eventType: 'direct_image_send',
-                                deliveryId: imageDeliveryId
+                                deliveryId: imageDeliveryId,
+                                payloadByLocale: {
+                                    tr: imagePayloadForLocale('tr'),
+                                    en: imagePayloadForLocale('en')
+                                }
                             }).catch((e) => console.error('direct_image_send push error:', e.message));
                         }
 

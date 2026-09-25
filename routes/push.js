@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { calculateLegalStatus, legalStatusPayload } = require('../utils/legalAcceptance');
-const { sendApiError } = require('../utils/i18n');
+const { normalizeLang, sendApiError } = require('../utils/i18n');
 const { authenticate: authenticateSession } = require('../utils/sessionService');
 
 const authenticate = async (req, res, next) => {
@@ -25,24 +25,29 @@ router.post('/register', async (req, res) => {
     const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
     const platform = typeof req.body?.platform === 'string' ? req.body.platform.trim().toLowerCase() : 'android';
     const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() || null : null;
+    const submittedLocale = req.body?.locale;
+    const locale = submittedLocale === undefined ? normalizeLang(req.user?.locale, 'en') : normalizeLang(submittedLocale, null);
 
-    if (!token || token.length > 4096 || !['android', 'web'].includes(platform) || (deviceId && deviceId.length > 200)) {
+    if (!token || token.length > 4096 || !['android', 'web'].includes(platform) || (deviceId && deviceId.length > 200) || !locale) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     try {
         await pool.query(
-            `INSERT INTO push_devices (user_id, device_id, platform, push_token, is_active, updated_at, last_seen_at)
-             VALUES ($1, $2, $3, $4, TRUE, NOW(), NOW())
+            `INSERT INTO push_devices
+              (user_id, device_id, platform, push_token, locale, locale_updated_at, is_active, updated_at, last_seen_at)
+             VALUES ($1, $2, $3, $4, $5, NOW(), TRUE, NOW(), NOW())
              ON CONFLICT (push_token)
              DO UPDATE SET
                user_id = EXCLUDED.user_id,
                device_id = EXCLUDED.device_id,
                platform = EXCLUDED.platform,
+               locale = EXCLUDED.locale,
+               locale_updated_at = NOW(),
                is_active = TRUE,
                updated_at = NOW(),
                last_seen_at = NOW()`,
-            [req.userId, deviceId, platform, token]
+            [req.userId, deviceId, platform, token, locale]
         );
 
         // Keep only the latest active token per user+device to prevent duplicate push notifications.
@@ -58,7 +63,7 @@ router.post('/register', async (req, res) => {
             );
         }
 
-        res.json({ success: true });
+        res.json({ success: true, locale, locale_source: submittedLocale === undefined ? 'profile' : 'device' });
     } catch (e) {
         console.error('Push register error:', e);
         return sendApiError(req, res, 500, 'SERVER_ERROR');
