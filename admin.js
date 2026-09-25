@@ -6,6 +6,12 @@ const path = require('path');
 const { pool } = require('./db');
 const { createAdminGuard } = require('./utils/adminSecurity');
 const { buildPerformanceOverview, resolvePerformancePolicy } = require('./utils/performanceContract');
+const {
+    buildSaleOverview,
+    countMetric,
+    identifiedOutcomeMetric,
+    unavailableMetric
+} = require('./utils/saleOverviewContract');
 const { getPushDiagnostics } = require('./utils/push');
 const { canRejectDeletion, executeAccountDeletion, POLICY_VERSION: DATA_POLICY_VERSION } = require('./utils/accountDeletion');
 const {
@@ -622,6 +628,78 @@ router.get('/stats', async (req, res) => {
             onlineConnections: online.onlineConnections || 0
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+const SALE_OVERVIEW_WINDOWS = Object.freeze({
+    allTime: Object.freeze({ kind: 'all_time', label: 'Tum zamanlar' }),
+    last24Hours: Object.freeze({ kind: 'rolling', hours: 24, label: 'Son 24 saat' }),
+    pointInTime: Object.freeze({ kind: 'point_in_time', label: 'Anlik' })
+});
+
+const saleMetricDefinition = (key, label, unit, source, window) => ({ key, label, unit, source, window });
+
+router.get('/sale-overview', async (req, res) => {
+    const definitions = {
+        totalUsers: saleMetricDefinition('totalUsers', 'Toplam Kullanici', 'users', 'PostgreSQL users', SALE_OVERVIEW_WINDOWS.allTime),
+        onlineUsers: saleMetricDefinition('onlineUsers', 'Anlik Online Kullanici', 'users', 'Runtime online snapshot', SALE_OVERVIEW_WINDOWS.pointInTime),
+        activeConversations: saleMetricDefinition('activeConversations', 'Aktif Sohbet', 'conversations', 'Runtime conversation registry', SALE_OVERVIEW_WINDOWS.pointInTime),
+        searches24h: saleMetricDefinition('searches24h', 'Arama', 'searches', 'behavior_events canonical search_id', SALE_OVERVIEW_WINDOWS.last24Hours),
+        matches24h: saleMetricDefinition('matches24h', 'Eslesme', 'matches', 'behavior_events canonical match_id', SALE_OVERVIEW_WINDOWS.last24Hours),
+        userReports24h: saleMetricDefinition('userReports24h', 'Kullanici Raporu', 'reports', 'PostgreSQL reports', SALE_OVERVIEW_WINDOWS.last24Hours),
+        supportReports24h: saleMetricDefinition('supportReports24h', 'Uygulama Raporu', 'reports', 'PostgreSQL support_reports', SALE_OVERVIEW_WINDOWS.last24Hours)
+    };
+
+    const tasks = await Promise.allSettled([
+        pool.query('SELECT COUNT(*)::bigint AS count FROM users'),
+        pool.query("SELECT COUNT(*)::bigint AS count FROM reports WHERE created_at > NOW() - INTERVAL '24 hours'"),
+        pool.query("SELECT COUNT(*)::bigint AS count FROM support_reports WHERE created_at > NOW() - INTERVAL '24 hours'"),
+        pool.query(`
+            SELECT
+                COUNT(*) FILTER (WHERE event_name = 'match_search_started')::bigint AS search_events,
+                COUNT(DISTINCT NULLIF(metadata->>'search_id', ''))
+                    FILTER (WHERE event_name = 'match_search_started')::bigint AS searches,
+                COUNT(*) FILTER (WHERE event_name = 'match_offer_received')::bigint AS offer_events,
+                COUNT(DISTINCT match_id)
+                    FILTER (WHERE event_name = 'match_offer_received' AND match_id IS NOT NULL)::bigint AS matches
+            FROM behavior_events
+            WHERE created_at > NOW() - INTERVAL '24 hours'
+        `),
+        Promise.resolve().then(() => {
+            const provider = router.getOnlineUsersSnapshot;
+            if (typeof provider !== 'function') throw new Error('ONLINE_PROVIDER_UNAVAILABLE');
+            const snapshot = provider();
+            if (!Array.isArray(snapshot)) throw new Error('ONLINE_PROVIDER_INVALID');
+            return new Set(snapshot.map((entry) => String(entry?.dbUserId || '').trim()).filter(Boolean)).size;
+        }),
+        Promise.resolve().then(() => {
+            const provider = router.getActiveConversationCount;
+            if (typeof provider !== 'function') throw new Error('CONVERSATION_PROVIDER_UNAVAILABLE');
+            const count = Number(provider());
+            if (!Number.isFinite(count) || count < 0) throw new Error('CONVERSATION_PROVIDER_INVALID');
+            return Math.floor(count);
+        })
+    ]);
+
+    const fulfilledRow = (result) => result.status === 'fulfilled' ? result.value?.rows?.[0] : null;
+    const users = fulfilledRow(tasks[0]);
+    const userReports = fulfilledRow(tasks[1]);
+    const supportReports = fulfilledRow(tasks[2]);
+    const activity = fulfilledRow(tasks[3]);
+    const metrics = [
+        users ? countMetric(definitions.totalUsers, users.count) : unavailableMetric(definitions.totalUsers),
+        tasks[4].status === 'fulfilled' ? countMetric(definitions.onlineUsers, tasks[4].value) : unavailableMetric(definitions.onlineUsers),
+        tasks[5].status === 'fulfilled' ? countMetric(definitions.activeConversations, tasks[5].value) : unavailableMetric(definitions.activeConversations),
+        activity
+            ? identifiedOutcomeMetric(definitions.searches24h, { identifiedCount: activity.searches, rawEventCount: activity.search_events })
+            : unavailableMetric(definitions.searches24h),
+        activity
+            ? identifiedOutcomeMetric(definitions.matches24h, { identifiedCount: activity.matches, rawEventCount: activity.offer_events })
+            : unavailableMetric(definitions.matches24h),
+        userReports ? countMetric(definitions.userReports24h, userReports.count) : unavailableMetric(definitions.userReports24h),
+        supportReports ? countMetric(definitions.supportReports24h, supportReports.count) : unavailableMetric(definitions.supportReports24h)
+    ];
+
+    return res.json(buildSaleOverview({ metrics }));
 });
 
 router.get('/online-users', async (req, res) => {
