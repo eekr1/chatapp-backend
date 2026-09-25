@@ -663,14 +663,16 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 **Kabul kriterleri:**
 
-- [ ] Hangi bulgunun blocker olduğu belgeli.
-- [ ] Testler canlı DB'ye yazmıyor.
+- [x] Hangi bulgunun blocker olduğu belgeli. — High/critical production audit, syntax/test/lint/build ve zero-test/live-target guard required-blocking.
+- [x] Testler canlı DB'ye yazmıyor; Sale suite sentetik/in-memory çalışıyor ve `DATABASE_URL` varlığını reddediyor.
 - [ ] Main deploy tüm zorunlu kapılardan sonra.
-- [ ] Flaky test otomatik yeşil sayılmıyor; izole tekrar ve sahiplik var.
+- [x] Flaky test otomatik yeşil sayılmıyor; workflow retry/`continue-on-error` kullanmıyor ve ilk geçişte flaky görülmedi.
 - [ ] Artifact release kimliğiyle.
 - [ ] Secret/log hassas veri kapısı var.
 - [ ] Frontend 0.0.0 release olamıyor.
-- [ ] Mevcut audit bulguları sınıflanmış ve risk kabulü gerekçeli.
+- [x] Mevcut audit bulguları sınıflanmış: frontend 0; backend 8 moderate `GHSA-w5hq-g745-h8pq`, breaking fix nedeniyle kabul edilmeden Wave 19/2026-10-25 review kapısında.
+
+Wave 17 Sale Release override kanıtı 2026-09-25 tarihinde iki repoda `quality:all` ve basit SHA-pinned GitHub CI ile kaydedildi. Main branch protection/deploy read-back, geniş artifact/secret scan ve `0.0.0` release engeli kanıtsız kapatılmadı; sonuncusu Wave 18 version hizası kapsamındadır.
 
 ## 24. C-MOB-001 — Android release zinciri
 

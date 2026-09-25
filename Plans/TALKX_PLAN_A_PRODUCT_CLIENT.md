@@ -639,10 +639,10 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 - [ ] Plan ID kabul kriterleri kanıtla işaretli.
 - [ ] Bağlı Plan B/C sözleşmeleri tamam veya açıkça kapsam dışı.
-- [ ] Test sonucu tarih/komut/sayı ile kayıtlı.
-- [ ] Manuel QA sonucu ve cihaz/browser kayıtlı.
-- [ ] Bilinen hata saklanmıyor.
-- [ ] Sonraki wave başlatılmıyor.
+- [x] Test sonucu tarih/komut/sayı ile kayıtlı. — Wave 17 Sale: frontend `quality:all`, core `46/46`, kritik `38/38`, lint/build geçti (2026-09-25).
+- [x] Manuel QA sonucu ve cihaz/browser kaydı Checkpoint C/Wave 19 havuzuna aktarıldı; Wave 17 commit kapısı yapılmadı.
+- [x] Bilinen hata saklanmıyor; enterprise component/browser/E2E matrisi Roadmap / Deferred olarak açık.
+- [x] Sonraki wave başlatılmıyor.
 
 ## 26. Çapraz plan sözleşmeleri
 

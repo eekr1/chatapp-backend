@@ -840,10 +840,10 @@ Plan haritasındaki `Birincil bağımlılık` sütunu yalnız wave sıralamasın
 
 - [ ] Plan ID kabul kriterleri kanıtlı.
 - [ ] Migration/rollback sonucu kayıtlı.
-- [ ] Test komutu ve sayısı kayıtlı.
+- [x] Test komutu ve sayısı kayıtlı. — Wave 17 Sale: 66 dosya syntax, core `101/101`, kritik `54/54` geçti (2026-09-25).
 - [ ] Client/admin consumer ile contract doğrulanmış.
-- [ ] Canlı yazma testi açık onay olmadan yapılmamış.
-- [ ] Sonraki wave başlatılmamış.
+- [x] Canlı yazma testi açık onay olmadan yapılmamış; live-target environment guard negatif testi exit `1` verdi.
+- [x] Sonraki wave başlatılmamış.
 
 ## 31. Çapraz plan sözleşmeleri
 

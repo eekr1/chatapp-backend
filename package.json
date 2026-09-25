@@ -7,6 +7,12 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "test": "node --test test/*.test.js",
+    "quality:policy": "node scripts/quality-gate.mjs self-test",
+    "quality:syntax": "node scripts/quality-gate.mjs syntax",
+    "quality:core": "node scripts/quality-gate.mjs core",
+    "quality:critical": "node scripts/quality-gate.mjs critical",
+    "quality:audit": "npm audit --omit=dev --audit-level=high",
+    "quality:all": "npm run quality:policy && npm run quality:syntax && npm run quality:core && npm run quality:critical && npm run quality:audit",
     "migration:run": "node scripts/migrate.js",
     "migration:status": "node scripts/migration-status.js",
     "backup:verify": "node scripts/verify-backup.js"

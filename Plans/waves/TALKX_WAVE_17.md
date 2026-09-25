@@ -3,7 +3,7 @@
 > Bu belge yalnız Wave 17 için hazırlanmış uygulama planıdır.
 > Canonical sıra Plan A `A-QA-001` → Plan B `B-QA-001` → Plan C `C-CI-001` şeklindedir.
 > Ana ilke: yeşil işaret ancak yeniden üretilebilir komut, izole test ortamı, saklanan kanıt ve açık blocker politikasıyla anlamlıdır; flaky veya çalışmayan kapı başarı sayılmaz.
-> Plan hazırdır. Wave 17 aktif değildir, Wave 01–16 kapanmamıştır ve uygulama başlamamıştır. Wave 18 ayrı belgede planlanmıştır; burada uygulanmaz veya başlatılmaz.
+> Wave 17 Sale Release kapsamı 2026-09-25 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 18 başlatılmadı.
 
 ## 1. Durum ve yürütme sınırı
 
@@ -11,13 +11,13 @@
 - **Wave adı:** Client/backend kalite kapıları ve ortak CI zinciri
 - **Plan katılımı:** Plan A + Plan B + Plan C
 - **Canonical sıra:** `A-QA-001` → `B-QA-001` → `C-CI-001`
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** Uygulandı
+- **Wave durumu:** Auto-verified / committed / manual-QA-deferred
+- **Uygulama durumu:** Sale Release minimum kalite kapıları ve basit CI tamamlandı; enterprise matris deferred
+- **Uygulama yetkisi:** 2026-09-25 tarihinde açıkça verildi
 - **Giriş kapısı:** Wave 16 **DEFERRED / ROADMAP / COMMITTED** ve kullanıcıdan açık "Wave 17'yi başlat" talimatı
-- **Mevcut blokaj:** Wave 16 PAS/roadmap kaydı henüz committed değil; Wave 17 uygulanamaz
-- **Önceki wave:** Wave 16 — planı hazır, aktif değil
+- **Mevcut blokaj:** Yok; branch protection/deploy enforcement dış sistemde ayrı yetki gerektiren açık manuel kapıdır
+- **Önceki wave:** Wave 16 — deferred / roadmap / committed
 - **Sonraki wave:** Wave 18 — ayrı planı hazır; aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması Wave 17 aktivasyonu, dependency/lockfile değişikliği, test çalıştırma, fixture/seed yazma, CI workflow veya branch protection oluşturma, repository setting/deploy trigger değiştirme, canlı DB/provider kullanma, secret erişimi, Android release uygulaması ya da Wave 18 aktivasyonu için yetki değildir.
@@ -58,6 +58,8 @@ Bu dosyanın hazırlanması Wave 17 aktivasyonu, dependency/lockfile değişikli
 - Yerel makineye özel absolute path, credential veya cache CI otoritesi olamaz.
 
 ## 3. Wave sonucu
+
+> Sale Release override sonucu: mevcut client/backend testleri zero-test ve live-target korumalı stable komutlara bağlandı; frontend lint/build ve iki reponun high-severity audit kapısı eklendi; iki bağımsız repoda SHA-pinned basit GitHub CI tanımlandı. Aşağıdaki enterprise DB/E2E/artifact ve geniş matris hedefleri Post-acquisition Roadmap / Deferred olarak açık kalır.
 
 Wave 17 sonunda:
 
@@ -567,32 +569,42 @@ Kriterler plan hazırlandığı için işaretlenmez. Önceki Plan ID'lerin check
 
 ### 19.1 Giriş
 
-- [ ] Wave 16 **DEFERRED / ROADMAP / COMMITTED**.
-- [ ] Kullanıcı açıkça Wave 17'yi başlattı.
-- [ ] Repo sahipliği/branch/remote/dirty snapshot kayıtlı.
-- [ ] Runtime/lockfile/test/CI inventory yeniden doğrulandı.
-- [ ] Test DB ve fake-provider modeli onaylı.
-- [ ] Production/deploy/repository-settings kapalı.
+- [x] Wave 16 **DEFERRED / ROADMAP / COMMITTED** (`f211a7fe161d3fc677179f526da7bb031ded09dc`, `origin/sale-release`).
+- [x] Kullanıcı açıkça Wave 17'yi başlattı.
+- [x] Backend/frontend ayrı `sale-release` repoları temiz ve kendi `origin/sale-release` uçlarıyla `0/0` senkron kaydedildi.
+- [x] Node `24.11.1`, npm `11.6.2`, iki lockfile, mevcut testler ve workflow yokluğu yeniden doğrulandı.
+- [x] Sale kapsamındaki testler sentetik/in-memory fake kullanıyor; live-target environment değişkenleri fail-closed reddediliyor. Ephemeral PostgreSQL matrisi Roadmap / Deferred.
+- [x] Production, deploy, branch protection, secret ve repository settings kapalı tutuldu.
 
 ### 19.2 Yerel tamam
 
-- [ ] A-QA-001 client kapıları çalışıyor ve zero-test guard var.
-- [ ] B-QA-001 backend/DB/two-client kapıları çalışıyor.
-- [ ] C-CI-001 workflow ve policy local/CI parity ile kanıtlı.
-- [ ] Testler canlı DB/provider/recipient kullanmıyor.
-- [ ] Success/failure/infra/cancel/skip/flaky sonuçları doğru sınıflı.
-- [ ] Artifact, secret/redaction ve cleanup kanıtları mevcut.
+- [x] A-QA-001 Sale client kapıları çalışıyor: zero-test guard, `46/46` core, `38/38` kritik, lint ve production build geçti.
+- [x] B-QA-001 Sale backend kapıları çalışıyor: 66 dosya syntax, `101/101` core ve `54/54` auth/session/two-client/match/reconnect/duplicate testi geçti.
+- [x] C-CI-001 basit workflow ve policy local komutlarla aynı `quality:all` girişini kullanıyor; action SHA'ları immutable sabitlendi.
+- [x] Testler canlı DB/provider/recipient kullanmıyor; iki repoda sahte production-benzeri `DATABASE_URL` negatif testi exit `1` verdi.
+- [x] Başarı ve kontrollü policy failure fail-closed kanıtlandı; otomatik retry, quarantine veya `continue-on-error` yok.
+- [ ] Geniş artifact/secret-scan/ephemeral-DB cleanup platformu — **Post-acquisition Roadmap / Deferred**.
 
 ### 19.3 Sale Release otomatik kapanışı
 
-- [ ] Required checks bilerek failure ile fail-closed kanıtlandı.
-- [ ] Branch protection/deploy gate açık onay varsa read-back ile doğrulandı; yoksa açık manual external gate kaldı.
-- [ ] Full command/test count/runtime/artifact evidence kayıtlı.
-- [ ] Flaky registry boş veya her kayıt owner/issue/expiry ve onaylı koruma taşıyor.
-- [ ] Master §11 ilgili maddeleri gerçek kanıtla senkronize edildi.
-- [ ] Manuel QA maddeleri Checkpoint C/Wave 19 havuzuna aktarıldı.
-- [ ] Canonical Plan A/B/C, Wave Map ve sonuç alanı senkronize edildi.
-- [ ] Wave 18 başlatılmadan duruldu.
+- [x] Required local policy guard sahte live target ile bilerek kırıldı ve fail-closed sonuç verdi.
+- [x] Branch protection/deploy gate değiştirilmedi; ayrı açık yetki/read-back gerektiren external manual gate olarak kaldı.
+- [x] Full komut, runtime ve test sayıları sonuç alanına kaydedildi; geniş artifact platformu deferred.
+- [x] İlk geçişte flaky test görülmedi; retry/quarantine kullanılmadı.
+- [x] Master kalite yönlendirmesi gerçek Sale Release kanıtıyla senkronize edildi; full enterprise kriterleri açık bırakıldı.
+- [x] Manuel QA maddeleri Checkpoint C/Wave 19 havuzuna aktarıldı.
+- [x] Canonical Plan A/B/C, Wave Map ve sonuç alanı gerçek kanıt kadar senkronize edildi.
+- [x] Wave 18 başlatılmadan duruldu.
+
+### 19.4 Sale Release otomatik kanıtı — 2026-09-25
+
+- Backend `npm run quality:all`: policy self-test geçti; 66 JavaScript dosyası syntax geçti; core `101/101`; kritik `54/54`; high/critical audit blocker yok. Firebase/Google zincirindeki `GHSA-w5hq-g745-h8pq` kaynaklı 8 moderate bulgu breaking fix gerektirdiği için görünür ve kabul edilmemiş takip maddesi olarak `docs/QUALITY_GATES.md` içinde 2026-10-25/Wave 19 inceleme kapısıyla kaydedildi.
+- Frontend `npm run quality:all`: policy self-test geçti; core `46/46`; kritik `38/38`; ESLint geçti; Vite production build 110 modül ile geçti; audit 0 bulgu.
+- İki runner da sıfır-test manifest kontrolü ve live external variable reddi taşır. Sahte `DATABASE_URL=postgres://production.example/talkx` ile core komutu iki repoda da beklenen exit `1` verdi; URL veya credential loglanmadı.
+- Backend `Backend quality`, frontend `Frontend quality` stable job/check isimlerini kullanır; `contents: read`, lockfile `npm ci`, Node `24.11.1`, SHA-pinned checkout/setup-node, timeout ve no-retry/no-deploy sözleşmesi vardır.
+- Değişen ürün davranışı, schema, migration, dependency veya lockfile yoktur. Production/staging DB, provider, recipient, deploy, secret, branch protection ve repository setting işlemi yapılmadı.
+- Frontend `0.0.0` sürüm hizası, Android asset/version/signing ve release artifact zinciri Wave 18 kapsamıdır; bu wave'de değiştirilmedi.
+- Manuel tarayıcı/cihaz/a11y, CI cancellation/infra ve branch-protection read-back maddeleri Checkpoint C/Wave 19 veya açık external yetki kapısında kaldı.
 
 ## 20. Kapsam dışı ve successor guard
 
@@ -674,11 +686,10 @@ Kriter yalnız kanıtla `[x]` olur. Bir scriptin varlığı, tek başarılı yer
 
 ## 24. Durma kuralı
 
-Wave 16 QA kapanışı ve kullanıcının açık Wave 17 başlatma talimatı birlikte gelene kadar:
+Wave 17 Sale Release minimum kapsamı committed/pushed olduktan sonra:
 
-- Wave 17 için kod, test, dependency, lockfile, fixture, migration, workflow, branch protection, secret, deploy veya external setting değişikliği yapılmaz.
-- Wave 17 `Aktif` işaretlenmez; belge yalnız `Hazır — aktif değil` kalır.
-- Canonical `[ ]` maddeler kanıtsız kapatılmaz.
-- Mevcut `npm test`, lint/build scripti veya Crashlytics/Android asset satırı çalışır CI kanıtı sayılmaz.
+- Wave 18 için kod, test, dependency, lockfile, Android, signing, artifact veya release hazırlığı yapılmaz.
+- Canonical `[ ]` enterprise/manuel maddeler kanıtsız kapatılmaz; Roadmap ve Checkpoint C/Wave 19'da açık kalır.
+- Branch protection, deploy, secret veya external repository setting ayrıca açık yetki olmadan değiştirilmez.
 - Flaky retry, skipped/missing job, zero test ve infrastructure error yeşil sayılmaz.
-- Wave 18 planı ayrı dosyada hazırdır; Wave 18 aktive edilmez veya uygulanmaz.
+- Wave 18 planı ayrı dosyada hazırdır; yalnız yeni açık kullanıcı talimatıyla aktive edilir.
