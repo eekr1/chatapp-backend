@@ -80,7 +80,7 @@ Her yuzey once su sorulari cevaplar:
 
 ## Plan belge yönlendirmesi
 
-> 2026-09-24 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–07 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır; Wave 08–19 başlatılmamıştır.
+> 2026-09-25 itibarıyla üç kalıcı uygulama planı ile canonical Wave Map hazırdır. Wave 01–15 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışındadır. Wave 16 PAS kaydı DEFERRED / ROADMAP / COMMITTED olarak kapandı; Wave 17–19 başlatılmamıştır.
 
 | Plan | Canonical dosya | Birincil sahiplik |
 |---|---|---|
@@ -96,15 +96,15 @@ Her yuzey once su sorulari cevaplar:
 | Wave 05 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_05.md`](waves/TALKX_WAVE_05.md) | Reconnect, active state, gerçek presence, client recovery ve Checkpoint A kanıtı |
 | Wave 06 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_06.md`](waves/TALKX_WAVE_06.md) | Veri registry, canonical ülke, fail-closed privacy/retention, hesap silme ve support operasyon kanıtı |
 | Wave 07 Planı — Auto-verified, manual QA deferred | [`waves/TALKX_WAVE_07.md`](waves/TALKX_WAVE_07.md) | Yalnız Wave 07 QA-014 server-otoriteli arama yaşam döngüsü, UI/UX, kanıt planı ve durma noktası |
-| Wave 08 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_08.md`](waves/TALKX_WAVE_08.md) | Yalnız Wave 08 QA-017 Global/Kendi Ülkem queue, UI, analytics ve Home dilimi; kanıt planı ve durma noktası |
-| Wave 09 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_09.md`](waves/TALKX_WAVE_09.md) | Yalnız Wave 09 QA-003 pending-match protokolü, teklif/kabul UI'si, kanıt planı ve durma noktası |
-| Wave 10 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_10.md`](waves/TALKX_WAVE_10.md) | Yalnız Wave 10 kalıcı metin mesajı idempotency, outbox, retry ve ordering; medya handoff'u, kanıt planı ve durma noktası |
-| Wave 11 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_11.md`](waves/TALKX_WAVE_11.md) | Yalnız Wave 11 tek kullanımlık medya, moderasyon kanıtı, sohbet güven aksiyonları ve A-FRIEND-003 medya kapanışı; kanıt planı ve durma noktası |
-| Wave 12 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_12.md`](waves/TALKX_WAVE_12.md) | Yalnız Wave 12 QA-013 sürümlü legal yayın, reaccept/session recovery ve ayarlar-destek-hesap silme yüzeyleri; kanıt planı ve durma noktası |
-| Wave 13 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_13.md`](waves/TALKX_WAVE_13.md) | Yalnız Wave 13 QA-010/015 locale, çok dilli bildirim, kalıcı TalkX Sistem inbox ve güvenli kampanya teslimi; kanıt planı ve durma noktası |
-| Wave 14 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_14.md`](waves/TALKX_WAVE_14.md) | Yalnız Wave 14 B-ANL-001, C-ANL-001, C-ADMIN-002 ve C-ADMIN-003; ölçüm birimleri, ordered funnel, journey kanıtı, Dashboard ve aktivite özeti; Wave 16 Release Health için dürüst provider-pending sınırı |
-| Wave 15 Planı — Hazır, aktif değil | [waves/TALKX_WAVE_15.md](waves/TALKX_WAVE_15.md) | Yalnız Wave 15 C-ADMIN-004, C-ADMIN-005 ve C-ADMIN-006; güvenli profil listesi/detayı, doğru session-geo-relation anlamları, rapor lifecycle/grouping, hassas kanıt ve auditli operasyon aksiyonları |
-| Wave 16 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_16.md`](waves/TALKX_WAVE_16.md) | Yalnız Wave 16 B-OBS-002 ve C-REL-001; release kimliği, güvenli client-error ingestion, redaction, grouping/rollup, Release Health karar ekranı, lifecycle, alert ve recovery kanıt planı |
+| Wave 08 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_08.md`](waves/TALKX_WAVE_08.md) | Yalnız Wave 08 QA-017 Global/Kendi Ülkem queue, UI, analytics ve Home dilimi; kanıt planı ve durma noktası |
+| Wave 09 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_09.md`](waves/TALKX_WAVE_09.md) | Yalnız Wave 09 QA-003 pending-match protokolü, teklif/kabul UI'si, kanıt planı ve durma noktası |
+| Wave 10 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_10.md`](waves/TALKX_WAVE_10.md) | Yalnız Wave 10 kalıcı metin mesajı idempotency, outbox, retry ve ordering; medya handoff'u, kanıt planı ve durma noktası |
+| Wave 11 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_11.md`](waves/TALKX_WAVE_11.md) | Yalnız Wave 11 tek kullanımlık medya, moderasyon kanıtı, sohbet güven aksiyonları ve A-FRIEND-003 medya kapanışı; kanıt planı ve durma noktası |
+| Wave 12 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_12.md`](waves/TALKX_WAVE_12.md) | Yalnız Wave 12 QA-013 sürümlü legal yayın, reaccept/session recovery ve ayarlar-destek-hesap silme yüzeyleri; kanıt planı ve durma noktası |
+| Wave 13 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_13.md`](waves/TALKX_WAVE_13.md) | Yalnız Wave 13 QA-010/015 locale, çok dilli bildirim, kalıcı TalkX Sistem inbox ve güvenli kampanya teslimi; kanıt planı ve durma noktası |
+| Wave 14 Planı — Auto-verified / committed / manual QA deferred | [`waves/TALKX_WAVE_14.md`](waves/TALKX_WAVE_14.md) | Yalnız Wave 14 B-ANL-001, C-ANL-001, C-ADMIN-002 ve C-ADMIN-003; ölçüm birimleri, ordered funnel, journey kanıtı, Dashboard ve aktivite özeti; Wave 16 Release Health için dürüst provider-pending sınırı |
+| Wave 15 Planı — Auto-verified / committed / manual QA deferred | [waves/TALKX_WAVE_15.md](waves/TALKX_WAVE_15.md) | Yalnız Wave 15 C-ADMIN-004, C-ADMIN-005 ve C-ADMIN-006; güvenli profil listesi/detayı, doğru session-geo-relation anlamları, rapor lifecycle/grouping, hassas kanıt ve auditli operasyon aksiyonları |
+| Wave 16 Planı — Deferred / Roadmap / committed | [`waves/TALKX_WAVE_16.md`](waves/TALKX_WAVE_16.md) | Wave 04 baseline yeterliliği doğrulandı; B-OBS-002 ve C-REL-001'in ingestion, redaction, grouping/rollup ve gelişmiş Release Health kapsamı Post-acquisition Roadmap'te açık korundu |
 | Wave 17 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_17.md`](waves/TALKX_WAVE_17.md) | Yalnız Wave 17 A-QA-001, B-QA-001 ve C-CI-001; izole test ortamı, client/backend kalite kapıları, two-client/migration güveni, ortak CI, blocker/flaky/secret/artifact ve deploy enforcement kanıt planı |
 | Wave 18 Planı — Hazır, aktif değil | [waves/TALKX_WAVE_18.md](waves/TALKX_WAVE_18.md) | Yalnız Wave 18 C-MOB-001 ve A-MOB-001; ortak release/version kaynağı, frontend/Capacitor/Gradle artifact zinciri, signing/manifest/store güvenliği ve Android WebView back/lifecycle/network/push/media eşliği |
 | Wave 19 Planı — Hazır, aktif değil | [`waves/TALKX_WAVE_19.md`](waves/TALKX_WAVE_19.md) | Yalnız Wave 19 C-QA-001; bütünleşik admin/operasyon/release QA, release candidate freeze, evidence reconciliation, manuel matris, kullanıcı onayı ve terminal durma noktası |

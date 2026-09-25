@@ -3,7 +3,7 @@
 > Bu belge yalnız Wave 16 için hazırlanmış uygulama planıdır.
 > Canonical sıra Plan B `B-OBS-002` → Plan C `C-REL-001` şeklindedir.
 > Ana ilke: istemci hatası içerik toplamadan gerçek release kimliği ve güven seviyesiyle ölçülür; admin önce durum, etki ve aksiyonu, sonra maskelenmiş kanıtı görür.
-> Plan hazırdır. Wave 16 aktif değildir, Wave 01–15 kapanmamıştır ve uygulama başlamamıştır. Wave 17 ayrı belgede planlanmıştır; burada uygulanmaz veya başlatılmaz.
+> Wave 16 Sale Release PAS kaydı 2026-09-25 tarihinde tamamlandı. Gelişmiş Release Health kapsamı Post-acquisition Roadmap olarak korundu; Wave 17 başlatılmadı.
 
 ## 1. Durum ve yürütme sınırı
 
@@ -11,13 +11,13 @@
 - **Wave adı:** QA-016 Release Health
 - **Plan katılımı:** Plan B + Plan C
 - **Canonical sıra:** `B-OBS-002 → C-REL-001`
-- **Plan durumu:** Hazır
-- **Wave durumu:** Bekliyor
-- **Uygulama durumu:** Başlamadı
-- **Uygulama yetkisi:** Verilmedi
+- **Plan durumu:** PAS kaydı tamamlandı
+- **Wave durumu:** DEFERRED / ROADMAP / COMMITTED
+- **Uygulama durumu:** Sale Release override tamamlandı; ürün kodu, schema ve UI değişmedi
+- **Uygulama yetkisi:** 2026-09-25 tarihinde yalnız PAS/roadmap kaydı için açıkça verildi
 - **Giriş kapısı:** Wave 15 **AUTO-VERIFIED / COMMITTED** ve kullanıcıdan açık "Wave 16 PAS kaydını başlat" talimatı
-- **Mevcut blokaj:** Wave 15 henüz committed değil; Wave 16 PAS/roadmap kaydı kapatılamaz
-- **Önceki wave:** Wave 15 — planı hazır, aktif değil
+- **Mevcut blokaj:** Yok; post-acquisition implementasyon ayrıca yeni kapsam ve açık yetki gerektirir
+- **Önceki wave:** Wave 15 — auto-verified / committed / manual-QA-deferred
 - **Sonraki wave:** Wave 17 — ayrı planı hazır; aktif değil ve başlatılmadı
 
 Bu dosyanın hazırlanması aktivasyon, dependency/provider satın alma, telemetry açma, migration, production event toplama, source map/symbol yükleme, alarm gönderme, canlı DB sorgusu, config/secret değişikliği, deploy veya Wave 17 aktivasyonu için yetki değildir.
@@ -57,6 +57,8 @@ Bu dosyanın hazırlanması aktivasyon, dependency/provider satın alma, telemet
 - Dashboard kısa karar kartıdır; araştırma Release Health detayındadır.
 
 ## 3. Wave sonucu
+
+> Aşağıdaki tam Release Health sonucu Post-acquisition Roadmap kapsamıdır; Sale Release Wave 16 yürütmesinde uygulanmadı veya tamamlanmış işaretlenmedi. Sale Release sonucu, Wave 04 baseline yeterlilik doğrulaması ve PAS kaydıdır.
 
 Wave 16 sonunda:
 
@@ -539,12 +541,12 @@ Plan hazırlandığı için kriter işaretlenmez. Yalnız uygulama, otomatik kan
 
 ### 16.1 Giriş
 
-- [ ] Wave 15 **AUTO-VERIFIED / COMMITTED**.
-- [ ] Kullanıcı Wave 16'yı açıkça başlattı.
-- [ ] Repo/unrelated değişiklik snapshotı alındı.
-- [ ] Provider kararı veya blokajı kayıtlı.
-- [ ] Production/provider/live destination kapalı.
-- [ ] Migration/dependency/artifact etkisi raporlandı.
+- [x] Wave 15 **AUTO-VERIFIED / COMMITTED** (`693bd02e7360ac516ef4d485f21c068df6d6c3e0`, `origin/sale-release`).
+- [x] Kullanıcı Wave 16 PAS kaydını açıkça başlattı.
+- [x] Backend ve frontend `sale-release` çalışma ağaçları temiz, kendi `origin/sale-release` uçlarıyla `0/0` senkron doğrulandı.
+- [x] Provider kararı kaydedildi: Sale Release'te provider/ingestion seçimi veya aktivasyonu yok; karar Post-acquisition Roadmap'e ertelendi.
+- [x] Production/provider/live destination kapalı tutuldu; canlı sorgu, config, secret, restart veya deploy yapılmadı.
+- [x] Migration/dependency/artifact etkisi yok: Wave 16 yalnız canonical dokümantasyon değiştirdi.
 
 ### 16.2 Yerel tamam
 
@@ -557,14 +559,25 @@ Plan hazırlandığı için kriter işaretlenmez. Yalnız uygulama, otomatik kan
 
 ### 16.3 Deferred / Roadmap kapanışı
 
-- [ ] QA-016 manuel matrisi staging'de tamam.
-- [ ] Web ve gerçek Android cihaz/emülatör kanıtı var.
-- [ ] Admin desktop/mobile/a11y/TR/EN doğrulandı.
-- [ ] Low sample/no-data/outage/zero ayrımı kanıtlandı.
-- [ ] Provider privacy/retention/cost/runbook tamam.
-- [ ] Wave 16 PAS/roadmap sonucu kaydedildi; manuel QA gerekmiyor.
-- [ ] Canonical belgeler ve sonuç senkronize edildi.
-- [ ] Wave 17 başlatılmadan duruldu.
+- [ ] QA-016 manuel matrisi staging'de tamam. — **Post-acquisition Roadmap / Deferred**
+- [ ] Web ve gerçek Android cihaz/emülatör kanıtı var. — **Post-acquisition Roadmap / Deferred**
+- [ ] Admin desktop/mobile/a11y/TR/EN doğrulandı. — **Post-acquisition Roadmap / Deferred**
+- [ ] Low sample/no-data/outage/zero ayrımı kanıtlandı. — **Post-acquisition Roadmap / Deferred**
+- [ ] Provider privacy/retention/cost/runbook tamam. — **Post-acquisition Roadmap / Deferred**
+- [x] Wave 04 health/readiness, version/commit ve deploy identity baseline'ı Sale Release için yeterli doğrulandı.
+- [x] Wave 16 PAS/roadmap sonucu kaydedildi; Wave 16 için manuel QA gerekmedi.
+- [x] Canonical belgeler ve sonuç senkronize edildi.
+- [x] Wave 17 başlatılmadan duruldu.
+
+### 16.4 Sale Release PAS kanıtı — 2026-09-25
+
+- Backend başlangıç/final tabanı: `sale-release` ve `origin/sale-release` `693bd02e7360ac516ef4d485f21c068df6d6c3e0`; Wave 15 commit'i mevcut ve pushlanmıştı.
+- Frontend snapshotı: `sale-release` ve `origin/sale-release` `96125a185c3f081d665926067416764a9676154a`; çalışma ağacı temizdi ve Wave 16 değişikliği yapılmadı.
+- Wave 04 commit kanıtı: `4f57e22d423b4877b98e7054b2b2e4f53a169966` ve takip düzeltmesi `e9f031aa02387806dea715dd7f7cb6a8be50944b` güncel backend geçmişinde korunuyor.
+- `node --test test/wave04-operations.test.js`: **10/10 geçti**; release identity allowlist, DB'den bağımsız liveness, fail-closed readiness, migration bütünlüğü, no-data/low-confidence ayrımı ve güvenli operasyon yüzeyleri doğrulandı.
+- `node --check index.js`, `node --check utils/health.js`, `node --check utils/runtimeConfig.js` ve `node --check db.js` hedefli syntax kontrolleri geçti.
+- B-OBS-002 ve C-REL-001 kabul kriterleri tamamlanmış gösterilmedi; ingestion, redaction pipeline, aggregation, source map/symbol ve gelişmiş Release Health UI bütünü Post-acquisition Roadmap'te açık bırakıldı.
+- Ürün kodu, schema, migration, dependency, frontend, Android veya live ortam değişmedi; manuel QA çalıştırılmadı.
 
 ## 17. Kapsam dışı ve successor guard
 

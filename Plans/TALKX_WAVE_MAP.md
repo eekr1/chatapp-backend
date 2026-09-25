@@ -2,7 +2,7 @@
 
 > Plan A/B/C içindeki 67 stable uygulama maddesini bağımlılık sırasına göre wave'lere yönlendiren canonical yürütme haritası.
 > Bu belge plan ayrıntısını tekrar etmez; ayrıntının otoritesi ilgili Plan A/B/C maddesidir.
-> Harita ile Wave 01–19 planları hazırdır. Wave 01–05 Sale Release kapsamları 2026-09-23, Wave 06–07 kapsamları 2026-09-24 tarihinde auto-verified/committed/manual-QA-deferred kapanışına ulaştı; Wave 08–19 başlatılmadı.
+> Harita ile Wave 01–19 planları hazırdır. Wave 01–15 Sale Release kapsamları auto-verified/committed/manual-QA-deferred kapanışına ulaştı. Wave 16 PAS kaydı 2026-09-25 tarihinde DEFERRED / ROADMAP / COMMITTED olarak kapandı; Wave 17–19 başlatılmadı.
 
 > **Sale Release override:** Bu harita, Master Backlog ile Plan A/B/C'deki uzun vadeli kararları değiştirmez. Satış öncesinde hangi parçanın uygulanacağını, hangi parçanın küçültüldüğünü ve hangisinin **Post-acquisition Roadmap / Deferred** olarak korunacağını belirler. Bir wave dosyasındaki eski kapanış veya manuel QA dili bu override ile çelişirse bu harita geçerlidir.
 
@@ -25,8 +25,8 @@ Wave yeni ürün kararı veya mimari üretmez. Çelişkide uygulama durur; önce
 - **Wave Map durumu:** Hazır
 - **Aktif wave:** Yok
 - **Hazırlanmış Wave Planları:** `waves/TALKX_WAVE_01.md`, `waves/TALKX_WAVE_02.md`, `waves/TALKX_WAVE_03.md`, `waves/TALKX_WAVE_04.md`, `waves/TALKX_WAVE_05.md`, `waves/TALKX_WAVE_06.md`, `waves/TALKX_WAVE_07.md`, `waves/TALKX_WAVE_08.md`, `waves/TALKX_WAVE_09.md`, `waves/TALKX_WAVE_10.md`, `waves/TALKX_WAVE_11.md`, `waves/TALKX_WAVE_12.md`, `waves/TALKX_WAVE_13.md`, `waves/TALKX_WAVE_14.md`, `waves/TALKX_WAVE_15.md`, `waves/TALKX_WAVE_16.md`, `waves/TALKX_WAVE_17.md`, `waves/TALKX_WAVE_18.md` ve `waves/TALKX_WAVE_19.md` — on dokuz plan da aktif değil
-- **Uygulama durumu:** Wave 01–07 auto-verified; ayrı repo commitleri ve ertelenmiş manuel QA ile kapalı
-- **İlk yürütme adayı:** Wave 08 — yalnız ayrı açık kullanıcı talimatıyla
+- **Uygulama durumu:** Wave 01–15 auto-verified; ayrı repo commitleri ve ertelenmiş manuel QA ile kapalı. Wave 16 PAS/roadmap kaydı committed.
+- **İlk yürütme adayı:** Wave 17 — yalnız ayrı açık kullanıcı talimatıyla
 - **Wave 01 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
 - **Wave 02 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
 - **Wave 03 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
@@ -34,9 +34,11 @@ Wave yeni ürün kararı veya mimari üretmez. Çelişkide uygulama durur; önce
 - **Wave 05 yetkisi:** 2026-09-23 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
 - **Wave 06 yetkisi:** 2026-09-24 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
 - **Wave 07 yetkisi:** 2026-09-24 tarihinde verildi ve yalnız Sale Release kapsamı yürütüldü
-- **Sonraki işlem:** Dur; Wave 08 için ayrı açık başlangıç talimatını bekle
+- **Wave 08–15 yetkileri:** Açık kullanıcı talimatlarıyla verildi; yalnız ilgili Sale Release kapsamları yürütüldü ve commitlendi
+- **Wave 16 yetkisi:** 2026-09-25 tarihinde yalnız PAS/roadmap kaydı için verildi; ürün implementasyonu yapılmadı
+- **Sonraki işlem:** Dur; Wave 17 için ayrı açık başlangıç talimatını bekle
 
-Wave 08 ve sonrası yalnız hazırlanmış plandır; aktivasyon veya uygulama anlamına gelmez.
+Wave 17 ve sonrası yalnız hazırlanmış plandır; aktivasyon veya uygulama anlamına gelmez.
 
 ## 3. Değişmez yürütme kuralları
 
@@ -131,15 +133,15 @@ Roadmap'e taşınan stable ID ve kabul kriterleri silinmez. Canonical Plan A/B/C
 | 05 | Reconnect, active state ve gerçek presence | B-WS-002 → B-PRES-001 → A-MATCH-004 → A-FRIEND-001 → A-PRD-002 | İki-client recovery/presence deterministik | Auto-verified / commit & QA deferred |
 | 06 | Veri sahipliği, canonical ülke, privacy ve hesap silme | B-DATA-001 → B-DATA-002 → C-COMP-002 → B-DATA-003 → C-TRUST-002 | Veri yaşam döngüsü ve ülke otoritesi geri izlenebilir | Auto-verified / commit & QA deferred |
 | 07 | QA-014 gerçek arama yaşam döngüsü | B-MM-001 → A-MATCH-001 | Arama ekranı yalnız server-otoriteli phase gösteriyor | Auto-verified / commit & QA deferred |
-| 08 | QA-017 Global / Kendi Ülkem dikey dilimi | B-MM-002 → A-MATCH-003 → C-ANL-002 → A-HOME-001 | Scope izolasyonu, açık fallback ve telemetry doğrulandı | Bekliyor |
-| 09 | QA-003 pending match teklif protokolü | B-MM-003 → A-MATCH-002 | Offer/countdown/accept/pass/requeue regresyonsuz | Bekliyor |
-| 10 | Kalıcı mesaj idempotency ve outbox deneyimi | B-MSG-001 → A-FRIEND-003 | Retry/duplicate/offline davranışı güvenilir | Bekliyor |
-| 11 | Tek kullanımlık medya, moderasyon ve sohbet güven aksiyonları | B-MSG-002 → C-TRUST-001 → A-FRIEND-002 → A-FRIEND-003 (medya kapanışı) | Medya ve rapor/engel kanıt zinciri tutarlı | Bekliyor |
-| 12 | Legal reaccept, session recovery ve hesap yüzeyleri | C-LEGAL-001 → B-AUTH-002 → A-AUTH-002 → A-HOME-002 | Legal sürümden client sonucuna uçtan uca kanıt | Bekliyor |
-| 13 | Locale, bildirim ve TalkX Sistem iletişimi | B-I18N-001 → A-I18N-001 → C-NOTIFY-001 → B-SYS-001 → C-SYS-001 → A-SYS-001 | TR/EN fallback, recipient ve kalıcı inbox teslimi doğrulandı | Bekliyor |
-| 14 | Davranış analitiği, dashboard ve aktivite özeti | B-ANL-001 → C-ANL-001 → C-ADMIN-002 → C-ADMIN-003 | Admin özetleri kaynak/zaman penceresine geri izlenebilir | Bekliyor |
-| 15 | Profil ve uygulama raporu operasyon ekranları | C-ADMIN-004 → C-ADMIN-005 → C-ADMIN-006 | Liste/detay/rapor yetki ve veri durumlarıyla doğrulandı | Bekliyor |
-| 16 | QA-016 Release Health | B-OBS-002 → C-REL-001 | Release kimliği, ingestion, redaction ve karar özeti kanıtlı | Bekliyor |
+| 08 | QA-017 Global / Kendi Ülkem dikey dilimi | B-MM-002 → A-MATCH-003 → C-ANL-002 → A-HOME-001 | Scope izolasyonu, açık fallback ve telemetry doğrulandı | Auto-verified / commit & QA deferred |
+| 09 | QA-003 pending match teklif protokolü | B-MM-003 → A-MATCH-002 | Offer/countdown/accept/pass/requeue regresyonsuz | Auto-verified / commit & QA deferred |
+| 10 | Kalıcı mesaj idempotency ve outbox deneyimi | B-MSG-001 → A-FRIEND-003 | Retry/duplicate/offline davranışı güvenilir | Auto-verified / commit & QA deferred |
+| 11 | Tek kullanımlık medya, moderasyon ve sohbet güven aksiyonları | B-MSG-002 → C-TRUST-001 → A-FRIEND-002 → A-FRIEND-003 (medya kapanışı) | Medya ve rapor/engel kanıt zinciri tutarlı | Auto-verified / commit & QA deferred |
+| 12 | Legal reaccept, session recovery ve hesap yüzeyleri | C-LEGAL-001 → B-AUTH-002 → A-AUTH-002 → A-HOME-002 | Legal sürümden client sonucuna uçtan uca kanıt | Auto-verified / commit & QA deferred |
+| 13 | Locale, bildirim ve TalkX Sistem iletişimi | B-I18N-001 → A-I18N-001 → C-NOTIFY-001 → B-SYS-001 → C-SYS-001 → A-SYS-001 | TR/EN fallback, recipient ve kalıcı inbox teslimi doğrulandı | Auto-verified / commit & QA deferred |
+| 14 | Davranış analitiği, dashboard ve aktivite özeti | B-ANL-001 → C-ANL-001 → C-ADMIN-002 → C-ADMIN-003 | Admin özetleri kaynak/zaman penceresine geri izlenebilir | Auto-verified / commit & QA deferred |
+| 15 | Profil ve uygulama raporu operasyon ekranları | C-ADMIN-004 → C-ADMIN-005 → C-ADMIN-006 | Liste/detay/rapor yetki ve veri durumlarıyla doğrulandı | Auto-verified / commit & QA deferred |
+| 16 | QA-016 Release Health PAS kaydı | B-OBS-002 → C-REL-001 | Wave 04 baseline yeterliliği doğrulandı; tam kapsam roadmap'te açık | Deferred / Roadmap / committed |
 | 17 | Client/backend test kapıları ve ortak CI zinciri | A-QA-001 → B-QA-001 → C-CI-001 | Lint/test/build/audit kapıları tekrar üretilebilir | Bekliyor |
 | 18 | Android release zinciri ve WebView davranış eşliği | C-MOB-001 → A-MOB-001 | Version/build/signing/sync ve cihaz davranışı kanıtlı | Bekliyor |
 | 19 | Bütünleşik admin, operasyon ve release QA kapanışı | C-QA-001 | QA matrisi, manuel kanıt ve kullanıcı onayı tamam | Bekliyor |
