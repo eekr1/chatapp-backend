@@ -8,6 +8,7 @@ const { sendApiError, t, resolveRequestLang } = require('../utils/i18n');
 const { findValidSessionByToken, parseBearerToken } = require('../utils/sessionService');
 const { hashKey, resolvePeerAddress } = require('../utils/abuseProtection');
 const logger = require('../utils/logger');
+const { buildSupportFingerprint } = require('../utils/adminOperationsContract');
 
 const router = express.Router();
 
@@ -335,6 +336,7 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
     const userId = req.authUser?.user_id || null;
     const usernameSnapshot = req.authUser?.username || null;
     const submissionScopeHash = getRateLimitKey(req);
+    const problemFingerprint = buildSupportFingerprint({ subject, lastErrorCode, platform, appVersion });
 
     let reportId = null;
     let createdAt = null;
@@ -344,9 +346,9 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
         await dbClient.query('BEGIN');
         const insertResult = await dbClient.query(
             `INSERT INTO support_reports
-              (subject, description, contact_email, user_id, username_snapshot, app_version, platform, device_model, client_timestamp, network_type, last_error_code, ip, user_agent, brevo_status, submission_id, submission_scope_hash, record_status, delivery_status, updated_at)
+              (subject, description, contact_email, user_id, username_snapshot, app_version, platform, device_model, client_timestamp, network_type, last_error_code, ip, user_agent, brevo_status, submission_id, submission_scope_hash, record_status, delivery_status, problem_fingerprint, fingerprint_version, updated_at)
              VALUES
-              ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', $14, $15, 'received', 'pending', NOW())
+              ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', $14, $15, 'received', 'pending', $16, 'wave15-v1', NOW())
              ON CONFLICT (submission_scope_hash, submission_id) WHERE submission_id IS NOT NULL AND submission_scope_hash IS NOT NULL DO NOTHING
              RETURNING id, created_at`,
             [
@@ -364,7 +366,8 @@ router.post('/report', authenticateOptional, supportLimiter, supportUploadMiddle
                 ip,
                 userAgent,
                 submissionId,
-                submissionScopeHash
+                submissionScopeHash,
+                problemFingerprint
             ]
         );
 

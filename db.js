@@ -859,6 +859,53 @@ const migrations = Object.freeze([
         ON push_devices(locale,is_active)
         WHERE is_active = TRUE;
     `
+  }),
+  Object.freeze({
+    version: '008',
+    name: 'wave15_admin_operations',
+    sql: `
+      ALTER TABLE support_reports
+        ADD COLUMN IF NOT EXISTS workflow_status TEXT NOT NULL DEFAULT 'new',
+        ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'normal',
+        ADD COLUMN IF NOT EXISTS workflow_owner TEXT,
+        ADD COLUMN IF NOT EXISTS workflow_note TEXT,
+        ADD COLUMN IF NOT EXISTS workflow_revision INTEGER NOT NULL DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS problem_fingerprint TEXT,
+        ADD COLUMN IF NOT EXISTS fingerprint_version TEXT,
+        ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS archived_by TEXT,
+        ADD COLUMN IF NOT EXISTS archive_reason TEXT,
+        ADD COLUMN IF NOT EXISTS legal_hold BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE support_reports DROP CONSTRAINT IF EXISTS support_reports_workflow_status_check;
+      ALTER TABLE support_reports ADD CONSTRAINT support_reports_workflow_status_check
+        CHECK (workflow_status IN ('new','investigating','resolved','duplicate','insufficient_info','archived'));
+      ALTER TABLE support_reports DROP CONSTRAINT IF EXISTS support_reports_priority_check;
+      ALTER TABLE support_reports ADD CONSTRAINT support_reports_priority_check
+        CHECK (priority IN ('low','normal','high','critical'));
+      ALTER TABLE support_reports DROP CONSTRAINT IF EXISTS support_reports_workflow_revision_check;
+      ALTER TABLE support_reports ADD CONSTRAINT support_reports_workflow_revision_check
+        CHECK (workflow_revision > 0);
+
+      CREATE TABLE IF NOT EXISTS support_report_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        report_id UUID NOT NULL REFERENCES support_reports(id) ON DELETE RESTRICT,
+        actor_admin TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        from_status TEXT,
+        to_status TEXT,
+        reason TEXT,
+        revision INTEGER NOT NULL,
+        audit_ref UUID,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_reports_workflow_updated
+        ON support_reports(workflow_status,priority,updated_at DESC,id DESC);
+      CREATE INDEX IF NOT EXISTS idx_support_reports_fingerprint
+        ON support_reports(problem_fingerprint,created_at DESC)
+        WHERE problem_fingerprint IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_support_report_history_report_created
+        ON support_report_history(report_id,created_at DESC);
+    `
   })
 ]);
 

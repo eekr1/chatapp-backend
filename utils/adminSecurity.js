@@ -34,7 +34,9 @@ const capabilityFor = (method, path) => {
     if (route.includes('deletion-request')) return ADMIN_CAPABILITIES.DELETION;
     if (route.includes('legal') || route.includes('notification')) return verb === 'GET' ? ADMIN_CAPABILITIES.READ : ADMIN_CAPABILITIES.CONTENT;
     if (route.includes('push/') || route.includes('performance') || route.includes('analytics') || route.includes('audit')) return ADMIN_CAPABILITIES.OPERATIONS;
-    if (route.includes('profile-details') || route.includes('support-report') || route.includes('user-')) return ADMIN_CAPABILITIES.SENSITIVE_READ;
+    if (route.includes('profile-details') || route.includes('support-report') || route.includes('user-')) {
+        return verb === 'GET' ? ADMIN_CAPABILITIES.SENSITIVE_READ : ADMIN_CAPABILITIES.ACTION;
+    }
     return verb === 'GET' ? ADMIN_CAPABILITIES.READ : ADMIN_CAPABILITIES.ACTION;
 };
 

@@ -19,6 +19,15 @@ const {
     validateLegalContentPayload,
     saveLegalSettings
 } = require('./utils/legalContent');
+const {
+    SUPPORT_PRIORITIES,
+    isSafeSupportMediaType,
+    locationState,
+    maskEmail,
+    maskIdentifier,
+    maskIp,
+    validateWorkflowTransition
+} = require('./utils/adminOperationsContract');
 
 const isEnvEnabled = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
 const hasSecureAdminPassword = () => {
@@ -476,10 +485,11 @@ const logAdminAudit = async (dbOrPool, {
 }) => {
     if (!actionType || !entityType) return;
     const db = dbOrPool || pool;
-    await db.query(
+    const result = await db.query(
         `INSERT INTO admin_action_audit
           (actor_admin, action_type, entity_type, entity_id, payload, created_at)
-         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())`,
+         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+         RETURNING id`,
         [
             String(actorAdmin || 'admin').slice(0, 120),
             String(actionType).slice(0, 80),
@@ -488,6 +498,7 @@ const logAdminAudit = async (dbOrPool, {
             JSON.stringify(payload || {})
         ]
     );
+    return result?.rows?.[0]?.id || null;
 };
 
 // Admin Dashboard HTML (Serve Static File)
@@ -774,9 +785,8 @@ router.get('/data', async (req, res) => {
         } else if (type === 'profiles') {
             const sortBy = normalizeProfileSortBy(req.query.sortBy);
             const sortDir = normalizeProfileSortDir(req.query.sortDir);
-            const page = clampPage(req.query.page, 1);
+            const requestedPage = clampPage(req.query.page, 1);
             const pageSize = clampProfilePageSize(req.query.pageSize, 50);
-            const offset = (page - 1) * pageSize;
             const where = [];
             const params = [];
 
@@ -795,6 +805,10 @@ router.get('/data', async (req, res) => {
                 `,
                 params
             );
+            const total = Number(totalRes.rows[0]?.total) || 0;
+            const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0;
+            const page = totalPages > 0 ? Math.min(requestedPage, totalPages) : 1;
+            const offset = (page - 1) * pageSize;
 
             params.push(pageSize);
             const limitParam = params.length;
@@ -804,7 +818,7 @@ router.get('/data', async (req, res) => {
 
             const result = await pool.query(
                 `
-                SELECT u.id, u.username, u.created_at, u.last_seen_at,
+                SELECT u.id, u.username, u.status, u.created_at, u.last_seen_at,
                        p.display_name, p.avatar_url, p.bio,
                        reg.id AS registration_id,
                        reg.ip AS registration_ip,
@@ -813,7 +827,9 @@ router.get('/data', async (req, res) => {
                        reg.location_label,
                        reg.location_source,
                        reg.location_resolved_at,
-                       COALESCE(NULLIF(be_last.platform, 'unknown'), pd_last.platform, be_last.platform, 'unknown') AS last_platform
+                       COALESCE(NULLIF(be_last.platform, 'unknown'), pd_last.platform, be_last.platform, 'unknown') AS last_platform,
+                       active_ban.ban_type AS active_ban_type,
+                       active_ban.ban_until AS active_ban_until
                 FROM users u
                 LEFT JOIN profiles p ON u.id = p.user_id
                 LEFT JOIN LATERAL (
@@ -838,6 +854,14 @@ router.get('/data', async (req, res) => {
                     ORDER BY pd.updated_at DESC NULLS LAST, pd.created_at DESC
                     LIMIT 1
                 ) AS pd_last ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT b.ban_type, b.ban_until
+                    FROM bans b
+                    WHERE b.user_id = u.id
+                      AND (b.ban_until > NOW() OR b.ban_type IN ('perm', 'shadow'))
+                    ORDER BY b.created_at DESC
+                    LIMIT 1
+                ) AS active_ban ON TRUE
                 ${whereSql}
                 ORDER BY ${orderColumn} ${sortDir.toUpperCase()} NULLS LAST, u.id ASC
                 LIMIT $${limitParam}
@@ -846,10 +870,28 @@ router.get('/data', async (req, res) => {
                 params
             );
 
-            const total = Number(totalRes.rows[0]?.total) || 0;
-            const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0;
-
-            const items = await attachRegistrationLocationToProfileRows(result.rows);
+            const locatedItems = await attachRegistrationLocationToProfileRows(result.rows);
+            const asOf = new Date().toISOString();
+            const items = locatedItems.map((row) => {
+                const {
+                    registration_ip: _sensitiveRegistrationIp,
+                    location_label: _possiblyIpBearingLocationLabel,
+                    ...safeRow
+                } = row;
+                return {
+                    ...safeRow,
+                    location_state: locationState({
+                        source: row.location_source,
+                        resolvedAt: row.location_resolved_at,
+                        city: row.location_city,
+                        country: row.location_country
+                    }),
+                    account_state: row.active_ban_type || row.status || 'unknown',
+                    source: 'users/profiles/legal_acceptances',
+                    as_of: asOf,
+                    revision: [row.status || 'unknown', row.last_seen_at || '', row.active_ban_type || ''].join(':')
+                };
+            });
 
             res.json({
                 items,
@@ -863,28 +905,35 @@ router.get('/data', async (req, res) => {
                 }
             });
         } else if (type === 'app_reports') {
+            const requestedPage = clampPage(req.query.page, 1);
+            const pageSize = clampProfilePageSize(req.query.pageSize, 25);
             const params = [];
-            let whereSql = '';
+            const where = ["sr.workflow_status <> 'archived'"];
             if (search) {
                 params.push(`%${search}%`);
-                whereSql = `
-                    WHERE sr.subject ILIKE $1
+                where.push(`(sr.subject ILIKE $1
                        OR sr.description ILIKE $1
                        OR COALESCE(sr.contact_email, '') ILIKE $1
                        OR COALESCE(sr.username_snapshot, '') ILIKE $1
-                       OR COALESCE(sr.brevo_status, '') ILIKE $1
-                `;
+                       OR COALESCE(sr.workflow_status, '') ILIKE $1
+                       OR COALESCE(sr.delivery_status, sr.brevo_status, '') ILIKE $1)`);
             }
+            const whereSql = `WHERE ${where.join(' AND ')}`;
+            const totalRes = await pool.query(`SELECT COUNT(*)::int AS total FROM support_reports sr ${whereSql}`, params);
+            const total = Number(totalRes.rows[0]?.total) || 0;
+            const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0;
+            const page = totalPages > 0 ? Math.min(requestedPage, totalPages) : 1;
+            const offset = (page - 1) * pageSize;
             const limitParam = params.length + 1;
-            params.push(100);
+            params.push(pageSize);
+            const offsetParam = params.length + 1;
+            params.push(offset);
 
             const result = await pool.query(
                 `
                 SELECT
                     sr.id,
                     sr.subject,
-                    sr.description,
-                    sr.contact_email,
                     sr.user_id,
                     sr.username_snapshot,
                     sr.app_version,
@@ -893,19 +942,45 @@ router.get('/data', async (req, res) => {
                     sr.client_timestamp,
                     sr.network_type,
                     sr.last_error_code,
-                    sr.brevo_status,
+                    sr.workflow_status,
+                    sr.priority,
+                    sr.workflow_owner,
+                    sr.workflow_revision,
+                    COALESCE(sr.delivery_status, sr.brevo_status, 'unknown') AS delivery_status,
+                    sr.problem_fingerprint,
                     sr.created_at,
-                    COUNT(srm.id)::int AS media_count
+                    sr.updated_at,
+                    COUNT(srm.id)::int AS media_count,
+                    CASE WHEN sr.problem_fingerprint IS NULL THEN 1 ELSE GREATEST(COALESCE(group_stats.report_count, 0), 1) END::int AS repeat_count,
+                    CASE WHEN sr.problem_fingerprint IS NULL THEN CASE WHEN sr.user_id IS NULL THEN 0 ELSE 1 END ELSE COALESCE(group_stats.user_count, 0) END::int AS affected_users
                 FROM support_reports sr
                 LEFT JOIN support_report_media srm ON srm.report_id = sr.id
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*)::int AS report_count, COUNT(DISTINCT grouped.user_id)::int AS user_count
+                    FROM support_reports grouped
+                    WHERE sr.problem_fingerprint IS NOT NULL
+                      AND grouped.problem_fingerprint = sr.problem_fingerprint
+                      AND grouped.workflow_status <> 'archived'
+                ) group_stats ON TRUE
                 ${whereSql}
-                GROUP BY sr.id
+                GROUP BY sr.id, group_stats.report_count, group_stats.user_count
                 ORDER BY sr.created_at DESC
                 LIMIT $${limitParam}
+                OFFSET $${offsetParam}
                 `,
                 params
             );
-            res.json({ items: result.rows });
+            res.json({
+                items: result.rows,
+                pagination: {
+                    page,
+                    pageSize,
+                    total,
+                    totalPages
+                },
+                source: 'support_reports',
+                asOf: new Date().toISOString()
+            });
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -936,7 +1011,8 @@ router.get('/profile-details/:userId', async (req, res) => {
         const [registrationRes, firstSessionRes, recentSessionsRes, pushDevicesRes] = await Promise.all([
             pool.query(
                 `
-                SELECT id, accepted_at, ip, location_city, location_country, location_label, location_source, location_resolved_at
+                SELECT id, accepted_at, ip, terms_version, privacy_version, release_id, release_revision,
+                       location_city, location_country, location_label, location_source, location_resolved_at
                 FROM legal_acceptances
                 WHERE user_id = $1
                 ORDER BY (NULLIF(TRIM(COALESCE(ip, '')), '') IS NULL) ASC, accepted_at ASC
@@ -981,20 +1057,32 @@ router.get('/profile-details/:userId', async (req, res) => {
             const location = await resolveRegistrationLocationForRow(registrationRes.rows[0]);
             registration = {
                 ...registrationRes.rows[0],
-                ip: location?.ip || normalizeIpForDisplay(registrationRes.rows[0].ip) || null,
-                location_label: location?.label || null,
+                ip: maskIp(location?.ip || normalizeIpForDisplay(registrationRes.rows[0].ip)),
+                location_label: [location?.city, location?.country].filter(Boolean).join(', ') || null,
                 location_city: location?.city || null,
                 location_country: location?.country || null,
-                location_source: location?.source || null
+                location_source: location?.source || null,
+                location_state: locationState({
+                    source: location?.source,
+                    resolvedAt: registrationRes.rows[0].location_resolved_at,
+                    city: location?.city,
+                    country: location?.country
+                })
             };
         }
 
         res.json({
             item: profileRes.rows[0],
             registration,
-            first_session: firstSessionRes.rows[0] || null,
-            recent_sessions: recentSessionsRes.rows || [],
-            recent_push_devices: pushDevicesRes.rows || []
+            first_session: firstSessionRes.rows[0] ? {
+                ...firstSessionRes.rows[0],
+                device_id: maskIdentifier(firstSessionRes.rows[0].device_id),
+                activity_state: 'unknown'
+            } : null,
+            recent_sessions: (recentSessionsRes.rows || []).map((row) => ({ ...row, device_id: maskIdentifier(row.device_id), activity_state: 'unknown' })),
+            recent_push_devices: (pushDevicesRes.rows || []).map((row) => ({ ...row, device_id: maskIdentifier(row.device_id) })),
+            source: 'users/profiles/sessions/push_devices/legal_acceptances',
+            asOf: new Date().toISOString()
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1005,7 +1093,12 @@ router.get('/support-report/:id', async (req, res) => {
     const reportId = req.params.id;
     try {
         const reportRes = await pool.query(
-            `SELECT *
+            `SELECT id, subject, description, user_id, username_snapshot, app_version, platform,
+                    device_model, client_timestamp, network_type, last_error_code, created_at, updated_at,
+                    workflow_status, priority, workflow_owner, workflow_note, workflow_revision,
+                    problem_fingerprint, fingerprint_version, archived_at,
+                    COALESCE(delivery_status, brevo_status, 'unknown') AS delivery_status,
+                    contact_email, ip, user_agent, brevo_message_id, brevo_error
              FROM support_reports
              WHERE id = $1
              LIMIT 1`,
@@ -1013,17 +1106,52 @@ router.get('/support-report/:id', async (req, res) => {
         );
         if (!reportRes.rows.length) return res.status(404).json({ error: 'Rapor bulunamadi.' });
 
-        const mediaRes = await pool.query(
+        const [mediaRes, historyRes, groupRes] = await Promise.all([pool.query(
             `SELECT id, report_id, mime_type, file_name, size_bytes, media_kind, created_at
              FROM support_report_media
              WHERE report_id = $1
              ORDER BY created_at ASC`,
             [reportId]
-        );
+        ), pool.query(
+            `SELECT action_type, from_status, to_status, reason, revision, actor_admin, created_at
+             FROM support_report_history
+             WHERE report_id = $1
+             ORDER BY created_at DESC
+             LIMIT 50`,
+            [reportId]
+        ), pool.query(
+            `SELECT COUNT(*)::int AS report_count,
+                    COUNT(DISTINCT user_id)::int AS affected_users,
+                    MIN(created_at) AS first_seen,
+                    MAX(created_at) AS last_seen
+             FROM support_reports
+             WHERE problem_fingerprint IS NOT NULL
+               AND problem_fingerprint = $1
+               AND workflow_status <> 'archived'`,
+            [reportRes.rows[0].problem_fingerprint]
+        )]);
 
+        const raw = reportRes.rows[0];
         res.json({
-            item: reportRes.rows[0],
-            media: mediaRes.rows
+            item: {
+                ...raw,
+                contact_email: maskEmail(raw.contact_email),
+                ip: maskIp(raw.ip),
+                user_agent: maskIdentifier(raw.user_agent),
+                brevo_message_id: maskIdentifier(raw.brevo_message_id),
+                brevo_error: raw.brevo_error ? 'Teslim hatasi kayitli' : null
+            },
+            media: mediaRes.rows,
+            history: historyRes.rows,
+            group: raw.problem_fingerprint ? groupRes.rows[0] : {
+                report_count: 1,
+                affected_users: raw.user_id ? 1 : 0,
+                first_seen: raw.created_at,
+                last_seen: raw.created_at
+            },
+            evidenceState: mediaRes.rows.length ? 'complete' : 'partial',
+            source: 'support_reports/support_report_media',
+            asOf: new Date().toISOString()
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1042,8 +1170,11 @@ router.get('/support-report-media/:mediaId/content', async (req, res) => {
         if (!mediaRes.rows.length) return res.status(404).send('Medya bulunamadi.');
 
         const media = mediaRes.rows[0];
-        res.setHeader('Content-Type', media.mime_type || 'application/octet-stream');
+        if (!isSafeSupportMediaType(media.mime_type)) return res.status(415).send('Desteklenmeyen medya turu.');
+        res.setHeader('Content-Type', media.mime_type);
         res.setHeader('Content-Disposition', `inline; filename="${(media.file_name || 'media.bin').replace(/"/g, '')}"`);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'private, no-store');
         res.send(media.data);
     } catch (e) {
         res.status(500).send('Medya okunamadi.');
@@ -1051,28 +1182,108 @@ router.get('/support-report-media/:mediaId/content', async (req, res) => {
 });
 
 router.delete('/support-report/:id', async (req, res) => {
+    return res.status(405).json({
+        error: 'Kalici silme bu operasyon yuzeyinde kapali. Arsiv lifecycle islemini kullanin.',
+        errorCode: 'SUPPORT_REPORT_HARD_DELETE_DISABLED'
+    });
+});
+
+router.patch('/support-report/:id/workflow', async (req, res) => {
+    const reportId = String(req.params.id || '').trim();
+    const expectedRevision = Number(req.body?.expectedRevision);
+    const nextStatus = String(req.body?.status || '').trim().toLowerCase();
+    const priority = String(req.body?.priority || 'normal').trim().toLowerCase();
+    const owner = String(req.body?.owner || '').trim().slice(0, 120) || null;
+    const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
+    const reason = String(req.body?.reason || '').trim().slice(0, 500);
+    if (!isUuid(reportId) || !Number.isInteger(expectedRevision) || expectedRevision < 1 || reason.length < 3) {
+        return res.status(400).json({ error: 'Gecerli rapor, revision ve gerekce gerekli.' });
+    }
+    if (!SUPPORT_PRIORITIES.includes(priority)) return res.status(400).json({ error: 'Gecersiz oncelik.' });
+
+    const db = await pool.connect();
     try {
-        const result = await pool.query(
-            'DELETE FROM support_reports WHERE id = $1 RETURNING id',
-            [req.params.id]
+        await db.query('BEGIN');
+        const currentRes = await db.query(
+            `SELECT id, workflow_status, priority, workflow_owner, workflow_revision, legal_hold
+             FROM support_reports WHERE id = $1 FOR UPDATE`,
+            [reportId]
         );
-        if (!result.rows.length) return res.status(404).json({ error: 'Rapor bulunamadi.' });
-        res.json({ success: true });
+        if (!currentRes.rows.length) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Rapor bulunamadi.' });
+        }
+        const current = currentRes.rows[0];
+        if (Number(current.workflow_revision) !== expectedRevision) {
+            await db.query('ROLLBACK');
+            return res.status(409).json({ error: 'Rapor baska bir yonetici tarafindan guncellendi.', current });
+        }
+        const transition = validateWorkflowTransition({ current: current.workflow_status, next: nextStatus });
+        if (!transition.ok) {
+            await db.query('ROLLBACK');
+            return res.status(409).json({ error: transition.code });
+        }
+        const nextRevision = expectedRevision + 1;
+        const updatedRes = await db.query(
+            `UPDATE support_reports
+             SET workflow_status = $2, priority = $3, workflow_owner = $4, workflow_note = $5,
+                 workflow_revision = $6,
+                 archived_at = CASE WHEN $2 = 'archived' THEN NOW() ELSE NULL END,
+                 archived_by = CASE WHEN $2 = 'archived' THEN $7 ELSE NULL END,
+                 archive_reason = CASE WHEN $2 = 'archived' THEN $8 ELSE NULL END,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, workflow_status, priority, workflow_owner, workflow_note, workflow_revision, archived_at`,
+            [reportId, nextStatus, priority, owner, note, nextRevision, req.adminUser, reason]
+        );
+        const auditRef = await logAdminAudit(db, {
+            actorAdmin: req.adminUser,
+            actionType: nextStatus === 'archived' ? 'SUPPORT_REPORT_ARCHIVE' : 'SUPPORT_REPORT_WORKFLOW',
+            entityType: 'support_report',
+            entityId: reportId,
+            payload: {
+                fromStatus: current.workflow_status,
+                toStatus: nextStatus,
+                fromPriority: current.priority,
+                toPriority: priority,
+                owner,
+                reason,
+                revision: nextRevision
+            }
+        });
+        await db.query(
+            `INSERT INTO support_report_history
+              (report_id, actor_admin, action_type, from_status, to_status, reason, revision, audit_ref)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [reportId, req.adminUser, nextStatus === 'archived' ? 'archive' : 'workflow', current.workflow_status, nextStatus, reason, nextRevision, auditRef]
+        );
+        await db.query('COMMIT');
+        return res.json({ success: true, result: transition.noOp ? 'no_op' : 'success', item: updatedRes.rows[0], auditRef });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        try { await db.query('ROLLBACK'); } catch { /* ignore rollback errors */ }
+        return res.status(500).json({ error: 'Rapor workflow islemi tamamlanamadi.' });
+    } finally {
+        db.release();
     }
 });
 
 // Get user specific blocks
 router.get('/user-blocks/:userId', async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT b.blocked_id, u.username as nickname 
+        const [outgoing, incoming] = await Promise.all([pool.query(`
+            SELECT b.blocker_id, b.blocked_id, b.created_at, u.username as nickname
             FROM blocks b
             LEFT JOIN users u ON b.blocked_id = u.id
             WHERE b.blocker_id = $1
-        `, [req.params.userId]);
-        res.json({ items: result.rows });
+            ORDER BY b.created_at DESC
+        `, [req.params.userId]), pool.query(`
+            SELECT b.blocker_id, b.blocked_id, b.created_at, u.username as nickname
+            FROM blocks b
+            LEFT JOIN users u ON b.blocker_id = u.id
+            WHERE b.blocked_id = $1
+            ORDER BY b.created_at DESC
+        `, [req.params.userId])]);
+        res.json({ blockedByUser: outgoing.rows, blockingUser: incoming.rows, source: 'blocks', asOf: new Date().toISOString() });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1081,7 +1292,11 @@ router.get('/user-friends/:userId', async (req, res) => {
     try {
         const userId = req.params.userId;
         const result = await pool.query(`
-            SELECT u.id, u.username, u.created_at 
+            SELECT u.id, u.username,
+                   f.created_at AS relationship_created_at,
+                   f.updated_at AS relationship_updated_at,
+                   f.status AS relationship_status,
+                   CASE WHEN f.user_id = $1 THEN 'outgoing' ELSE 'incoming' END AS direction
             FROM friendships f
             JOIN users u ON (f.user_id = u.id OR f.friend_user_id = u.id)
             WHERE (f.user_id = $1 OR f.friend_user_id = $1) 
@@ -1298,11 +1513,30 @@ router.post('/bulk-user-action', async (req, res) => {
 
 // Unblock Action
 router.post('/unblock', async (req, res) => {
-    const { blockerId, blockedId } = req.body;
+    const blockerId = String(req.body?.blockerId || '').trim();
+    const blockedId = String(req.body?.blockedId || '').trim();
+    const reason = String(req.body?.reason || '').trim().slice(0, 500);
+    if (!isUuid(blockerId) || !isUuid(blockedId) || reason.length < 3) {
+        return res.status(400).json({ error: 'Exact engel yonu ve gerekce gerekli.' });
+    }
+    const db = await pool.connect();
     try {
-        await pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [blockerId, blockedId]);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        await db.query('BEGIN');
+        const result = await db.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [blockerId, blockedId]);
+        const outcome = result.rowCount ? 'deleted' : 'no_op';
+        const auditRef = await logAdminAudit(db, {
+            actorAdmin: req.adminUser,
+            actionType: 'UNBLOCK',
+            entityType: 'block',
+            entityId: `${blockerId}:${blockedId}`,
+            payload: { blockerId, blockedId, reason, outcome }
+        });
+        await db.query('COMMIT');
+        res.json({ success: true, result: outcome, auditRef });
+    } catch (e) {
+        try { await db.query('ROLLBACK'); } catch { /* ignore rollback errors */ }
+        res.status(500).json({ error: 'Engel kaldirma islemi tamamlanamadi.' });
+    } finally { db.release(); }
 });
 
 // Add Friend Action
@@ -1441,15 +1675,34 @@ router.post('/add-friend', async (req, res) => {
 
 // Remove Friend Action
 router.post('/remove-friend', async (req, res) => {
-    const { userId, friendId } = req.body;
+    const userId = String(req.body?.userId || '').trim();
+    const friendId = String(req.body?.friendId || '').trim();
+    const reason = String(req.body?.reason || '').trim().slice(0, 500);
+    if (!isUuid(userId) || !isUuid(friendId) || reason.length < 3) {
+        return res.status(400).json({ error: 'Exact arkadaslik ve gerekce gerekli.' });
+    }
+    const db = await pool.connect();
     try {
-        await pool.query(`
+        await db.query('BEGIN');
+        const result = await db.query(`
             DELETE FROM friendships 
             WHERE (user_id = $1 AND friend_user_id = $2) 
                OR (user_id = $2 AND friend_user_id = $1)
         `, [userId, friendId]);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        const outcome = result.rowCount ? 'deleted' : 'no_op';
+        const auditRef = await logAdminAudit(db, {
+            actorAdmin: req.adminUser,
+            actionType: 'FRIEND_REMOVE',
+            entityType: 'friendship',
+            entityId: `${userId}:${friendId}`,
+            payload: { userId, friendId, reason, outcome }
+        });
+        await db.query('COMMIT');
+        res.json({ success: true, result: outcome, auditRef });
+    } catch (e) {
+        try { await db.query('ROLLBACK'); } catch { /* ignore rollback errors */ }
+        res.status(500).json({ error: 'Arkadaslik kaldirma islemi tamamlanamadi.' });
+    } finally { db.release(); }
 });
 
 router.post('/notify', async (req, res) => {
@@ -1911,7 +2164,7 @@ router.get('/push/logs', async (req, res) => {
              LIMIT $1`,
             [limit]
         );
-        res.json({ items: result.rows });
+        res.json({ items: result.rows, source: 'friendships', asOf: new Date().toISOString() });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

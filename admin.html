@@ -103,6 +103,14 @@
     .bulk-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:10px 0 12px; padding:10px; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02); flex-wrap:wrap; }
     .bulk-toolbar .bulk-left { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
     .bulk-toolbar .bulk-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .profile-identity { display:flex; flex-direction:column; gap:3px; min-width:0; }
+    .profile-identity strong, .profile-identity span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cell-stack { display:flex; flex-direction:column; gap:3px; }
+    .cell-stack small { color:var(--muted); }
+    .state-note { color:var(--muted); font-size:12px; }
+    .detail-section { margin:12px 0; padding:12px; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,.018); }
+    .detail-section h3 { margin-top:0; }
+    .technical-evidence { margin-top:12px; border-top:1px solid var(--border); padding-top:10px; }
     .bulk-counter { display:inline-flex; align-items:center; border:1px solid var(--border); background:rgba(255,255,255,0.06); color:var(--text); border-radius:999px; padding:4px 8px; font-weight:700; }
     .table-scroll { overflow:auto; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.015); }
     .table-scroll--trend { max-height:320px; }
@@ -328,12 +336,19 @@
     let profilePageSize=50;
     let profileTotal=0;
     let profileTotalPages=0;
+    let appReportPage=1;
+    let appReportPageSize=25;
+    let appReportTotal=0;
+    let appReportTotalPages=0;
     let onlineUsersRefreshTimer=null;
     let bulkSelectedUserIds=new Set();
     let bulkVisibleUserIds=[];
     let bulkBusy=false;
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
+    const WORKFLOW_LABELS={new:'Yeni',investigating:'Inceleniyor',resolved:'Cozuldu',duplicate:'Tekrar',insufficient_info:'Bilgi yetersiz',archived:'Arsivlendi'};
+    const PRIORITY_LABELS={low:'Dusuk',normal:'Normal',high:'Yuksek',critical:'Kritik'};
+    const LOCATION_STATE_LABELS={resolved:'Dogrulandi',unresolved:'Cozulemedi',pending:'Bekliyor',stale:'Bayat',provider_error:'Saglayici hatasi',not_available:'Veri yok'};
     const TAB_LABELS={
       dashboard:'Dashboard',
       reports:'Kullanici Raporlari',
@@ -458,12 +473,13 @@
     };
 
     function refreshAll(){loadStats();loadPushHealth();loadPushDiagnostics();loadPerformanceSummaryCard();loadContent();}
-    function triggerSearch(){ if(currentTab==='profiles') profilePage=1; loadContent(); }
+    function triggerSearch(){ if(currentTab==='profiles') profilePage=1; if(currentTab==='app_reports') appReportPage=1; loadContent(); }
     function handleSearchKeyup(event){ if(event?.key==='Enter') triggerSearch(); }
-    function profileSortIcon(sortKey){ if(profileSortBy!==sortKey) return '-'; return profileSortDir==='asc'?'^':'v'; }
+    function profileSortIcon(sortKey){ if(profileSortBy!==sortKey) return '↕'; return profileSortDir==='asc'?'↑':'↓'; }
     function renderProfileSortHeader(label,sortKey){
       const active=profileSortBy===sortKey?' is-active':'';
-      return `<th><button type="button" class="th-sort${active}" onclick="changeProfileSort('${sortKey}')">${label} <span>${profileSortIcon(sortKey)}</span></button></th>`;
+      const aria=profileSortBy===sortKey?(profileSortDir==='asc'?'ascending':'descending'):'none';
+      return `<th aria-sort="${aria}"><button type="button" class="th-sort${active}" onclick="changeProfileSort('${sortKey}')">${label} <span aria-hidden="true">${profileSortIcon(sortKey)}</span></button></th>`;
     }
     function changeProfileSort(sortKey){
       if(currentTab!=='profiles') return;
@@ -509,6 +525,16 @@
           </div>
         </div>
       `;
+    }
+    function changeAppReportPage(delta){
+      const next=appReportPage+Number(delta||0);
+      if(next<1||(appReportTotalPages>0&&next>appReportTotalPages)) return;
+      appReportPage=next; loadContent();
+    }
+    function renderAppReportPagination(itemsCount){
+      const start=itemsCount?((appReportPage-1)*appReportPageSize)+1:0;
+      const end=itemsCount?start+itemsCount-1:0;
+      return `<div class="profiles-pagination"><div>Kayit: ${start}-${end} / ${appReportTotal} | Sayfa ${appReportPage}${appReportTotalPages?` / ${appReportTotalPages}`:''}</div><div class="controls"><button class="btn btn-refresh" ${appReportPage<=1?'disabled':''} onclick="changeAppReportPage(-1)">Onceki</button><button class="btn btn-refresh" ${!appReportTotalPages||appReportPage>=appReportTotalPages?'disabled':''} onclick="changeAppReportPage(1)">Sonraki</button></div></div>`;
     }
 
     function isBulkTab(){
@@ -556,6 +582,8 @@
       document.querySelectorAll('[data-bulk-action]').forEach((btn)=>{
         btn.disabled=bulkBusy||bulkSelectedUserIds.size===0;
       });
+      const toolbar=document.getElementById('bulk-toolbar');
+      if(toolbar) toolbar.style.display=bulkSelectedUserIds.size?'flex':'none';
     }
     function toggleBulkAll(checked){
       if(!isBulkTab()) return;
@@ -579,7 +607,7 @@
     function renderBulkToolbar(){
       if(!isBulkTab()) return '';
       return `
-        <div class="bulk-toolbar">
+        <div class="bulk-toolbar" id="bulk-toolbar" style="display:${bulkSelectedUserIds.size?'flex':'none'}">
           <div class="bulk-left">
             <span id="bulk-selected-count" class="bulk-counter">${bulkSelectedUserIds.size} secili</span>
             <button class="btn btn-refresh" type="button" onclick="clearBulkSelection()">Temizle</button>
@@ -2044,6 +2072,10 @@
           qs.set('page',String(profilePage));
           qs.set('pageSize',String(profilePageSize));
         }
+        if(currentTab==='app_reports'){
+          qs.set('page',String(appReportPage));
+          qs.set('pageSize',String(appReportPageSize));
+        }
         const r=await fetch(`/admin/data?${qs.toString()}`); const x=await r.json(); if(!r.ok) throw new Error(x.error||'Veri alinamadi.'); const items=Array.isArray(x.items)?x.items:[];
         const allowBulk=isBulkTab();
         bulkVisibleUserIds=allowBulk?items.map((it)=>getBulkUserIdFromRow(it)).filter(Boolean):[];
@@ -2061,16 +2093,23 @@
           profileTotal=Math.max(0,Number(p.total)||0);
           profileTotalPages=Math.max(0,Number(p.totalPages)||0);
         }
+        if(currentTab==='app_reports'){
+          const p=x.pagination||{};
+          appReportPage=Math.max(1,Number(p.page)||appReportPage);
+          appReportPageSize=Math.max(1,Math.min(100,Number(p.pageSize)||appReportPageSize));
+          appReportTotal=Math.max(0,Number(p.total)||0);
+          appReportTotalPages=Math.max(0,Number(p.totalPages)||0);
+        }
         let h=allowBulk?renderBulkToolbar():'';
         h+='<table><thead><tr>';
         if(allowBulk) h+='<th class="bulk-select-cell"><input id="bulk-select-all" type="checkbox" onclick="toggleBulkAll(this.checked)" aria-label="Tumunu sec"></th>';
         if(currentTab==='reports') h+='<th>Tarih</th><th>Raporlayan</th><th>Raporlanan</th><th>Sebep</th><th>Kanit</th><th>Durum</th><th>Islem</th>';
         else if(currentTab==='bans') h+='<th>Kullanici</th><th>Tur</th><th>Bitis</th><th>Sebep</th><th>Islem</th>';
-        else if(currentTab==='profiles') h+=`${renderProfileSortHeader('Kullanici','username')}<th>Gorunen Isim</th><th>Sehir</th><th>Ulke</th><th>IP/Kaynak</th>${renderProfileSortHeader('Son Gorulme','last_seen_at')}${renderProfileSortHeader('Kayit','created_at')}<th>Islem</th>`;
-        else h+='<th>Tarih</th><th>Konu</th><th>Kullanici</th><th>E-posta</th><th>Durum</th><th>Medya</th><th>Islem</th>';
+        else if(currentTab==='profiles') h+=`${renderProfileSortHeader('Kullanici','username')}<th>Durum</th><th>Konum</th>${renderProfileSortHeader('Aktivite','last_seen_at')}<th>Islem</th>`;
+        else h+='<th>Sorun</th><th>Operasyon</th><th>Etki / Tekrar</th><th>Ortam</th><th>E-posta Teslimi</th><th>Islem</th>';
         h+='</tr></thead><tbody>';
         if(!items.length){
-          const baseColSpan=currentTab==='reports'?7:currentTab==='bans'?5:currentTab==='profiles'?8:7;
+          const baseColSpan=currentTab==='reports'?7:currentTab==='bans'?5:currentTab==='profiles'?5:6;
           const colSpan=allowBulk?baseColSpan+1:baseColSpan;
           h+=`<tr><td colspan="${colSpan}">Kayit bulunamadi.</td></tr>`;
         }else{
@@ -2092,16 +2131,17 @@
             }else if(currentTab==='bans'){
               h+=`<td>${esc(it.nickname||'Bilinmiyor')}</td><td><span class="badge ${esc(it.ban_type)}">${esc((it.ban_type||'').toUpperCase())}</span></td><td>${it.ban_until?new Date(it.ban_until).toLocaleString():'SURESIZ'}</td><td>${esc(it.reason||'')}</td><td><button class="btn btn-unban" onclick="actionUnban('${it.user_id}')">Yasagi Kaldir</button></td>`;
             }else if(currentTab==='profiles'){
-              const geoHint=[it.registration_ip,it.location_source].filter(Boolean).join(' / ');
-              h+=`<td><span class="username-cell"><strong>${esc(it.username||'-')}</strong>${renderProfilePlatformIcon(it.last_platform)}</span></td><td>${esc(it.display_name||'-')}</td><td title="${esc(it.location_label||geoHint)}">${esc(it.location_city||'-')}</td><td title="${esc(it.location_label||geoHint)}">${esc(it.location_country||'-')}</td><td title="${esc(it.location_label||'')}">${esc(geoHint||'-')}</td><td>${d(it.last_seen_at)}</td><td>${d(it.created_at)}</td><td><button class="btn btn-details" onclick="openProfileDetails('${it.id}','${esc(it.username||'-')}')">Detay</button><button class="btn btn-ban" onclick="actionBan('${it.id}',1,'Panel islemi')">Yasakla</button></td>`;
+              const location=[it.location_city,it.location_country].filter(Boolean).join(', ')||LOCATION_STATE_LABELS[it.location_state]||'Veri yok';
+              h+=`<td><div class="profile-identity"><strong title="${esc(it.username||'-')}">${esc(it.username||'-')}</strong><span title="${esc(it.display_name||'')}">${esc(it.display_name||'Gorunen isim yok')}</span>${renderProfilePlatformIcon(it.last_platform)}</div></td><td><div class="cell-stack"><span class="badge ${esc(it.account_state||'unknown')}">${esc(it.account_state||'Bilinmiyor')}</span><small>${esc(it.active_ban_until?`Bitis: ${d(it.active_ban_until)}`:'')}</small></div></td><td><div class="cell-stack"><span>${esc(location)}</span><small>${esc(LOCATION_STATE_LABELS[it.location_state]||it.location_state||'Bilinmiyor')} | ${esc(it.location_source||'kaynak yok')}</small></div></td><td><div class="cell-stack"><span>${d(it.last_seen_at)}</span><small>Kayit: ${d(it.created_at)}</small></div></td><td><button class="btn btn-details" onclick="openProfileDetails('${it.id}','${esc(it.username||'-')}')">Detay</button></td>`;
             }else{
-              h+=`<td>${d(it.created_at)}</td><td>${esc(subject(it.subject))}</td><td>${esc(it.username_snapshot||'-')}</td><td>${esc(it.contact_email||'-')}</td><td><span class="badge ${esc(it.brevo_status||'pending')}">${esc(brevo(it.brevo_status))}</span></td><td>${Number(it.media_count||0)}</td><td><button class="btn btn-details" onclick="openSupportDetails('${it.id}')">Detay</button><button class="btn btn-delete" onclick="deleteSupportReport('${it.id}')">Sil</button></td>`;
+              h+=`<td><div class="cell-stack"><strong>${esc(subject(it.subject))}</strong><small>${d(it.created_at)} | ${esc(it.username_snapshot||'Anonim')}</small></div></td><td><div class="cell-stack"><span class="badge ${esc(it.workflow_status||'new')}">${esc(WORKFLOW_LABELS[it.workflow_status]||it.workflow_status||'Yeni')}</span><small>Oncelik: ${esc(PRIORITY_LABELS[it.priority]||it.priority||'Normal')} | Sahip: ${esc(it.workflow_owner||'Atanmadi')}</small></div></td><td><div class="cell-stack"><span>${Number(it.repeat_count||1)} rapor / ${Number(it.affected_users||0)} kullanici</span><small>${Number(it.media_count||0)} medya</small></div></td><td><div class="cell-stack"><span>${esc(it.platform||'Bilinmiyor')}</span><small>${esc(it.app_version||'Surum yok')} | ${esc(it.last_error_code||'Hata kodu yok')}</small></div></td><td><span class="badge ${esc(it.delivery_status||'pending')}">${esc(brevo(it.delivery_status))}</span></td><td><button class="btn btn-details" onclick="openSupportDetails('${it.id}')">Detay</button></td>`;
             }
             h+='</tr>';
           });
         }
         h+='</tbody></table>';
         if(currentTab==='profiles') h+=renderProfilesPagination(items.length);
+        if(currentTab==='app_reports') h+=renderAppReportPagination(items.length);
         c.innerHTML=h;
         if(allowBulk) requestAnimationFrame(updateBulkSelectionUI);
       }catch(e){ c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Veri yuklenemedi: ${esc(e.message||e)}</p>`; }
@@ -2113,15 +2153,18 @@
     async function openProfileDetails(userId,username){
       openModal(`Profil Detayi: ${username}`,'<p>Yukleniyor...</p>');
       try{
-        const [rd,rb,rf]=await Promise.all([
-          fetch(`/admin/profile-details/${userId}`),
-          fetch(`/admin/user-blocks/${userId}`),
-          fetch(`/admin/user-friends/${userId}`)
+        const loadSection=async(url)=>{const r=await fetch(url);const x=await r.json();if(!r.ok) throw new Error(x.error||'Bolum okunamadi.');return x;};
+        const [detailsResult,blocksResult,friendsResult,reportsResult]=await Promise.allSettled([
+          loadSection(`/admin/profile-details/${userId}`),
+          loadSection(`/admin/user-blocks/${userId}`),
+          loadSection(`/admin/user-friends/${userId}`),
+          loadSection(`/admin/user-reports/${userId}`)
         ]);
-        const details=await rd.json(); const b=await rb.json(); const f=await rf.json();
-        if(!rd.ok) throw new Error(details.error||'Profil detayi okunamadi.');
-        if(!rb.ok) throw new Error(b.error||'Engel listesi okunamadi.');
-        if(!rf.ok) throw new Error(f.error||'Arkadas listesi okunamadi.');
+        if(detailsResult.status!=='fulfilled') throw detailsResult.reason;
+        const details=detailsResult.value;
+        const b=blocksResult.status==='fulfilled'?blocksResult.value:null;
+        const f=friendsResult.status==='fulfilled'?friendsResult.value:null;
+        const reports=reportsResult.status==='fulfilled'?reportsResult.value:null;
 
         const it=details.item||{};
         const reg=details.registration||null;
@@ -2129,39 +2172,35 @@
         const recentSessions=Array.isArray(details.recent_sessions)?details.recent_sessions:[];
         const recentPushDevices=Array.isArray(details.recent_push_devices)?details.recent_push_devices:[];
 
-        let accountHtml=`<h3>Hesap Bilgisi</h3><div class="grid">
+        let accountHtml=`<section class="detail-section"><h3>Profil Ozeti</h3><div class="grid">
           <div class="item"><strong>Kullanici</strong>${esc(it.username||'-')}</div>
           <div class="item"><strong>Gorunen Isim</strong>${esc(it.display_name||'-')}</div>
           <div class="item"><strong>Durum</strong>${esc(it.status||'-')}</div>
           <div class="item"><strong>Kayit Tarihi</strong>${d(it.created_at)}</div>
           <div class="item"><strong>Son Gorulme</strong>${d(it.last_seen_at)}</div>
-          <div class="item"><strong>Kayit Onayi Zamani</strong>${d(reg?.accepted_at)}</div>
-          <div class="item"><strong>Kayit Sehir</strong>${esc(reg?.location_city||'-')}</div>
-          <div class="item"><strong>Kayit Ulke</strong>${esc(reg?.location_country||'-')}</div>
-          <div class="item"><strong>Kayit Konumu</strong>${esc(reg?.location_label||'-')}</div>
-          <div class="item"><strong>Kayit Kaynagi</strong>${esc(reg?.location_source||'-')}</div>
-          <div class="item"><strong>Kayit IP</strong>${esc(reg?.ip||'-')}</div>
-          <div class="item"><strong>Ilk Device</strong>${esc(firstSession?.device_id||'-')}</div>
-          <div class="item"><strong>Ilk Session</strong>${d(firstSession?.created_at)}</div>
-        </div>`;
+        </div></section>`;
 
-        let sessionHtml='<h3>Son Sessionlar</h3><ul class="list-compact">';
+        const moderationHtml=`<section class="detail-section"><h3>Moderasyon</h3>${reports?`<div class="grid"><div class="item"><strong>Alinan Rapor</strong>${esc(reports.stats?.receivedCount||'0')}</div><div class="item"><strong>Gonderilen Rapor</strong>${esc(reports.stats?.sentCount||'0')}</div></div>`:'<p class="state-note">Rapor ozeti yuklenemedi. Diger bolumler korunuyor.</p>'}</section>`;
+
+        let sessionHtml='<section class="detail-section"><h3>Oturumlar</h3><p class="state-note">Session aktivitesi authoritative revocation/last-use verisi olmadigi icin bilinmiyor.</p><ul class="list-compact">';
         if(!recentSessions.length) sessionHtml+='<li>Session kaydi yok.</li>';
         else recentSessions.forEach(s=>{
-          sessionHtml+=`<li><code>${esc(s.device_id||'unknown')}</code> | Baslangic: ${d(s.created_at)} | Bitis: ${d(s.expires_at)}</li>`;
+          sessionHtml+=`<li><code>${esc(s.device_id||'unknown')}</code><br/>Olusturma: ${d(s.created_at)}<br/>Sona erme / son kullanma tarihi: ${d(s.expires_at)}<br/>Aktiflik: Bilinmiyor</li>`;
         });
-        sessionHtml+='</ul>';
+        sessionHtml+='</ul></section>';
 
-        let pushHtml='<h3>Son Push Cihazlari</h3><ul class="list-compact">';
+        let pushHtml='<section class="detail-section"><h3>Push Cihazlari</h3><p class="state-note">Push cihazi session degildir; cihaz kimlikleri maskelidir.</p><ul class="list-compact">';
         if(!recentPushDevices.length) pushHtml+='<li>Push cihaz kaydi yok.</li>';
         else recentPushDevices.forEach(p=>{
           const active=p.is_active===true?'Evet':'Hayir';
           pushHtml+=`<li><code>${esc(p.device_id||'unknown')}</code> | Platform: ${esc(p.platform||'-')} | Son gorulme: ${d(p.last_seen_at||p.updated_at||p.created_at)} | Aktif: ${active}</li>`;
         });
-        pushHtml+='</ul>';
+        pushHtml+='</ul></section>';
+
+        const legalHtml=`<section class="detail-section"><h3>Yasal Kabul ve Konum</h3><div class="grid"><div class="item"><strong>Terms / Privacy</strong>${esc(reg?`${reg.terms_version||'?'} / ${reg.privacy_version||'?'}`:'Veri yok')}</div><div class="item"><strong>Kabul Zamani</strong>${reg?d(reg.accepted_at):'Veri yok'}</div><div class="item"><strong>Konum</strong>${esc([reg?.location_city,reg?.location_country].filter(Boolean).join(', ')||'Cozulemedi')}</div><div class="item"><strong>Konum Durumu</strong>${esc(LOCATION_STATE_LABELS[reg?.location_state]||reg?.location_state||'Veri yok')}</div><div class="item"><strong>Kaynak / Tazelik</strong>${esc(reg?.location_source||'Kaynak yok')} / ${d(reg?.location_resolved_at)}</div><div class="item"><strong>Maskeli IP</strong>${esc(reg?.ip||'Veri yok')}</div></div></section>`;
 
         const friendInputId=`friend-add-${String(userId).replace(/[^a-zA-Z0-9_-]/g,'')}`;
-        let fh='<h3>Arkadaslar</h3>';
+        let fh='<section class="detail-section"><h3>Iliskiler — Arkadaslar</h3>';
         fh+=`<div style="margin:8px 0 12px;padding:10px;border:1px dashed #344765;border-radius:10px;background:#151f32">
           <div style="font-size:12px;color:#a7b5cd;margin-bottom:8px">Bu profile panelden manuel arkadas ekleyebilirsiniz (kullanici adi veya UUID).</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -2170,16 +2209,25 @@
           </div>
         </div>`;
         fh+='<ul class="list-compact">';
-        if(!f.items?.length) fh+='<li>Arkadas kaydi yok.</li>';
-        else f.items.forEach(i=>{fh+=`<li style="margin-bottom:8px;display:flex;justify-content:space-between;gap:8px"><span>${esc(i.username)} <small>(${new Date(i.created_at).toLocaleDateString()})</small></span><button class="btn btn-perm" onclick="actionRemoveFriend('${userId}','${i.id}')">Sil</button></li>`;});
-        fh+='</ul>';
+        if(!f) fh+='<li>Arkadas bolumu yuklenemedi; yerel tekrar deneyin.</li>';
+        else if(!f.items?.length) fh+='<li>Arkadas kaydi yok.</li>';
+        else f.items.forEach(i=>{fh+=`<li style="margin-bottom:8px;display:flex;justify-content:space-between;gap:8px"><span>${esc(i.username)}<br/><small>Iliski: ${d(i.relationship_created_at)} | ${esc(i.relationship_status||'-')} | ${esc(i.direction||'-')}</small></span><button class="btn btn-perm" onclick="actionRemoveFriend('${userId}','${i.id}')">Arkadasligi Kaldir</button></li>`;});
+        fh+='</ul></section>';
 
-        let bh='<h3>Engellenen Kullanici</h3><ul class="list-compact">';
-        if(!b.items?.length) bh+='<li>Engel kaydi yok.</li>';
-        else b.items.forEach(i=>{bh+=`<li style="margin-bottom:8px;display:flex;justify-content:space-between;gap:8px"><span>${esc(i.nickname||'Anonim')}</span><button class="btn btn-unban" onclick="actionUnblock('${userId}','${i.blocked_id}')">Engeli Kaldir</button></li>`;});
-        bh+='</ul>';
+        let bh='<section class="detail-section"><h3>Iliskiler — Engeller</h3>';
+        if(!b) bh+='<p class="state-note">Engel bolumu yuklenemedi; diger bolumler korunuyor.</p>';
+        else{
+          bh+='<h4>Bu kullanicinin engelledikleri</h4><ul class="list-compact">';
+          if(!b.blockedByUser?.length) bh+='<li>Kayit yok.</li>';
+          else b.blockedByUser.forEach(i=>{bh+=`<li>${esc(i.nickname||'Anonim')} | ${d(i.created_at)} <button class="btn btn-unban" onclick="actionUnblock('${i.blocker_id}','${i.blocked_id}')">Engeli Kaldir</button></li>`;});
+          bh+='</ul><h4>Bu kullaniciyi engelleyenler</h4><ul class="list-compact">';
+          if(!b.blockingUser?.length) bh+='<li>Kayit yok.</li>';
+          else b.blockingUser.forEach(i=>{bh+=`<li>${esc(i.nickname||'Anonim')} | ${d(i.created_at)}</li>`;});
+          bh+='</ul>';
+        }
+        bh+='</section>';
 
-        document.getElementById('m_body').innerHTML=`${accountHtml}${sessionHtml}${pushHtml}<hr/>${fh}<hr/>${bh}`;
+        document.getElementById('m_body').innerHTML=`${accountHtml}${moderationHtml}${sessionHtml}${pushHtml}${legalHtml}${fh}${bh}`;
       }catch(e){document.getElementById('m_body').innerHTML=`<p>Detay yuklenemedi: ${esc(e.message||e)}</p>`;}
     }
 
@@ -2187,27 +2235,27 @@
       openModal('Uygulama Raporu Detayi','<p>Yukleniyor...</p>');
       try{
         const r=await fetch(`/admin/support-report/${id}`); const x=await r.json(); if(!r.ok) throw new Error(x.error||'hata');
-        const it=x.item||{}; const media=Array.isArray(x.media)?x.media:[];
-        let body=`<div class="grid">
+        const it=x.item||{}; const media=Array.isArray(x.media)?x.media:[]; const history=Array.isArray(x.history)?x.history:[]; const group=x.group||{};
+        let body=`<section class="detail-section"><h3>Problem ve Operasyon Ozeti</h3><div class="grid">
           <div class="item"><strong>Rapor ID</strong>${esc(it.id||'-')}</div>
           <div class="item"><strong>Konu</strong>${esc(subject(it.subject))}</div>
-          <div class="item"><strong>Tarih</strong>${d(it.created_at)}</div>
+          <div class="item"><strong>Operasyon Durumu</strong>${esc(WORKFLOW_LABELS[it.workflow_status]||it.workflow_status||'Yeni')}</div>
+          <div class="item"><strong>Oncelik</strong>${esc(PRIORITY_LABELS[it.priority]||it.priority||'Normal')}</div>
+          <div class="item"><strong>Sahip</strong>${esc(it.workflow_owner||'Atanmadi')}</div>
+          <div class="item"><strong>Etki / Tekrar</strong>${Number(group.report_count||1)} rapor / ${Number(group.affected_users||0)} kullanici</div>
+          <div class="item"><strong>Ilk / Son Gorulme</strong>${d(group.first_seen)} / ${d(group.last_seen)}</div>
+          <div class="item"><strong>Server Kayit Zamani</strong>${d(it.created_at)}</div>
           <div class="item"><strong>Kullanici</strong>${esc(it.username_snapshot||'-')}</div>
-          <div class="item"><strong>Iletisim E-posta</strong>${esc(it.contact_email||'-')}</div>
-          <div class="item"><strong>Brevo Durumu</strong>${esc(brevo(it.brevo_status))}</div>
+          <div class="item"><strong>E-posta Teslimi</strong>${esc(brevo(it.delivery_status))}</div>
           <div class="item"><strong>App Versiyon</strong>${esc(it.app_version||'-')}</div>
           <div class="item"><strong>Platform</strong>${esc(it.platform||'-')}</div>
           <div class="item"><strong>Cihaz Modeli</strong>${esc(it.device_model||'-')}</div>
-          <div class="item"><strong>Istemci Saat</strong>${d(it.client_timestamp)}</div>
+          <div class="item"><strong>Istemci Bildirim Zamani</strong>${d(it.client_timestamp)}</div>
           <div class="item"><strong>Ag Tipi</strong>${esc(it.network_type||'-')}</div>
           <div class="item"><strong>Son Hata Kodu</strong>${esc(it.last_error_code||'-')}</div>
-          <div class="item"><strong>IP</strong>${esc(it.ip||'-')}</div>
-          <div class="item"><strong>User-Agent</strong>${esc(it.user_agent||'-')}</div>
-          <div class="item"><strong>Brevo Mesaj ID</strong>${esc(it.brevo_message_id||'-')}</div>
-          <div class="item"><strong>Brevo Hata</strong>${esc(it.brevo_error||'-')}</div>
-        </div>
-        <h3>Aciklama</h3><div class="desc">${esc(it.description||'-')}</div>
-        <h3>Medya</h3>`;
+        </div><div style="margin-top:10px"><button class="btn btn-details" onclick="actionSupportWorkflow('${it.id}',${Number(it.workflow_revision||1)},'${esc(it.workflow_status||'new')}','${esc(it.priority||'normal')}')">Durum / Not Guncelle</button> <button class="btn btn-delete" onclick="archiveSupportReport('${it.id}',${Number(it.workflow_revision||1)},'${esc(it.priority||'normal')}')">Arsivle</button></div></section>
+        <section class="detail-section"><h3>Kullanici Bildirimi</h3><div class="desc">${esc(it.description||'-')}</div></section>
+        <section class="detail-section"><h3>Medya Kaniti</h3>`;
         if(!media.length) body+='<p>Medya yok.</p>';
         else{
           body+='<div class="media">';
@@ -2218,17 +2266,38 @@
           });
           body+='</div>';
         }
+        body+=`</section><section class="detail-section"><h3>Islem Gecmisi</h3>${history.length?`<ul class="list-compact">${history.map((row)=>`<li>${d(row.created_at)} | ${esc(row.actor_admin||'-')} | ${esc(row.from_status||'-')} → ${esc(row.to_status||'-')} | ${esc(row.reason||'-')}</li>`).join('')}</ul>`:'<p class="state-note">Henuz workflow islemi yok.</p>'}</section><details class="technical-evidence"><summary>Maskeli teknik kaniti ac</summary><div class="grid"><div class="item"><strong>Maskeli E-posta</strong>${esc(it.contact_email||'Veri yok')}</div><div class="item"><strong>Maskeli IP</strong>${esc(it.ip||'Veri yok')}</div><div class="item"><strong>Maskeli User-Agent</strong>${esc(it.user_agent||'Veri yok')}</div><div class="item"><strong>Maskeli Brevo ID</strong>${esc(it.brevo_message_id||'Veri yok')}</div><div class="item"><strong>Teslim Hatasi</strong>${esc(it.brevo_error||'Yok')}</div><div class="item"><strong>Fingerprint</strong>${esc(it.problem_fingerprint?`${String(it.problem_fingerprint).slice(0,12)}…`:'Standalone')}</div></div></details>`;
         document.getElementById('m_body').innerHTML=body;
       }catch(e){document.getElementById('m_body').innerHTML=`<p>Detay yuklenemedi: ${esc(e.message||e)}</p>`;}
     }
 
-    async function deleteSupportReport(id){
-      if(!confirm('Bu uygulama raporunu kalici olarak silmek istiyor musunuz?')) return;
+    async function patchSupportWorkflow(id,payload){
+      const r=await fetch(`/admin/support-report/${id}/workflow`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const x=await r.json().catch(()=>({}));
+      if(!r.ok||!x.success) throw new Error(x.error||'Workflow guncellenemedi');
+      return x;
+    }
+    async function actionSupportWorkflow(id,revision,currentStatus,currentPriority){
+      const status=(prompt('Yeni durum: new, investigating, resolved, duplicate, insufficient_info, archived',currentStatus)||'').trim();
+      if(!status) return;
+      const priority=(prompt('Oncelik: low, normal, high, critical',currentPriority)||'').trim();
+      if(!priority) return;
+      const reason=(prompt('Gerekce (zorunlu):')||'').trim();
+      if(reason.length<3){alert('En az 3 karakter gerekce gerekli.');return;}
       try{
-        const r=await fetch(`/admin/support-report/${id}`,{method:'DELETE'}); const x=await r.json().catch(()=>({}));
-        if(!r.ok||!x.success) throw new Error(x.error||'Silinemedi');
+        await patchSupportWorkflow(id,{expectedRevision:revision,status,priority,reason,note:reason});
+        closeModal();
         loadContent(); loadStats();
-      }catch(e){alert(`Silme hatasi: ${e.message}`);}
+      }catch(e){alert(`Workflow hatasi: ${e.message}`);}
+    }
+    async function archiveSupportReport(id,revision,priority){
+      const reason=(prompt('Arsiv gerekcesi:')||'').trim();
+      if(reason.length<3) return;
+      if(!confirm('Rapor reversible olarak arsivlensin mi? Veri silinmeyecek.')) return;
+      try{
+        await patchSupportWorkflow(id,{expectedRevision:revision,status:'archived',priority,reason,note:reason});
+        closeModal(); loadContent(); loadStats();
+      }catch(e){alert(`Arsivleme hatasi: ${e.message}`);}
     }
 
     async function sendNotice(){
@@ -2305,7 +2374,7 @@
         setBulkBusy(false);
       }
     }
-    async function actionUnblock(blockerId,blockedId){ if(!confirm('Bu engeli kaldirmak istiyor musunuz?')) return; await apiPost('/admin/unblock',{blockerId,blockedId}); closeModal(); }
+    async function actionUnblock(blockerId,blockedId){ const reason=(prompt('Engeli kaldirma gerekcesi:')||'').trim();if(reason.length<3)return;if(!confirm('Bu exact engel yonu kaldirilsin mi?')) return; await apiPost('/admin/unblock',{blockerId,blockedId,reason}); closeModal(); }
     async function actionAddFriend(userId,username,inputId){
       const friendRef=(document.getElementById(inputId)?.value||'').trim();
       if(!friendRef){ alert('Kullanici adi veya UUID girin.'); return; }
@@ -2313,7 +2382,7 @@
       await apiPost('/admin/add-friend',{userId,friendRef});
       await openProfileDetails(userId,username||'-');
     }
-    async function actionRemoveFriend(userId,friendId){ if(!confirm('Arkadasligi silmek istiyor musunuz?')) return; await apiPost('/admin/remove-friend',{userId,friendId}); closeModal(); }
+    async function actionRemoveFriend(userId,friendId){ const reason=(prompt('Arkadasligi kaldirma gerekcesi:')||'').trim();if(reason.length<3)return;if(!confirm('Bu exact arkadaslik kaldirilsin mi?')) return; await apiPost('/admin/remove-friend',{userId,friendId,reason}); closeModal(); }
     async function actionApproveDeletion(requestId){ if(!confirm('Bu hesabi kalici olarak silmek istiyor musunuz?')) return; const confirmation=prompt('Onaylamak icin DELETE ACCOUNT yazin:'); if(confirmation!=='DELETE ACCOUNT') return; await apiPost(`/admin/deletion-requests/${requestId}/approve-delete`,{confirm_text:confirmation,policy_version:'talkx-data-policy-v1'}); }
     async function actionRejectDeletion(requestId){ if(!confirm('Silme talebini reddetmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reject`,{}); }
     async function actionReactivateDeletion(requestId){ if(!confirm('Bu kullaniciyi yeniden aktif etmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reactivate`,{}); }
