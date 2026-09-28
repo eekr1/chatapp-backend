@@ -6,23 +6,29 @@
   <title>TalkX Yonetim Paneli</title>
   <style>
     :root {
-      --bg: #161d29;
-      --bg-2: #111722;
-      --surface: #1b2432;
-      --surface-2: #243043;
-      --surface-3: #2d3a52;
-      --border: #3a4861;
-      --text: #e9eef8;
-      --muted: #a4b2c8;
-      --muted-2: #8e9cb3;
-      --accent: #6aaeff;
-      --accent-2: #4f96eb;
+      --bg: #090b14;
+      --bg-2: #0d101c;
+      --surface: #121624;
+      --surface-2: #171c2d;
+      --surface-3: #20263a;
+      --border: #2a3044;
+      --border-strong: #3a4260;
+      --text: #f5f7ff;
+      --muted: #9da6bd;
+      --muted-2: #717b94;
+      --accent: #7c63ff;
+      --accent-2: #6550dc;
+      --accent-soft: rgba(124, 99, 255, 0.14);
+      --cyan: #20d8e7;
       --success: #45d89b;
-      --danger: #ff7988;
+      --danger: #ff667e;
       --warning: #ffc46d;
-      --shadow: 0 14px 34px rgba(4, 8, 16, 0.26);
+      --shadow: 0 20px 48px rgba(0, 0, 0, 0.32);
     }
-    body { font-family: Segoe UI, Tahoma, sans-serif; margin: 0; padding: 20px; background:radial-gradient(1000px 520px at 15% -10%, rgba(112,157,220,0.18), transparent 60%),linear-gradient(180deg,var(--bg-2),var(--bg)); color:var(--text); }
+    * { box-sizing:border-box; }
+    body { font-family: Inter, Segoe UI, Tahoma, sans-serif; margin:0; padding:20px; min-height:100vh; background:radial-gradient(900px 520px at 88% -12%, rgba(124,99,255,.14), transparent 62%),radial-gradient(680px 420px at 20% 0%, rgba(32,216,231,.06), transparent 62%),linear-gradient(180deg,var(--bg-2),var(--bg)); color:var(--text); }
+    body.admin-nav-open { overflow:hidden; }
+    button, input, select, textarea { font:inherit; }
     .container { max-width: 1500px; margin: 0 auto; }
     .header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; }
     .brand { display:flex; align-items:center; gap:10px; }
@@ -126,25 +132,30 @@
     .list-compact li { margin-bottom:6px; }
     hr { border:none; border-top:1px solid var(--border); margin:14px 0; }
 
-    .app-shell { min-height:calc(100vh - 40px); display:grid; grid-template-columns:270px minmax(0,1fr); gap:14px; }
-    .sidebar { border:1px solid var(--border); border-radius:18px; background:linear-gradient(180deg, rgba(10,17,30,0.92), rgba(11,18,30,0.72)); box-shadow:var(--shadow); padding:16px 12px; display:flex; flex-direction:column; gap:14px; }
+    .app-shell { min-height:calc(100vh - 40px); display:grid; grid-template-columns:260px minmax(0,1fr); gap:18px; }
+    .sidebar { position:sticky; top:20px; height:calc(100vh - 40px); border:1px solid var(--border); border-radius:20px; background:linear-gradient(180deg, rgba(17,21,35,.97), rgba(11,14,25,.94)); box-shadow:var(--shadow); padding:16px 12px; display:flex; flex-direction:column; gap:14px; overflow:hidden; z-index:40; }
     .sidebar-brand { display:flex; align-items:center; gap:10px; padding:4px 8px 12px; border-bottom:1px solid rgba(255,255,255,0.07); }
-    .sidebar-brand .brand-title { font-size:35px; line-height:1; letter-spacing:-1px; font-weight:800; text-transform:lowercase; }
+    .sidebar-brand .brand-title { font-size:29px; line-height:1; letter-spacing:-1px; font-weight:800; }
     .sidebar-brand .brand-sub { color:var(--muted); font-size:12px; margin-top:4px; }
-    .nav-group { display:flex; flex-direction:column; gap:6px; }
+    .sidebar-nav { display:flex; flex-direction:column; gap:14px; overflow-y:auto; padding-right:3px; }
+    .nav-group { display:flex; flex-direction:column; gap:5px; }
     .nav-group-title { color:var(--muted-2); font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin:2px 8px 4px; }
-    .sidebar .tab { width:100%; text-align:left; display:flex; align-items:center; gap:10px; border:1px solid transparent; border-radius:12px; padding:10px 12px; background:transparent; color:var(--muted); font-weight:600; border-bottom:none; }
+    .sidebar .tab { width:100%; min-height:44px; text-align:left; display:flex; align-items:center; gap:11px; border:1px solid transparent; border-radius:11px; padding:9px 11px; background:transparent; color:var(--muted); font-weight:600; border-bottom:none; }
     .sidebar .tab:hover { color:var(--text); background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.07); }
-    .sidebar .tab.active { color:#fff; background:linear-gradient(90deg, rgba(130,77,255,0.35), rgba(87,69,220,0.22)); border-color:rgba(153,109,255,0.45); box-shadow:0 8px 20px rgba(76,44,156,0.35); }
-    .nav-icon { width:16px; height:16px; display:inline-block; opacity:.95; }
-    .sidebar-refresh { width:100%; margin-right:0; margin-top:auto; background:linear-gradient(135deg, #6f56d9, #4f96eb); }
+    .sidebar .tab.active { color:#fff; background:linear-gradient(90deg, rgba(124,99,255,.28), rgba(124,99,255,.1)); border-color:rgba(142,122,255,.46); box-shadow:inset 3px 0 0 var(--accent), 0 8px 20px rgba(45,30,111,.24); }
+    .nav-icon { width:18px; height:18px; flex:0 0 18px; display:block; opacity:.95; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .sidebar-foot { margin-top:auto; padding:12px 9px 2px; border-top:1px solid rgba(255,255,255,.07); color:var(--muted-2); font-size:11px; }
+    .sidebar-backdrop { display:none; position:fixed; inset:0; z-index:35; border:0; background:rgba(2,4,10,.72); backdrop-filter:blur(3px); }
 
     .main-shell { min-width:0; display:flex; flex-direction:column; gap:14px; }
-    .topbar { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; border:1px solid var(--border); border-radius:18px; background:linear-gradient(180deg, rgba(10,18,31,0.85), rgba(12,21,36,0.68)); padding:14px 16px; box-shadow:var(--shadow); }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; border:1px solid var(--border); border-radius:18px; background:linear-gradient(180deg, rgba(18,22,37,.9), rgba(13,16,28,.86)); padding:15px 17px; box-shadow:var(--shadow); }
+    .topbar-heading { display:flex; align-items:center; gap:12px; min-width:0; }
     .topbar h1 { margin:0; font-size:28px; line-height:1.1; letter-spacing:-.02em; }
     .topbar p { margin:4px 0 0; color:var(--muted); font-size:13px; }
     .topbar-right { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
-    .topbar-refresh { margin-right:0; background:linear-gradient(135deg, #6f56d9, #4f96eb); }
+    .topbar-refresh { margin-right:0; min-height:40px; padding:8px 14px; display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg, #7259ed, #5946c7); }
+    .topbar-refresh svg, .sidebar-toggle svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+    .sidebar-toggle { display:none; width:44px; height:44px; flex:0 0 44px; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:11px; background:var(--surface-2); color:var(--text); cursor:pointer; }
     .top-search { margin:0; }
     .top-search input { min-width:280px; }
     .top-search .btn { margin-right:0; }
@@ -162,10 +173,11 @@
 
     .system-diag { margin:0; border-radius:16px; padding:12px 14px; }
     .workspace-panel { margin:0; min-height:520px; }
+    .workspace-panel.dashboard-mode { padding:0; border-color:transparent; background:transparent; box-shadow:none; backdrop-filter:none; }
     .dashboard-surface { display:flex; flex-direction:column; gap:12px; }
     .dashboard-columns { display:grid; gap:12px; grid-template-columns:minmax(0,1.7fr) minmax(0,1fr); align-items:start; }
-    .dashboard-panel { border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,0.02); padding:12px; }
-    .dashboard-panel h3 { margin:0 0 6px; font-size:18px; }
+    .dashboard-panel { border:1px solid var(--border); border-radius:16px; background:linear-gradient(180deg, rgba(23,28,45,.9), rgba(16,20,33,.9)); padding:16px; box-shadow:0 12px 30px rgba(0,0,0,.18); }
+    .dashboard-panel h3 { margin:0 0 6px; font-size:17px; }
     .dashboard-sub { margin:0 0 10px; color:var(--muted); font-size:12px; }
     .dashboard-kpi-grid { display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); margin-bottom:10px; }
     .dashboard-kpi { border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,0.02); padding:8px; }
@@ -175,6 +187,38 @@
     .dashboard-kpi.is-no-data .v, .dashboard-kpi.is-unavailable .v { color:var(--muted); font-size:15px; }
     .dashboard-status { border:1px solid var(--border); border-radius:10px; padding:9px 10px; color:var(--muted); font-size:12px; }
     .dashboard-status.is-partial { border-color:rgba(235,138,63,.6); color:#ffc48e; }
+    .dashboard-section-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .dashboard-section-head p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+    .dashboard-section-tag { border:1px solid var(--border); border-radius:999px; padding:5px 9px; color:var(--muted); font-size:11px; white-space:nowrap; }
+    .overview-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .overview-card { min-width:0; border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.022); padding:14px; }
+    .overview-card-top { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.045em; }
+    .overview-card-icon { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:10px; color:#a798ff; background:var(--accent-soft); }
+    .overview-card-icon svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .overview-card-value { margin-top:14px; font-size:30px; font-weight:760; line-height:1; letter-spacing:-.03em; }
+    .overview-card-value.is-muted { color:var(--muted); font-size:17px; }
+    .overview-card-meta { margin-top:8px; color:var(--muted-2); font-size:10px; line-height:1.35; }
+    .health-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    .health-card { border:1px solid var(--border); border-radius:14px; padding:14px; background:rgba(255,255,255,.018); }
+    .health-title { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; font-weight:700; }
+    .health-status { display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:10px; font-weight:650; white-space:nowrap; }
+    .status-dot { width:8px; height:8px; border-radius:50%; background:var(--muted-2); box-shadow:0 0 0 4px rgba(113,123,148,.12); }
+    .status-dot.ok { background:var(--success); box-shadow:0 0 0 4px rgba(69,216,155,.12); }
+    .status-dot.warn { background:var(--warning); box-shadow:0 0 0 4px rgba(255,196,109,.12); }
+    .status-dot.bad { background:var(--danger); box-shadow:0 0 0 4px rgba(255,102,126,.12); }
+    .health-value { margin-top:12px; font-size:24px; font-weight:740; }
+    .health-meta { margin-top:6px; color:var(--muted); font-size:11px; line-height:1.45; }
+    .dashboard-detail-grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr); gap:12px; }
+    .push-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .push-summary div { border:1px solid var(--border); border-radius:11px; padding:10px; background:rgba(255,255,255,.016); }
+    .push-summary span { display:block; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+    .push-summary strong { display:block; margin-top:6px; font-size:19px; }
+    .dashboard-technical { margin-top:12px; border-top:1px solid var(--border); padding-top:10px; color:var(--muted); font-size:11px; }
+    .dashboard-technical summary { cursor:pointer; color:#b9b0ff; font-weight:650; }
+    .dashboard-technical-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 12px; margin-top:9px; }
+    .dashboard-technical-grid div { overflow-wrap:anywhere; }
+    .activity-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
+    .activity-value { font-size:26px; font-weight:740; margin-top:8px; }
     .dashboard-chart { border:1px solid var(--border); border-radius:12px; background:linear-gradient(180deg, rgba(76,115,214,0.08), rgba(76,115,214,0.015)); padding:8px 10px 10px; margin-bottom:10px; }
     .dashboard-chart svg { width:100%; height:220px; display:block; }
     .dashboard-chart .axis { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:4px; color:var(--muted-2); font-size:11px; }
@@ -193,12 +237,13 @@
 
     @media (max-width: 1180px) {
       .app-shell { grid-template-columns:1fr; }
-      .sidebar { order:2; }
-      .main-shell { order:1; }
-      .nav-group { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:8px; }
-      .nav-group-title { grid-column:1 / -1; }
+      .sidebar { position:fixed; top:12px; bottom:12px; left:12px; width:min(320px,calc(100vw - 24px)); height:auto; transform:translateX(calc(-100% - 24px)); transition:transform .2s ease; }
+      .sidebar.is-open { transform:translateX(0); }
+      .sidebar-backdrop.is-open { display:block; }
+      .sidebar-toggle { display:inline-flex; }
       .top-search input { min-width:220px; }
       .dashboard-columns { grid-template-columns:1fr; }
+      .overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     }
 
     @media (max-width: 760px) {
@@ -206,101 +251,100 @@
       .app-shell { min-height:calc(100vh - 24px); gap:10px; }
       .topbar { padding:12px; border-radius:14px; }
       .topbar h1 { font-size:22px; }
+      .topbar { align-items:flex-start; flex-wrap:wrap; }
+      .topbar-left { min-width:0; }
       .top-search { width:100%; }
       .top-search input { min-width:0; width:100%; }
       .topbar-right { width:100%; justify-content:stretch; }
       .topbar-refresh { width:100%; }
-      .sidebar { border-radius:14px; padding:12px 10px; }
       .workspace-panel { min-height:420px; padding:12px; }
+      .workspace-panel.dashboard-mode { padding:0; }
       .card .v, .stat-body .v { font-size:28px; }
+      .overview-grid, .health-grid, .dashboard-detail-grid, .activity-pair { grid-template-columns:1fr; }
+      .push-summary { grid-template-columns:1fr; }
+      .dashboard-section-head { align-items:flex-start; flex-direction:column; }
     }
   </style>
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="icon-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect></symbol>
+    <symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></symbol>
+    <symbol id="icon-report" viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h11l3 3v15"></path><path d="M8 8h8M8 12h8M8 16h5"></path></symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></symbol>
+    <symbol id="icon-bug" viewBox="0 0 24 24"><path d="m8 2 1.3 2.2M16 2l-1.3 2.2M3 13h4M17 13h4M5 19l3-2M19 19l-3-2"></path><rect x="7" y="4" width="10" height="16" rx="5"></rect><path d="M12 4v16"></path></symbol>
+    <symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path></symbol>
+    <symbol id="icon-radio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"></circle><path d="M16.24 7.76a6 6 0 0 1 0 8.48M7.76 16.24a6 6 0 0 1 0-8.48M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"></path></symbol>
+    <symbol id="icon-performance" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"></path><path d="m12 12 4-4M7 17h10"></path></symbol>
+    <symbol id="icon-analytics" viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"></path></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v5M14 11v5"></path></symbol>
+    <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5M12 7v5l3 2"></path></symbol>
+    <symbol id="icon-legal" viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"></path><path d="M14 2v6h6M9 13h6M9 17h6"></path></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"></path><path d="M6.1 9A7 7 0 0 1 18.4 6.6L20 11M4 13l1.6 4.4A7 7 0 0 0 17.9 15"></path></symbol>
+    <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></symbol>
+    <symbol id="icon-message" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path></symbol>
+  </svg>
+  <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Menüyü kapat" onclick="closeAdminNav()"></button>
   <div class="app-shell">
-    <aside class="sidebar">
+    <aside id="admin-sidebar" class="sidebar" aria-label="Yönetim menüsü">
       <div class="sidebar-brand">
         <img src="/admin/assets/talkx-icon-256.png" class="logo" alt="TalkX" />
         <div>
-          <div class="brand-title">talkx</div>
-          <div class="brand-sub">Yonetim Paneli</div>
+          <div class="brand-title">TalkX</div>
+          <div class="brand-sub">Yönetim Paneli</div>
         </div>
       </div>
 
-      <div class="nav-group">
-        <div class="nav-group-title">Genel</div>
-        <button class="tab active" onclick="switchTab('dashboard',event)"><span class="nav-icon">D</span> Dashboard</button>
-      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-group">
+          <div class="nav-group-title">Genel</div>
+          <button class="tab active" data-tab="dashboard" aria-current="page" onclick="switchTab('dashboard',event)"><svg class="nav-icon"><use href="#icon-dashboard"></use></svg> Genel Bakış</button>
+        </div>
 
-      <div class="nav-group">
-        <div class="nav-group-title">Yonetim</div>
-        <button class="tab" onclick="switchTab('reports',event)"><span class="nav-icon">#</span> Kullanici Raporlari</button>
-        <button class="tab" onclick="switchTab('bans',event)"><span class="nav-icon">!</span> Yasaklar & Golge</button>
-        <button class="tab" onclick="switchTab('profiles',event)"><span class="nav-icon">@</span> Profiller</button>
-        <button class="tab" onclick="switchTab('app_reports',event)"><span class="nav-icon">?</span> Uygulama Raporlari</button>
-      </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Kullanıcılar ve Moderasyon</div>
+          <button class="tab" data-tab="profiles" onclick="switchTab('profiles',event)"><svg class="nav-icon"><use href="#icon-users"></use></svg> Profiller</button>
+          <button class="tab" data-tab="reports" onclick="switchTab('reports',event)"><svg class="nav-icon"><use href="#icon-report"></use></svg> Kullanıcı Raporları</button>
+          <button class="tab" data-tab="app_reports" onclick="switchTab('app_reports',event)"><svg class="nav-icon"><use href="#icon-bug"></use></svg> Uygulama Raporları</button>
+          <button class="tab" data-tab="bans" onclick="switchTab('bans',event)"><svg class="nav-icon"><use href="#icon-shield"></use></svg> Yasaklar ve Gölge</button>
+          <button class="tab" data-tab="deletion_requests" onclick="switchTab('deletion_requests',event)"><svg class="nav-icon"><use href="#icon-trash"></use></svg> Silme Talepleri</button>
+        </div>
 
-      <div class="nav-group">
-        <div class="nav-group-title">Operasyon</div>
-        <button class="tab" onclick="switchTab('notification_settings',event)"><span class="nav-icon">*</span> Bildirim Ayarlari</button>
-        <button class="tab" onclick="switchTab('performance',event)"><span class="nav-icon">%</span> Performans</button>
-        <button class="tab" onclick="switchTab('analytics',event)"><span class="nav-icon">~</span> Davranis Analitigi</button>
-        <button class="tab" onclick="switchTab('online_users',event)"><span class="nav-icon">+</span> Anlik Online Profiller</button>
-      </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Operasyon</div>
+          <button class="tab" data-tab="notification_settings" onclick="switchTab('notification_settings',event)"><svg class="nav-icon"><use href="#icon-bell"></use></svg> Bildirimler</button>
+          <button class="tab" data-tab="online_users" onclick="switchTab('online_users',event)"><svg class="nav-icon"><use href="#icon-radio"></use></svg> Anlık Online</button>
+        </div>
 
-      <div class="nav-group">
-        <div class="nav-group-title">Sistem</div>
-        <button class="tab" onclick="switchTab('deletion_requests',event)"><span class="nav-icon">-</span> Silme Talepleri</button>
-        <button class="tab" onclick="switchTab('audit_logs',event)"><span class="nav-icon">=</span> Audit Log</button>
-        <button class="tab" onclick="switchTab('legal',event)"><span class="nav-icon">:</span> Yasal Metinler</button>
-      </div>
-
-      <button class="btn sidebar-refresh" onclick="refreshAll()">Tum Verileri Yenile</button>
+        <div class="nav-group">
+          <div class="nav-group-title">Analiz ve Sistem</div>
+          <button class="tab" data-tab="performance" onclick="switchTab('performance',event)"><svg class="nav-icon"><use href="#icon-performance"></use></svg> Performans</button>
+          <button class="tab" data-tab="analytics" onclick="switchTab('analytics',event)"><svg class="nav-icon"><use href="#icon-analytics"></use></svg> Davranış Analitiği</button>
+          <button class="tab" data-tab="audit_logs" onclick="switchTab('audit_logs',event)"><svg class="nav-icon"><use href="#icon-history"></use></svg> Audit Log</button>
+          <button class="tab" data-tab="legal" onclick="switchTab('legal',event)"><svg class="nav-icon"><use href="#icon-legal"></use></svg> Yasal Metinler</button>
+        </div>
+      </nav>
+      <div class="sidebar-foot">TalkX admin · güvenli operasyon alanı</div>
     </aside>
 
     <main class="main-shell">
       <header class="topbar">
-        <div class="topbar-left">
-          <h1 id="topbar-title">Dashboard</h1>
-          <p id="topbar-subtitle">TalkX Yonetim Paneli</p>
+        <div class="topbar-heading">
+          <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Yönetim menüsünü aç" aria-controls="admin-sidebar" aria-expanded="false" onclick="toggleAdminNav()"><svg><use href="#icon-menu"></use></svg></button>
+          <div class="topbar-left">
+            <h1 id="topbar-title">Genel Bakış</h1>
+            <p id="topbar-subtitle">TalkX sistem ve operasyon özeti</p>
+          </div>
         </div>
         <div class="topbar-right">
           <div class="row top-search" id="search-wrap" style="display:none">
             <input id="search-input" type="text" onkeyup="handleSearchKeyup(event)" placeholder="Ara..." />
             <button class="btn btn-refresh" onclick="triggerSearch()">Ara</button>
           </div>
-          <button class="btn topbar-refresh" onclick="refreshAll()">Yenile</button>
+          <button class="btn topbar-refresh" onclick="refreshAll()"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg> Yenile</button>
         </div>
       </header>
-
-      <section class="cards" id="dashboard-cards">
-        <div class="card stat-card">
-          <div class="stat-icon users">U</div>
-          <div class="stat-body"><div class="t">Toplam Kullanici</div><div class="v" id="s_users">-</div><div class="meta" id="s_users_meta">Kaynak bekleniyor</div></div>
-        </div>
-        <div class="card stat-card">
-          <div class="stat-icon msg">M</div>
-          <div class="stat-body"><div class="t">Aktif Sohbet</div><div class="v" id="s_active">-</div><div class="meta" id="s_active_meta">Kaynak bekleniyor</div></div>
-        </div>
-        <div class="card stat-card">
-          <div class="stat-icon rooms">O</div>
-          <div class="stat-body"><div class="t">Anlik Online Kullanici</div><div class="v" id="s_online">-</div><div class="meta" id="s_online_meta">Kaynak bekleniyor</div></div>
-        </div>
-        <div class="card stat-card">
-          <div class="stat-icon ban">B</div>
-          <div class="stat-body"><div class="t">Kullanici Raporlari (24s)</div><div class="v" id="s_reports">-</div><div class="meta" id="s_reports_meta">Kaynak bekleniyor</div></div>
-        </div>
-        <div class="card"><div class="t">Uygulama Raporlari (24s)</div><div class="v" id="s_support_reports">-</div><div class="meta" id="s_support_reports_meta">Kaynak bekleniyor</div></div>
-        <div class="card"><div class="t">Push (60 dk)</div><div class="v" id="s_push_rate">-%</div><div class="s" id="s_push_total">0 gonderim / 0 hata</div><div class="meta">push_delivery_logs | Son 60 dakika</div></div>
-        <div class="card"><div class="t">Push Firebase</div><div class="v" id="s_push_enabled">-</div><div class="s" id="s_push_project">proje: -</div><div class="s" id="s_push_devices">aktif cihaz: -</div><div class="meta">Firebase config + push_devices | Anlik</div></div>
-        <div class="card"><div class="t">API P95 (60 dk)</div><div class="v" id="s_perf_p95">-</div><div class="s" id="s_perf_req">0 istek</div><div class="meta">http_request_metrics_minute | Son 60 dakika</div></div>
-        <div class="card"><div class="t">API Hata Orani (60 dk)</div><div class="v" id="s_perf_err">-%</div><div class="s" id="s_perf_slow">0 yavas istek</div><div class="meta">http_request_metrics_minute | Son 60 dakika</div></div>
-      </section>
-
-      <section class="diag system-diag" id="dashboard-diag">
-        <strong>Push Teshis (24 saat)</strong>
-        <div id="push-diagnostics" class="diag-grid" style="margin-top:8px"><div>Yukleniyor...</div></div>
-      </section>
 
       <section class="panel workspace-panel">
         <div id="content">Yukleniyor...</div>
@@ -344,24 +388,39 @@
     let bulkSelectedUserIds=new Set();
     let bulkVisibleUserIds=[];
     let bulkBusy=false;
+    let adminNavReturnFocus=null;
     const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
     const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
     const WORKFLOW_LABELS={new:'Yeni',investigating:'Inceleniyor',resolved:'Cozuldu',duplicate:'Tekrar',insufficient_info:'Bilgi yetersiz',archived:'Arsivlendi'};
     const PRIORITY_LABELS={low:'Dusuk',normal:'Normal',high:'Yuksek',critical:'Kritik'};
     const LOCATION_STATE_LABELS={resolved:'Dogrulandi',unresolved:'Cozulemedi',pending:'Bekliyor',stale:'Bayat',provider_error:'Saglayici hatasi',not_available:'Veri yok'};
     const TAB_LABELS={
-      dashboard:'Dashboard',
-      reports:'Kullanici Raporlari',
-      bans:'Yasaklar & Golge',
+      dashboard:'Genel Bakış',
+      reports:'Kullanıcı Raporları',
+      bans:'Yasaklar ve Gölge',
       profiles:'Profiller',
-      app_reports:'Uygulama Raporlari',
-      notification_settings:'Bildirim Ayarlari',
+      app_reports:'Uygulama Raporları',
+      notification_settings:'Bildirimler',
       performance:'Performans',
-      analytics:'Davranis Analitigi',
-      online_users:'Anlik Online Profiller',
+      analytics:'Davranış Analitiği',
+      online_users:'Anlık Online',
       deletion_requests:'Silme Talepleri',
       audit_logs:'Audit Log',
       legal:'Yasal Metinler'
+    };
+    const TAB_SUBTITLES={
+      dashboard:'TalkX sistem ve operasyon özeti',
+      profiles:'Kullanıcı hesaplarını görüntüle ve yönet',
+      reports:'Kullanıcı güvenliği ve moderasyon kuyruğu',
+      app_reports:'Uygulama sorunlarını incele ve sonuçlandır',
+      bans:'Aktif yaptırımları ve gölge yasakları yönet',
+      notification_settings:'Bildirim gönderimleri ve zamanlamalar',
+      online_users:'Canlı bağlantı ve profil görünümü',
+      performance:'API performansı ve sistem sağlığı',
+      analytics:'Ürün davranışı ve eşleşme analizi',
+      deletion_requests:'Hesap silme taleplerini güvenle işle',
+      audit_logs:'Yönetim işlemlerinin kayıt geçmişi',
+      legal:'Yasal metinleri ve sürümleri yönet'
     };
     const ANALYTICS_EVENT_LABELS={
       arrival:'Uygulamaya giris yapti',
@@ -472,7 +531,7 @@
       return '';
     };
 
-    function refreshAll(){loadStats();loadPushHealth();loadPushDiagnostics();loadPerformanceSummaryCard();loadContent();}
+    function refreshAll(){loadContent();}
     function triggerSearch(){ if(currentTab==='profiles') profilePage=1; if(currentTab==='app_reports') appReportPage=1; loadContent(); }
     function handleSearchKeyup(event){ if(event?.key==='Enter') triggerSearch(); }
     function profileSortIcon(sortKey){ if(profileSortBy!==sortKey) return '↕'; return profileSortDir==='asc'?'↑':'↓'; }
@@ -664,11 +723,14 @@
     }
 
     async function loadPushHealth(){
+      const rateEl=document.getElementById('s_push_rate');
+      const totalEl=document.getElementById('s_push_total');
+      if(!rateEl||!totalEl) return;
       try{
         const r=await fetch('/admin/push/health?minutes=60');const x=await r.json();if(!r.ok) throw new Error(x.error||'hata');
-        document.getElementById('s_push_rate').innerText=`${Number(x.successRate||0).toFixed(1)}%`;
-        document.getElementById('s_push_total').innerText=`${x.sentCount||0} gonderim / ${x.failureCount||0} hata (gecersiz: ${x.invalidTokenCount||0})`;
-      }catch(e){document.getElementById('s_push_rate').innerText='-%';document.getElementById('s_push_total').innerText='Push sagligi okunamadi';}
+        rateEl.innerText=`${Number(x.successRate||0).toFixed(1)}%`;
+        totalEl.innerText=`${x.sentCount||0} gonderim / ${x.failureCount||0} hata (gecersiz: ${x.invalidTokenCount||0})`;
+      }catch(e){rateEl.innerText='-%';totalEl.innerText='Push sagligi okunamadi';}
     }
 
     async function loadPushDiagnostics(){
@@ -676,6 +738,7 @@
       const enabled=document.getElementById('s_push_enabled');
       const project=document.getElementById('s_push_project');
       const devices=document.getElementById('s_push_devices');
+      if(!host||!enabled||!project||!devices) return;
       try{
         const r=await fetch('/admin/push/diagnostics?hours=24');const x=await r.json();if(!r.ok) throw new Error(x.error||'hata');
         const f=x.firebase||{};const dv=x.devices||{};const lg=x.logs||{};const errs=Array.isArray(lg.errorSummary)?lg.errorSummary:[];
@@ -728,13 +791,11 @@
       const showDashboard=currentTab==='dashboard';
       const titleEl=document.getElementById('topbar-title');
       const subtitleEl=document.getElementById('topbar-subtitle');
-      const cards=document.getElementById('dashboard-cards');
-      const diag=document.getElementById('dashboard-diag');
-      const label=TAB_LABELS[currentTab]||'Dashboard';
+      const workspace=document.querySelector('.workspace-panel');
+      const label=TAB_LABELS[currentTab]||'Genel Bakış';
       if(titleEl) titleEl.innerText=label;
-      if(subtitleEl) subtitleEl.innerText=showDashboard?'TalkX Yonetim Ozeti':`TalkX Yonetim Paneli / ${label}`;
-      if(cards) cards.style.display=showDashboard?'grid':'none';
-      if(diag) diag.style.display=showDashboard?'block':'none';
+      if(subtitleEl) subtitleEl.innerText=TAB_SUBTITLES[currentTab]||`TalkX Yönetim Paneli / ${label}`;
+      if(workspace) workspace.classList.toggle('dashboard-mode',showDashboard);
     }
     function humanizeAnalyticsKey(key){
       const norm=String(key||'').trim().toLowerCase();
@@ -900,18 +961,62 @@
       `;
     }
 
-    async function switchTab(tab,ev){
+    function setActiveNav(tab){
+      document.querySelectorAll('.tab[data-tab]').forEach((button)=>{
+        const active=button.dataset.tab===tab;
+        button.classList.toggle('active',active);
+        if(active) button.setAttribute('aria-current','page');
+        else button.removeAttribute('aria-current');
+      });
+    }
+    function toggleAdminNav(force){
+      const sidebar=document.getElementById('admin-sidebar');
+      const backdrop=document.getElementById('sidebar-backdrop');
+      const toggle=document.getElementById('sidebar-toggle');
+      if(!sidebar||!backdrop||!toggle) return;
+      const open=typeof force==='boolean'?force:!sidebar.classList.contains('is-open');
+      if(open) adminNavReturnFocus=document.activeElement;
+      sidebar.classList.toggle('is-open',open);
+      backdrop.classList.toggle('is-open',open);
+      document.body.classList.toggle('admin-nav-open',open);
+      toggle.setAttribute('aria-expanded',String(open));
+      toggle.setAttribute('aria-label',open?'Yönetim menüsünü kapat':'Yönetim menüsünü aç');
+      if(open){
+        requestAnimationFrame(()=>sidebar.querySelector('.tab.active')?.focus());
+      }else if(adminNavReturnFocus instanceof HTMLElement){
+        adminNavReturnFocus.focus();
+        adminNavReturnFocus=null;
+      }
+    }
+    function closeAdminNav(){ toggleAdminNav(false); }
+    function handleAdminKeydown(event){
+      const sidebar=document.getElementById('admin-sidebar');
+      if(event.key==='Escape'){ closeAdminNav(); return; }
+      if(event.key!=='Tab'||!sidebar?.classList.contains('is-open')) return;
+      const focusable=[...sidebar.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')];
+      if(!focusable.length) return;
+      const first=focusable[0];
+      const last=focusable[focusable.length-1];
+      if(event.shiftKey&&document.activeElement===first){ event.preventDefault(); last.focus(); }
+      else if(!event.shiftKey&&document.activeElement===last){ event.preventDefault(); first.focus(); }
+    }
+    function tabFromHash(){
+      const candidate=decodeURIComponent(String(location.hash||'').replace(/^#/,'')).trim();
+      return Object.prototype.hasOwnProperty.call(TAB_LABELS,candidate)?candidate:'dashboard';
+    }
+    async function switchTab(tab,ev,updateHash=true){
+      if(!Object.prototype.hasOwnProperty.call(TAB_LABELS,tab)) tab='dashboard';
       const tabChanged=currentTab!==tab;
       if(tabChanged) clearBulkSelectionState();
       currentTab=tab;
-      document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
-      const targetTab=ev?.currentTarget || ev?.target?.closest?.('.tab') || null;
-      if(targetTab) targetTab.classList.add('active');
+      setActiveNav(tab);
+      if(updateHash&&location.hash!==`#${tab}`) history.pushState(null,'',`#${tab}`);
       applySearchUI();
       applyTabChrome();
       if(tab==='online_users') startOnlineUsersAutoRefresh();
       else stopOnlineUsersAutoRefresh();
-      loadContent();
+      if(window.matchMedia('(max-width: 1180px)').matches) closeAdminNav();
+      await loadContent();
     }
 
     function startOnlineUsersAutoRefresh(){
@@ -1963,7 +2068,8 @@
         const items=Array.isArray(x.items)?x.items:[];
         const onlineUsers=Number(x.onlineUsers||0);
         const onlineConnections=Number(x.onlineConnections||0);
-        document.getElementById('s_online').innerText=onlineUsers;
+        const dashboardOnline=document.getElementById('s_online');
+        if(dashboardOnline) dashboardOnline.innerText=onlineUsers;
         const onlineMeta=document.getElementById('s_online_meta');
         if(onlineMeta) onlineMeta.innerText=`Runtime online snapshot | Anlik | ${onlineConnections} baglanti`;
 
@@ -2015,42 +2121,156 @@
       }
     }
 
-    function saleOverviewCard(metric){
-      const state=metric?.state||'unavailable';
-      const note=metric?.note?`<div class="meta">${esc(metric.note)}</div>`:'';
-      return `<div class="dashboard-kpi is-${esc(state)}">
-        <div class="k">${esc(metric?.label||'Metrik')}</div>
-        <div class="v">${esc(saleMetricValue(metric))}</div>
-        <div class="meta">${esc(saleMetricMeta(metric))}</div>${note}
-      </div>`;
+    async function fetchAdminJson(url,errorMessage){
+      const response=await fetch(url);
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(payload.error||errorMessage);
+      return payload;
+    }
+    function fulfilledValue(result,fallback={}){
+      return result?.status==='fulfilled'?result.value:fallback;
+    }
+    function dashboardIcon(name){
+      return `<svg aria-hidden="true"><use href="#icon-${esc(name)}"></use></svg>`;
+    }
+    function overviewCard(metric,icon,label){
+      const value=saleMetricValue(metric);
+      const muted=metric?.state==='value'?'':' is-muted';
+      return `<article class="overview-card">
+        <div class="overview-card-top"><span>${esc(label||metric?.label||'Metrik')}</span><span class="overview-card-icon">${dashboardIcon(icon)}</span></div>
+        <div class="overview-card-value${muted}">${esc(value)}</div>
+        <div class="overview-card-meta" title="${esc(metric?.note||'')}">${esc(saleMetricMeta(metric))}</div>
+      </article>`;
+    }
+    function combinedReportMetric(userMetric,supportMetric){
+      if(userMetric?.state==='value'&&supportMetric?.state==='value'){
+        return {state:'value',value:Number(userMetric.value||0)+Number(supportMetric.value||0),source:'user_reports + support_reports',window:{label:'Son 24 saat'},note:'Kullanıcı ve uygulama raporlarının toplamı'};
+      }
+      if(userMetric?.state==='no_data'||supportMetric?.state==='no_data'){
+        return {state:'no_data',value:null,source:'user_reports + support_reports',window:{label:'Son 24 saat'},note:'Rapor kaynaklarından biri için yeterli veri yok'};
+      }
+      return {state:'unavailable',value:null,source:'user_reports + support_reports',window:{label:'Son 24 saat'},note:'Rapor kaynaklarından biri okunamadı'};
+    }
+    function healthDotClass(state){
+      if(state==='ok') return 'ok';
+      if(state==='bad') return 'bad';
+      if(state==='warn') return 'warn';
+      return '';
+    }
+    function healthCard(title,value,meta,state='warn'){
+      const stateLabel={ok:'İyi',warn:'Uyarı',bad:'Kritik',unknown:'Bilinmiyor'}[state]||'Bilinmiyor';
+      return `<article class="health-card">
+        <div class="health-title"><span>${esc(title)}</span><span class="health-status"><span class="status-dot ${healthDotClass(state)}" aria-hidden="true"></span>${stateLabel}</span></div>
+        <div class="health-value">${esc(value)}</div>
+        <div class="health-meta">${esc(meta)}</div>
+      </article>`;
     }
 
     async function loadDashboardTab(){
       const c=document.getElementById('content');
-      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Dashboard yukleniyor...</p>';
-      try{
-        const overview=await fetchSaleOverview();
-        const m=overview.metrics||{};
-        const metricOrder=['totalUsers','onlineUsers','activeConversations','searches24h','matches24h','userReports24h','supportReports24h'];
-        const partial=overview.status!=='complete';
-        c.innerHTML=`
-          <div class="dashboard-surface">
-            <section class="dashboard-panel">
-              <h3>Satis Ozeti</h3>
-              <p class="dashboard-sub">Wave 14 minimal kapsam: kullanici, anlik aktivite, arama, eslesme ve raporlar.</p>
-              <div class="dashboard-status${partial?' is-partial':''}">
-                ${partial?'Bazi kaynaklar eksik; mevcut metrikler bagimsiz olarak gosteriliyor.':'Tum ozet kaynaklari okunabildi.'}
-                Son hesaplama: ${d(overview.generatedAt)}
-              </div>
-              <div class="dashboard-kpi-grid" style="margin-top:10px">
-                ${metricOrder.map((key)=>saleOverviewCard(m[key])).join('')}
-              </div>
-              <p class="dashboard-sub">Gercek sifir 0 olarak gosterilir. Kimliksiz eski kayitlar "Veri yetersiz", kaynak hatalari "Kullanilamiyor" durumundadir.</p>
-            </section>
-          </div>`;
-      }catch(e){
-        c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Dashboard yuklenemedi: ${esc(e.message||e)}</p>`;
+      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Genel bakış yükleniyor...</p>';
+      const [overviewResult,pushHealthResult,pushDiagnosticsResult,performanceResult]=await Promise.allSettled([
+        fetchSaleOverview(),
+        fetchAdminJson('/admin/push/health?minutes=60','Push sağlığı okunamadı.'),
+        fetchAdminJson('/admin/push/diagnostics?hours=24','Push teşhisi okunamadı.'),
+        fetchAdminJson('/admin/performance/overview?hours=1','Performans özeti okunamadı.')
+      ]);
+      if(overviewResult.status!=='fulfilled'){
+        c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Genel bakış yüklenemedi: ${esc(overviewResult.reason?.message||overviewResult.reason||'Bilinmeyen hata')}</p>`;
+        return;
       }
+
+      const overview=overviewResult.value;
+      const metrics=overview.metrics||{};
+      const searches24h=metrics.searches24h||{};
+      const matches24h=metrics.matches24h||{};
+      const reports24h=combinedReportMetric(metrics.userReports24h,metrics.supportReports24h);
+      const pushHealth=fulfilledValue(pushHealthResult);
+      const pushDiagnostics=fulfilledValue(pushDiagnosticsResult);
+      const performance=fulfilledValue(performanceResult);
+      const firebase=pushDiagnostics.firebase||{};
+      const devices=pushDiagnostics.devices||{};
+      const logs=pushDiagnostics.logs||{};
+      const errorRows=Array.isArray(logs.errorSummary)?logs.errorSummary:[];
+      const topErrors=errorRows.length?errorRows.slice(0,3).map((row)=>`${row.code}: ${row.count}`).join(', '):'Yok';
+      const dashboardPartial=overview.status!=='complete'||[pushHealthResult,pushDiagnosticsResult,performanceResult].some((result)=>result.status!=='fulfilled');
+      const p95Value=performanceResult.status==='fulfilled'?(performance.p95_ms==null?'Veri yok':`${Number(performance.p95_ms).toFixed(1)} ms`):'Kullanılamıyor';
+      const errorValue=performanceResult.status==='fulfilled'?(performance.error_rate==null?'Veri yok':`${Number(performance.error_rate).toFixed(2)}% hata`):'Performans kaynağı okunamadı';
+      const performanceThresholdText=performanceResult.status==='fulfilled'
+        ?`API eşikleri: P95 uyarı ${Number(performance.thresholds?.p95_warning_ms||0)} ms / kritik ${Number(performance.thresholds?.p95_critical_ms||0)} ms; hata uyarı %${Number(performance.thresholds?.error_warning_rate||0)} / kritik %${Number(performance.thresholds?.error_critical_rate||0)}.`
+        :'API eşikleri okunamadı.';
+      const pushRate=pushHealthResult.status==='fulfilled'?`${Number(pushHealth.successRate||0).toFixed(1)}%`:'Kullanılamıyor';
+      const pushAttemptCount=Number(pushHealth.sentCount||0)+Number(pushHealth.failureCount||0);
+      const pushState=pushHealthResult.status!=='fulfilled'||pushAttemptCount===0?'unknown':Number(pushHealth.failureCount||0)>0?'warn':'ok';
+      const firebaseState=pushDiagnosticsResult.status!=='fulfilled'?'unknown':firebase.enabled?'ok':'bad';
+      const performanceState=performanceResult.status!=='fulfilled'?'unknown':performance.evaluation==='critical'?'bad':performance.evaluation==='warning'?'warn':performance.evaluation==='healthy'?'ok':'unknown';
+
+      c.innerHTML=`
+        <div class="dashboard-surface" id="dashboard-overview">
+          <section class="dashboard-panel">
+            <div class="dashboard-section-head">
+              <div><h3>Genel Bakış</h3><p>Kullanıcı, sohbet ve moderasyon hareketlerinin kısa özeti.</p></div>
+              <span class="dashboard-section-tag">Son hesaplama: ${esc(d(overview.generatedAt))}</span>
+            </div>
+            <div class="dashboard-status${dashboardPartial?' is-partial':''}">${dashboardPartial?'Bazı kaynaklara ulaşılamadı; erişilebilen veriler bağımsız olarak gösteriliyor.':'Tüm özet kaynakları güncel ve okunabilir durumda.'}</div>
+            <div class="overview-grid" style="margin-top:12px">
+              ${overviewCard(metrics.totalUsers,'users','Toplam Kullanıcı')}
+              ${overviewCard(metrics.onlineUsers,'radio','Anlık Online')}
+              ${overviewCard(metrics.activeConversations,'message','Aktif Sohbet')}
+              ${overviewCard(reports24h,'report','Raporlar (24s)')}
+            </div>
+          </section>
+
+          <section class="dashboard-panel">
+            <div class="dashboard-section-head">
+              <div><h3>Sistem Sağlığı</h3><p>En kritik servis göstergeleri tek bakışta.</p></div>
+              <span class="dashboard-section-tag">Son 60 dakika</span>
+            </div>
+            <div class="health-grid">
+              ${healthCard('API P95',p95Value,`${Number(performance.total_requests||0)} istek · ${errorValue}`,performanceState)}
+              ${healthCard('Push Teslimatı',pushRate,`${Number(pushHealth.sentCount||0)} gönderim · ${Number(pushHealth.failureCount||0)} hata`,pushState)}
+              ${healthCard('Firebase',pushDiagnosticsResult.status==='fulfilled'?(firebase.enabled?'Aktif':'Kapalı'):'Kullanılamıyor',`Proje: ${firebase.projectId||'-'} · Aktif cihaz: ${Number(devices.activeCount||0)}`,firebaseState)}
+            </div>
+            <div class="dashboard-technical">http_request_metrics_minute | Son 60 dakika · push_delivery_logs | Son 60 dakika<br>${esc(performanceThresholdText)}</div>
+          </section>
+
+          <div class="dashboard-detail-grid">
+            <section class="dashboard-panel">
+              <div class="dashboard-section-head">
+                <div><h3>Push Teslimatı</h3><p>Gönderim başarısı, cihaz sağlığı ve hata özeti.</p></div>
+                <span class="dashboard-section-tag">24 saat</span>
+              </div>
+              <div class="push-summary">
+                <div><span>Gönderilen</span><strong>${Number(logs.sentCount||0)}</strong></div>
+                <div><span>Başarısız</span><strong>${Number(logs.failureCount||0)}</strong></div>
+                <div><span>Geçersiz Token</span><strong>${Number(logs.invalidTokenCount||0)}</strong></div>
+              </div>
+              <details class="dashboard-technical">
+                <summary>Teknik ayrıntıları göster</summary>
+                <div class="dashboard-technical-grid">
+                  <div><strong>Kimlik kaynağı:</strong> ${esc(firebase.credentialSource||'-')}</div>
+                  <div><strong>Beklenen proje:</strong> ${esc(firebase.expectedProjectId||'-')}</div>
+                  <div><strong>Aktif cihaz:</strong> ${Number(devices.activeCount||0)}</div>
+                  <div><strong>Üst hatalar:</strong> ${esc(topErrors)}</div>
+                  <div><strong>Başlatma hatası:</strong> ${esc(firebase.initError||'Yok')}</div>
+                  <div><strong>Veri durumu:</strong> ${pushDiagnosticsResult.status==='fulfilled'?'Okundu':'Kullanılamıyor'}</div>
+                </div>
+              </details>
+            </section>
+
+            <section class="dashboard-panel">
+              <div class="dashboard-section-head">
+                <div><h3>Kullanıcı Aktivitesi</h3><p>Gerçek kimlikli arama ve eşleşme sonuçları.</p></div>
+                <span class="dashboard-section-tag">Son 24 saat</span>
+              </div>
+              <div class="activity-pair">
+                <article class="health-card"><div class="health-title">Aramalar</div><div class="activity-value">${esc(saleMetricValue(searches24h))}</div><div class="health-meta">${esc(saleMetricMeta(searches24h))}</div></article>
+                <article class="health-card"><div class="health-title">Eşleşmeler</div><div class="activity-value">${esc(saleMetricValue(matches24h))}</div><div class="health-meta">${esc(saleMetricMeta(matches24h))}</div></article>
+              </div>
+              <div class="dashboard-technical">Gerçek sıfır 0 olarak gösterilir. Kimliksiz eski kayıtlar “Veri yetersiz”, kaynak hataları “Kullanılamıyor” durumundadır.</div>
+            </section>
+          </div>
+        </div>`;
     }
 
     async function loadContent(){
@@ -2387,7 +2607,13 @@
     async function actionRejectDeletion(requestId){ if(!confirm('Silme talebini reddetmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reject`,{}); }
     async function actionReactivateDeletion(requestId){ if(!confirm('Bu kullaniciyi yeniden aktif etmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reactivate`,{}); }
 
-    loadStats(); loadPushHealth(); loadPushDiagnostics(); loadPerformanceSummaryCard(); applySearchUI(); applyTabChrome(); loadContent();
+    document.addEventListener('keydown',handleAdminKeydown);
+    window.addEventListener('popstate',()=>switchTab(tabFromHash(),null,false));
+    currentTab=tabFromHash();
+    setActiveNav(currentTab);
+    applySearchUI();
+    applyTabChrome();
+    loadContent();
   </script>
 </body>
 </html>

@@ -10,7 +10,7 @@ Bu dosya, TalkX backend yönetim panelinin görsel ve bilgi mimarisi incelemesin
 - **Ana yüzey:** `admin.html`
 - **Mevcut canlı ekran kanıtları:** 1–2 Eylül 2026 tarihli kalıcı QA görüntüleri
 - **Güncel kod incelemesi:** 28 Eylül 2026 tarihli `admin.html`, `admin.js` ve ilgili admin API akışları
-- **Durum:** Analiz ve kodlama öncesi hazırlık tamamlandı; V1 görsel yön onayı bekleniyor, uygulama başlamadı
+- **Durum:** Üç V1 görsel yön onaylandı; ADM-01 ve ADM-02 uygulandı, ADM-00 ortak temeli aşamalı ilerliyor; canlı görsel QA bekliyor
 - **Kapsam:** Dashboard, navigasyon, profiller, moderasyon/raporlar, bildirimler, performans, davranış analitiği, online kullanıcılar, silme talepleri, audit ve yasal metinler
 
 > Kanıt sınırı: Windows tarayıcı görüntü yakalama yardımcısı bu turda oturum başlatma hatası verdi. Bu nedenle ekran görüntüleri son saklanmış canlı QA kayıtlarıdır; güncel davranış ayrıca mevcut `sale-release` kodundan doğrulanmıştır. Yeni tasarım uygulandıktan sonra bütün görüntüler yeniden alınacaktır.
@@ -56,7 +56,7 @@ Panel genelinde görülen ortak sorunlar:
 
 ## ADMIN-001 — Dashboard hiyerarşisi planlandığı gibi uygulanmamış
 
-- **Durum:** Bekliyor
+- **Durum:** Uygulandı; kaynak/regresyon testleri geçti, canlı görsel QA bekliyor
 - **Öncelik:** P1
 - **Kapsam:** Dashboard ilk görünüm; masaüstü ve mobil
 
@@ -106,7 +106,7 @@ Dashboard tek bir bilgi mimarisine taşınacak:
 
 ## ADMIN-002 — Sistem sağlığı ve Push Teşhis okunabilir bir karar alanı değil
 
-- **Durum:** Bekliyor
+- **Durum:** Uygulandı; backend değerlendirme/eşik sözleşmesine bağlandı, canlı görsel QA bekliyor
 - **Öncelik:** P1
 - **Kapsam:** Dashboard; API ve push operasyon durumu
 
@@ -132,7 +132,7 @@ Push Teşhis bloğu proje, kimlik kaynağı, gönderim/hata, geçersiz token, ta
 
 ## ADMIN-003 — Navigasyon gerçek bir yönetim kabuğuna dönüşmeli
 
-- **Durum:** Bekliyor
+- **Durum:** Uygulandı; SVG ikon, görev grupları, tek yenileme, URL durumu ve klavye kontrollü mobil drawer eklendi
 - **Öncelik:** P1
 - **Kapsam:** Sol navigasyon, topbar, mobil/dar ekran
 
@@ -170,7 +170,7 @@ Sidebar'daki `Tüm Verileri Yenile` ve topbar'daki `Yenile` kapsamı açık olma
 
 ## ADMIN-004 — Ortak admin tasarım sistemi ve durum sözleşmesi eksik
 
-- **Durum:** Bekliyor
+- **Durum:** Kısmen uygulandı; token, ikon, sayfa başlığı, durum ve responsive drawer temeli hazır, veri/form kalıpları sonraki paketlerde genişletilecek
 - **Öncelik:** P1
 - **Kapsam:** Bütün admin ekranları
 
@@ -472,9 +472,9 @@ Her ekran için aşağıdaki durumlar ayrı kabul kriteridir:
 
 Bu sıra aynı anda her ekranı değiştirmek yerine ortak temeli kurup riski kontrollü ilerletir:
 
-1. [ ] **ADM-00 — Tasarım temeli:** Ortak token, ikon ailesi, sayfa başlığı, durum bandı, filtre, tablo, drawer ve onay kalıpları.
-2. [ ] **ADM-01 — Kabuk ve navigasyon:** Sidebar bilgi mimarisi, topbar, gerçek ikonlar ve mobil drawer.
-3. [ ] **ADM-02 — Dashboard:** Eski/yeniden eklenen özetleri birleştir; onaylı Genel Bakış, Sistem Sağlığı ve Push Teslimatı yönünü uygula.
+1. [ ] **ADM-00 — Tasarım temeli (kısmi):** Token, ikon ailesi, sayfa başlığı, durum bandı ve drawer temeli uygulandı; filtre, tablo ve onay kalıpları ilgili ekran paketleriyle tamamlanacak.
+2. [x] **ADM-01 — Kabuk ve navigasyon:** Sidebar bilgi mimarisi, topbar, gerçek ikonlar ve mobil drawer.
+3. [x] **ADM-02 — Dashboard:** Eski/yeniden eklenen özetleri birleştir; onaylı Genel Bakış, Sistem Sağlığı ve Push Teslimatı yönünü uygula.
 4. [ ] **ADM-03 — Ortak tablo/aksiyon sistemi:** Okunabilir satırlar, filtre/pagination, bağlamsal ve riskli aksiyon desenleri.
 5. [ ] **ADM-04 — Profiller:** Liste, filtreler, gizlilik ve responsive profil detayı.
 6. [ ] **ADM-05 — Moderasyon:** Kullanıcı raporları, uygulama raporları ve yasakları vaka akışında birleştir.
@@ -507,7 +507,7 @@ Profiller/Raporlar için filtre, okunabilir tablo, seçim sırasında açılan t
 
 Yasal Metinler üzerinden belge özeti, tek belge editörü, TR/EN, taslak, önizleme, etki ve kontrollü yayın akışı tanımlandı. Bildirimler aynı besteci yapısını hedef/alıcı ve cihaz önizlemesiyle kullanacaktır.
 
-Bu üç V1 yön kullanıcı tarafından onaylandıktan sonra `ADM-00` ile ortak bileşen uygulamasına başlanacaktır.
+Üç V1 yön kullanıcı tarafından onaylandı. İlk uygulama paketi ADM-00 temeli, ADM-01 kabuğu ve ADM-02 dashboard ile başlatıldı.
 
 ## Uygulama dışı kalan kararlar
 
@@ -523,16 +523,16 @@ Görsel revizyon sırasında aşağıdaki davranışlar ayrıca backend/veri iş
 
 ### Genel kabuk
 
-- [ ] Gerçek ikonlar ve görev odaklı navigasyon kullanılıyor.
-- [ ] Mobil drawer, klavye ve focus davranışı doğru.
-- [ ] Tek ve anlaşılır yenileme davranışı var.
+- [x] Gerçek ikonlar ve görev odaklı navigasyon kullanılıyor.
+- [x] Mobil drawer, klavye ve focus davranışı kaynak testiyle doğrulandı; canlı viewport turu ADM-11'de yinelenecek.
+- [x] Tek ve anlaşılır yenileme davranışı var.
 - [ ] Ortak loading/empty/error/stale/partial durumları uygulanmış.
 
 ### Dashboard
 
-- [ ] Aynı metrik iki ayrı özet bölümünde tekrarlanmıyor.
-- [ ] Genel Bakış, Sistem Sağlığı ve Push Teslimatı ayrışıyor.
-- [ ] Durum ve eşikler gerçek veriden türetiliyor.
+- [x] Aynı metrik iki ayrı özet bölümünde tekrarlanmıyor.
+- [x] Genel Bakış, Sistem Sağlığı ve Push Teslimatı ayrışıyor.
+- [x] Durum ve eşikler gerçek veriden türetiliyor.
 - [ ] İlk görünümde ana durum ve dikkat gereken sorun anlaşılabiliyor.
 
 ### Veri ve moderasyon

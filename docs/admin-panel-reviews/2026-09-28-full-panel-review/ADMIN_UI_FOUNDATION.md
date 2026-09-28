@@ -5,8 +5,8 @@ Bu sözleşme, yönetim paneli revizyonunda kullanılacak ortak görsel ve davra
 ## Durum
 
 - **Tarih:** 29 Eylül 2026
-- **Kapsam:** Kodlama öncesi tasarım sözleşmesi
-- **Uygulama:** Başlamadı
+- **Kapsam:** Tasarım sözleşmesi ve aşamalı uygulama temeli
+- **Uygulama:** Başladı — ortak token/ikon/durum temeli ile ADM-01 ve ADM-02 uygulandı; kalan ortak veri/form kalıpları sonraki paketlerde genişletilecek
 - **Referanslar:**
   - `assets/admin-shell-dashboard-reference-v1.png`
   - `assets/data-management-reference-v1.png`
@@ -224,7 +224,7 @@ Görsel referanslar aşağıdaki davranışları kendiliğinden çözmez; backen
 - [x] Ortak token, bileşen, durum ve responsive sözleşmesi yazıldı.
 - [x] Hassas verili ekran kanıtları yayın paketinden çıkarıldı.
 - [x] Görsel işler ile backend/veri bağımlılıkları ayrıldı.
-- [ ] Kullanıcı üç V1 referansın görsel yönünü onayladı.
+- [x] Kullanıcı üç V1 referansın görsel yönünü onayladı.
 
-Son kutu onaylandığında `ADM-00` implementasyonuyla kodlamaya başlanabilir.
+Definition of Ready tamamlandı. İlk uygulama paketi `ADM-00` temeli üzerinde `ADM-01` ve `ADM-02` ile başladı.
 

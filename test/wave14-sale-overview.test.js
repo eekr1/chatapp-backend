@@ -76,3 +76,30 @@ test('dashboard consumes the minimal overview without default raw event or hourl
     assert.match(source, /push_delivery_logs \| Son 60 dakika/);
     assert.match(source, /http_request_metrics_minute \| Son 60 dakika/);
 });
+
+test('admin shell uses one responsive icon navigation and one dashboard hierarchy', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+    const dashboardStart = source.indexOf('async function loadDashboardTab()');
+    const dashboardEnd = source.indexOf('async function loadContent()', dashboardStart);
+    const dashboard = source.slice(dashboardStart, dashboardEnd);
+
+    assert.match(source, /<symbol id="icon-dashboard"/);
+    assert.match(source, /data-tab="dashboard"/);
+    assert.match(source, /aria-controls="admin-sidebar"/);
+    assert.match(source, /\.sidebar\.is-open \{ transform:translateX\(0\); \}/);
+    assert.match(source, /function handleAdminKeydown\(event\)/);
+    assert.match(source, /event\.key!=='Tab'/);
+    assert.match(source, /window\.addEventListener\('popstate'/);
+    assert.doesNotMatch(source, /<span class="nav-icon">/);
+    assert.doesNotMatch(source, /id="dashboard-cards"|id="dashboard-diag"|sidebar-refresh/);
+    assert.equal((source.match(/onclick="refreshAll\(\)"/g) || []).length, 1);
+
+    assert.match(dashboard, /Promise\.allSettled/);
+    assert.match(dashboard, /Genel Bakış/);
+    assert.match(dashboard, /Sistem Sağlığı/);
+    assert.match(dashboard, /Push Teslimatı/);
+    assert.match(dashboard, /Kullanıcı Aktivitesi/);
+    assert.match(dashboard, /performance\.evaluation/);
+    assert.match(dashboard, /performance\.thresholds\?\.p95_warning_ms/);
+    assert.doesNotMatch(dashboard, /Satis Ozeti|Wave 14 minimal/);
+});
