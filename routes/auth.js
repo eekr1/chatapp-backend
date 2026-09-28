@@ -12,18 +12,12 @@ const {
 const { buildSuccessMeta } = require('../utils/contracts');
 const { getRequiredLegalState, buildRequirementFingerprint } = require('../utils/legalAcceptance');
 const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
+const { resolveClientIp } = require('../utils/clientIp');
+const { ensureUserMatchCountry } = require('../utils/matchCountryService');
 
 const isBoundedString = (value, min, max) => typeof value === 'string'
     && value.length >= min
     && value.length <= max;
-
-const getClientIp = (req) => {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.trim()) {
-        return forwarded.split(',')[0].trim().slice(0, 120);
-    }
-    return String(req.ip || req.socket?.remoteAddress || '').trim().slice(0, 120) || null;
-};
 
 // Register
 router.post('/register', async (req, res) => {
@@ -68,7 +62,7 @@ router.post('/register', async (req, res) => {
     try {
         const requestedLocale = normalizeLang(req.body?.locale || req.headers['x-talkx-lang'] || lang, 'en');
         const hashedPassword = await hashPassword(String(password));
-        const requestIp = getClientIp(req);
+        const requestIp = resolveClientIp(req);
         const requestUserAgent = String(req.headers['user-agent'] || '').trim().slice(0, 400) || null;
 
         const client = await pool.connect();
@@ -105,6 +99,8 @@ router.post('/register', async (req, res) => {
             );
 
             await client.query('COMMIT');
+            void ensureUserMatchCountry({ pool, userId: user.id, ip: requestIp })
+                .catch((error) => console.warn('Register match country refresh failed:', error?.code || error?.message || error));
             return res.json({
                 success: true,
                 user: {
@@ -144,6 +140,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
     const lang = resolveRequestLang(req);
     const { username, password, device_id } = req.body || {};
+    const requestIp = resolveClientIp(req);
     if (!isBoundedString(username, 3, 32) || !isBoundedString(password, 1, 128)) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
@@ -178,6 +175,8 @@ router.post('/login', async (req, res) => {
         const session = await createSession({ userId: user.id, deviceId: device_id });
 
         await pool.query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [user.id]);
+        void ensureUserMatchCountry({ pool, userId: user.id, ip: requestIp })
+            .catch((error) => console.warn('Login match country refresh failed:', error?.code || error?.message || error));
 
         return res.json({
             success: true,

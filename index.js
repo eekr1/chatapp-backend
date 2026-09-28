@@ -28,6 +28,7 @@ const { normalizeLang, resolveRequestLang, resolveLangFromHeaders, t } = require
 const { sendApiError } = require('./utils/i18n');
 const { requestContext } = require('./utils/contracts');
 const { BoundedRateLimiter, hashKey, resolvePeerAddress } = require('./utils/abuseProtection');
+const { resolveClientIp } = require('./utils/clientIp');
 const { ConnectionRegistry, normalizeClientContext, safeSend } = require('./utils/socketSecurity');
 const { findValidSessionByToken, onSessionsRevoked } = require('./utils/sessionService');
 const logger = require('./utils/logger');
@@ -44,6 +45,7 @@ const {
     matchScopesCapability,
     resolveCanonicalMatchScope
 } = require('./utils/matchScope');
+const { ensureUserMatchCountry, startMatchCountryBackfill } = require('./utils/matchCountryService');
 const {
     applyDeadline,
     applyDecision,
@@ -2362,6 +2364,11 @@ wss.on('connection', (ws, req) => {
                 ws.close(1013, 'Legal status unavailable');
                 return;
             }
+            try {
+                await ensureUserMatchCountry({ pool, userId: dbUser.id, ip: resolveClientIp(req) });
+            } catch (error) {
+                console.warn('WebSocket match country refresh failed:', { code: error?.code || 'MATCH_COUNTRY_REFRESH_FAILED' });
+            }
             activeClients.set(ws.clientId, {
                 ws,
                 dbUserId: dbUser.id,
@@ -3683,12 +3690,14 @@ if (fs.existsSync(frontendIndexPath)) {
     });
 }
 
+let stopMatchCountryBackfill = () => {};
 const startServer = async () => {
     try {
         assertMatchScopeTopology(realtimeConfig);
         await ensureTables();
         startNotificationScheduler();
         server.listen(port, () => {
+            stopMatchCountryBackfill = startMatchCountryBackfill({ pool, logger });
             console.log(`Backend running on ${port}`);
         });
     } catch (error) {
@@ -3704,6 +3713,7 @@ const shutdown = (signal) => {
     if (shutdownPromise) return shutdownPromise;
     healthState.shuttingDown = true;
     clearInterval(interval);
+    stopMatchCountryBackfill();
     if (notificationSchedulerState.timer) clearTimeout(notificationSchedulerState.timer);
     for (const client of wss.clients) {
         try { client.close(1001, 'server_shutdown'); } catch { /* best effort */ }

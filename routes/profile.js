@@ -7,16 +7,10 @@ const { calculateLegalStatus, acceptLegalRequirement, legalStatusPayload } = req
 const { normalizeLang, resolveRequestLang, sendApiError, t } = require('../utils/i18n');
 const { displayCountry } = require('../utils/countryPolicy');
 const { requestUserRuntimeTermination } = require('../utils/userRuntimeTermination');
+const { resolveClientIp } = require('../utils/clientIp');
+const { ensureUserMatchCountry } = require('../utils/matchCountryService');
 
 const DELETE_CONFIRM_TEXT = 'HESABIMI SIL';
-
-const getClientIp = (req) => {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.trim()) {
-        return forwarded.split(',')[0].trim().slice(0, 120);
-    }
-    return String(req.ip || req.socket?.remoteAddress || '').trim().slice(0, 120) || null;
-};
 
 const sendLegalReacceptRequired = (req, res, legalStatus) => res.status(428).json({
     error: t(resolveRequestLang(req), 'errors.LEGAL_REACCEPT_REQUIRED', {}, 'Legal reaccept required.'),
@@ -75,6 +69,7 @@ router.get('/me/legal-status', authenticate, async (req, res) => {
 // GET /me/match-country - Server-owned country record. This is not a country selector.
 router.get('/me/match-country', authenticate, async (req, res) => {
     try {
+        await ensureUserMatchCountry({ pool, userId: req.user.user_id, ip: resolveClientIp(req) });
         const result = await pool.query(
             `SELECT country_code, status, confidence, updated_at, policy_version
              FROM user_match_country WHERE user_id = $1`,
@@ -120,7 +115,7 @@ router.post('/me/legal-accept', authenticate, async (req, res) => {
             privacyVersion,
             commandId,
             locale,
-            ip: getClientIp(req),
+            ip: resolveClientIp(req),
             userAgent: String(req.headers['user-agent'] || '').trim().slice(0, 400) || null
         });
 
