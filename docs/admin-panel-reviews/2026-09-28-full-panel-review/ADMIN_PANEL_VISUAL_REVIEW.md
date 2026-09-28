@@ -10,7 +10,7 @@ Bu dosya, TalkX backend yönetim panelinin görsel ve bilgi mimarisi incelemesin
 - **Ana yüzey:** `admin.html`
 - **Mevcut canlı ekran kanıtları:** 1–2 Eylül 2026 tarihli kalıcı QA görüntüleri
 - **Güncel kod incelemesi:** 28 Eylül 2026 tarihli `admin.html`, `admin.js` ve ilgili admin API akışları
-- **Durum:** Analiz tamamlandı, uygulama başlamadı
+- **Durum:** Analiz ve kodlama öncesi hazırlık tamamlandı; V1 görsel yön onayı bekleniyor, uygulama başlamadı
 - **Kapsam:** Dashboard, navigasyon, profiller, moderasyon/raporlar, bildirimler, performans, davranış analitiği, online kullanıcılar, silme talepleri, audit ve yasal metinler
 
 > Kanıt sınırı: Windows tarayıcı görüntü yakalama yardımcısı bu turda oturum başlatma hatası verdi. Bu nedenle ekran görüntüleri son saklanmış canlı QA kayıtlarıdır; güncel davranış ayrıca mevcut `sale-release` kodundan doğrulanmıştır. Yeni tasarım uygulandıktan sonra bütün görüntüler yeniden alınacaktır.
@@ -487,13 +487,27 @@ Bu sıra aynı anda her ekranı değiştirmek yerine ortak temeli kurup riski ko
 
 ## Kodlama öncesi üç görsel referans
 
-Uygulamaya başlamadan önce bütün ekranlar için ayrı ayrı mockup üretmek gerekmiyor. Üç referans aile yeterli olacaktır:
+Uygulamaya başlamadan önce bütün ekranlar için ayrı ayrı mockup üretmek gerekmiyor. Üç referans aile hazırlandı. Ortak token, bileşen ve durum sözleşmesi [ADMIN_UI_FOUNDATION.md](ADMIN_UI_FOUNDATION.md) dosyasındadır.
 
-1. **Admin kabuğu + Dashboard:** Mevcut onaylı dashboard yönü güncel sidebar/topbar ile tamamlanır.
-2. **Yoğun veri ekranı:** Profiller/Raporlar için tablo + filtre + detay drawer referansı.
-3. **Form/yayın ekranı:** Bildirimler/Yasal Metinler için adımlı besteci + önizleme + onay referansı.
+### 1. Admin kabuğu + Dashboard
 
-Bu üç yön onaylandıktan sonra ortak bileşenlerle diğer ekranlara tutarlı biçimde uygulanacaktır.
+![Admin kabuğu ve dashboard V1 referansı](assets/admin-shell-dashboard-reference-v1.png)
+
+Mevcut onaylı dashboard yönü güncel sidebar/topbar, tek metrik hiyerarşisi, sistem sağlığı ve aktivite özetiyle tamamlandı.
+
+### 2. Yoğun veri + detay drawer
+
+![Yoğun veri ve detay drawer V1 referansı](assets/data-management-reference-v1.png)
+
+Profiller/Raporlar için filtre, okunabilir tablo, seçim sırasında açılan toplu işlem alanı, bağlamsal riskli eylem ve responsive detay drawer yönü hazırlandı.
+
+### 3. Form + önizleme + yayın
+
+![Form, önizleme ve yayın V1 referansı](assets/form-publishing-reference-v1.png)
+
+Yasal Metinler üzerinden belge özeti, tek belge editörü, TR/EN, taslak, önizleme, etki ve kontrollü yayın akışı tanımlandı. Bildirimler aynı besteci yapısını hedef/alıcı ve cihaz önizlemesiyle kullanacaktır.
+
+Bu üç V1 yön kullanıcı tarafından onaylandıktan sonra `ADM-00` ile ortak bileşen uygulamasına başlanacaktır.
 
 ## Uygulama dışı kalan kararlar
 
