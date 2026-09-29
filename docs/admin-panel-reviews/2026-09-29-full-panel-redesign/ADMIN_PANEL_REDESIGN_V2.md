@@ -282,7 +282,7 @@ Anlık gönderim ve yeni plan alanları etiketsiz tek satır input dizisidir. S�
 
 ### Backend bağımlılığı
 
-TR/EN varyantı, hedef segmenti ve kesin alıcı sayımı mevcut sözleşmede yoksa ayrı backend işi olarak uygulanmalıdır; yalnız görsel taklit yapılmaz.
+TR/EN varyantı, hedef segmenti ve kesin alıcı sayımı Paket F2'de gerçek backend sözleşmesiyle uygulandı; yalnız görsel taklit yapılmadı. Kapsam, zorunlu TR+EN içerik; `all`, `online`, `mobile` hedefleri; gönderim öncesi benzersiz kullanıcı, canlı bağlantı, aktif push cihazı ve locale/fallback dağılımıdır. Eski tek dilli planlar otomatik olarak bir dile atanmaz; çeviri gerekli durumunda pasife alınır.
 
 ## ADM2-09 — Anlık Online
 
@@ -385,8 +385,9 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 4. [x] **Paket D — ADM2-07/09/12 Operasyon kanıtı:** silme talepleri, online ve audit.
 5. [x] **Paket E — ADM2-10/11 Sistem içgörüsü:** performans ve davranış analitiği.
 6. [x] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
-7. [ ] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
-8. [ ] **Paket H — ADM2-01 Genel Bakış cilası ve tam regresyon:** teknik kaynak dili, no-data ve son görsel bütünlük.
+7. [x] **Paket F2 — ADM2-08 Çok dilli hedefli teslimat:** zorunlu TR/EN varyantları, `all/online/mobile` hedefleri, kesin alıcı önizlemesi, locale/fallback sonuçları ve güvenli eski-plan geçişi.
+8. [ ] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
+9. [ ] **Paket H — ADM2-01 Genel Bakış cilası ve tam regresyon:** teknik kaynak dili, no-data ve son görsel bütünlük.
 
 ### Uygulama kaydı — Paket A + Paket B
 
@@ -435,6 +436,15 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 - Planlar okunur kartlara taşındı. Düzenleme, aktiflik değişimi ve şimdi çalıştırma eylemleri menüde toplandı; silme ayrı ve onaylı tehlikeli işlem olarak bırakıldı.
 - Doğrulama: masaüstü ve 320×720 mobil görsel inceleme, sıfır yatay taşma, temiz tarayıcı konsolu ve `112/112` backend testi.
 
+### Uygulama kaydı — Paket F2
+
+- Anlık ve planlı bildirimlere zorunlu Türkçe ve English başlık/metin varyantları eklendi. English, null veya desteklenmeyen locale için açık güvenli fallback olarak kilitlendi.
+- Hedef sözleşmesi `all`, `online` ve `mobile` allowlist'iyle sınırlandı. Yönetici hedef değiştiğinde benzersiz kullanıcı, canlı bağlantı, aktif push cihazı, TR/EN teslim yüzeyi ve fallback sayısını sunucudan güncel olarak görür.
+- WebSocket istemcileri bağlantı diliyle, push cihazları cihaz locale'i → profil locale'i → English fallback sırasıyla gruplanır. TR ve EN payload'ları aynı teslimat kimliği altında doğru gruba gönderilir; sonuç iki dil ve iki kanal için ayrı raporlanır.
+- `009` migration'ı çok dilli içerik, hedef, fallback ve son teslim özetini ekler. Eski tek dilli planlar otomatik olarak bir dile atanmaz; pasife alınır ve `Çeviri gerekli` olarak düzenleme bekler.
+- Anlık gönderim audit kaydı hedefi, dilleri, kesin hedef özetini ve locale sonucunu içerir; bildirim metni veya push tokenı audit'e yazılmaz. Plan create/update/run-now ve scheduler aynı ortak sözleşmeyi kullanır.
+- Doğrulama: masaüstü ile 320×720 mobil görsel inceleme, TR/EN canlı önizleme, hedef sayımı, güvenli eski-plan kartı, sıfır yatay taşma, temiz tarayıcı konsolu, `115/115` tam test ve `63/63` kritik test.
+
 ## Paket sınırları
 
 - Her paket kendi otomatik testini ve masaüstü/mobil görsel QA'ini tamamlamadan sonraki pakete geçmez.
@@ -444,8 +454,8 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Otomatik doğrulama
 
-- [x] `npm test` tam geçer. (`112/112`)
-- [x] `npm run quality:all` geçer. (kritik paket `60/60`; yüksek/kritik güvenlik kaydı yok)
+- [x] `npm test` tam geçer. (`115/115`)
+- [x] `npm run quality:all` geçer. (kritik paket `63/63`; yüksek/kritik güvenlik kaydı yok)
 - [x] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini ve moderasyon onay akışını korur.
 - [x] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.
 - [ ] Riskli işlemler gerekçe + açık hedef + audit sonucu olmadan çalışmaz.

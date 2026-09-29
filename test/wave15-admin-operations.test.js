@@ -150,17 +150,20 @@ test('system insight workspaces keep raw evidence behind masked drawers', () => 
     assert.match(api, /const previousWindow =/);
 });
 
-test('notification composer exposes only supported delivery controls and separates send review', () => {
+test('notification composer exposes localized delivery controls and separates send review', () => {
     const api = fs.readFileSync(path.join(__dirname, '..', 'admin.js'), 'utf8');
     const ui = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
     assert.match(ui, /notification-composer-grid/);
-    assert.match(ui, /Mevcut sözleşme: tüm kullanıcılar/);
+    assert.match(ui, /TR ve EN içeriği aynı teslimat sözleşmesinde yönetin/);
     assert.match(ui, /function prepareImmediateNotice\(\)/);
     assert.match(ui, /Onayla ve gönder/);
     assert.match(ui, /data-notification-preview-title/);
     assert.match(ui, /Plan işlemleri/);
-    assert.doesNotMatch(ui, /id="notification-target"/);
+    assert.match(ui, /id="notification-target"/);
+    assert.match(ui, /id="notification-title-tr"/);
+    assert.match(ui, /id="notification-title-en"/);
+    assert.match(ui, /\/admin\/notification-audience\?target=/);
     assert.doesNotMatch(ui, /id="notification-language"/);
-    assert.match(api, /target: 'all'/);
+    assert.match(api, /normalizeNoticeContentByLocale/);
     assert.match(api, /router\.post\('\/notification-schedules'/);
 });

@@ -21,6 +21,11 @@ const pushRoutes = require('./routes/push');
 const supportRoutes = require('./routes/support');
 const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 const { resolveDeliveryLocale, selectLocalizedPayload } = require('./utils/notificationLocale');
+const {
+    buildAudienceSummary,
+    normalizeNoticeContentByLocale,
+    normalizeNoticeTarget
+} = require('./utils/adminNotificationContract');
 const { shouldDebouncePush } = require('./utils/pushDebounce');
 const { fetchLegalSettings } = require('./utils/legalContent');
 const { buildLegalRelease, calculateLegalStatus, legalStatusPayload } = require('./utils/legalAcceptance');
@@ -251,9 +256,10 @@ const runNotificationSchedulesTick = async () => {
     try {
         const schedulesRes = await pool.query(
             `
-            SELECT id, title, body, duration_ms, schedule_time, timezone, is_active, last_sent_local_date
+            SELECT id, content_by_locale, target, fallback_locale, requires_translation,
+                   duration_ms, schedule_time, timezone, is_active, last_sent_local_date
             FROM notification_schedules
-            WHERE is_active = TRUE
+            WHERE is_active = TRUE AND requires_translation = FALSE
             `
         );
 
@@ -271,11 +277,17 @@ const runNotificationSchedulesTick = async () => {
             if (String(row.last_sent_local_date || '') === zonedNow.localDate) continue;
 
             try {
-                await adminRoutes.sendSystemNotice({
-                    title: String(row.title || '').trim(),
-                    body: String(row.body || '').trim(),
+                const contentByLocale = normalizeNoticeContentByLocale(row.content_by_locale);
+                const target = normalizeNoticeTarget(row.target);
+                if (!contentByLocale || !target) {
+                    console.warn('scheduled notice skipped: incomplete locale or target contract', row.id);
+                    continue;
+                }
+                const deliveryResult = await adminRoutes.sendSystemNotice({
+                    contentByLocale,
+                    fallbackLocale: row.fallback_locale || 'en',
                     durationMs: Math.max(3000, Math.min(60000, Number(row.duration_ms) || 10000)),
-                    target: 'all'
+                    target
                 });
                 await pool.query(
                     `
@@ -283,17 +295,19 @@ const runNotificationSchedulesTick = async () => {
                     SET
                         last_sent_local_date = $2,
                         last_sent_at = NOW(),
+                        last_delivery_summary = $3::jsonb,
                         updated_at = NOW()
                     WHERE id = $1
                     `,
-                    [row.id, zonedNow.localDate]
+                    [row.id, zonedNow.localDate, JSON.stringify(deliveryResult)]
                 );
                 trackBehaviorEvent({
                     eventName: 'scheduled_notification_sent',
                     metadata: {
                         schedule_id: row.id,
                         timezone: timeZone,
-                        schedule_time: row.schedule_time
+                        schedule_time: row.schedule_time,
+                        target
                     }
                 });
             } catch (e) {
@@ -1062,27 +1076,100 @@ const sendPushToUser = async (userId, payload = {}, options = {}) => {
     }
 };
 
-adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' }) => {
-    const noticeTitle = toText(title, 'Duyuru').trim().slice(0, 80) || 'Duyuru';
-    const cleanBody = toText(body, '').trim().slice(0, 300);
+const collectSystemNoticeAudience = async (target = 'all') => {
+    const normalizedTarget = normalizeNoticeTarget(target, 'all');
+    const includeOnline = normalizedTarget === 'all' || normalizedTarget === 'online';
+    const includePush = normalizedTarget === 'all' || normalizedTarget === 'mobile';
+    const online = [];
+    if (includeOnline) {
+        for (const [, client] of activeClients) {
+            if (!client || client.ws?.readyState !== WebSocket.OPEN) continue;
+            const resolution = resolveDeliveryLocale({ deviceLocale: client.lang, profileLocale: null });
+            online.push({
+                client,
+                userId: client.dbUserId || null,
+                locale: resolution.locale,
+                source: resolution.source,
+                fallback: resolution.source === 'fallback'
+            });
+        }
+    }
+
+    let push = [];
+    if (includePush) {
+        const tokenRes = await pool.query(
+            `SELECT DISTINCT ON ((COALESCE(pd.user_id::text, '') || ':' || COALESCE(NULLIF(pd.device_id, ''), 'no-device')))
+                    pd.push_token,
+                    pd.user_id,
+                    pd.locale AS device_locale,
+                    p.locale AS profile_locale
+             FROM push_devices pd
+             LEFT JOIN profiles p ON p.user_id = pd.user_id
+             WHERE pd.is_active = TRUE
+             ORDER BY (COALESCE(pd.user_id::text, '') || ':' || COALESCE(NULLIF(pd.device_id, ''), 'no-device')), pd.updated_at DESC`
+        );
+        push = (tokenRes.rows || []).filter((row) => row.push_token).map((row) => {
+            const resolution = resolveDeliveryLocale({
+                deviceLocale: row.device_locale,
+                profileLocale: row.profile_locale
+            });
+            return {
+                token: row.push_token,
+                userId: row.user_id || null,
+                locale: resolution.locale,
+                source: resolution.source,
+                fallback: resolution.source === 'fallback'
+            };
+        });
+    }
+    return { online, push };
+};
+
+const summarizeSystemNoticeAudience = (target, records) => ({
+    ...buildAudienceSummary({ target, online: records.online, push: records.push }),
+    countedAt: new Date().toISOString()
+});
+
+adminRoutes.getSystemNoticeAudience = async ({ target = 'all' } = {}) => {
+    const normalizedTarget = normalizeNoticeTarget(target);
+    if (!normalizedTarget) throw new Error('invalid_notice_target');
+    const records = await collectSystemNoticeAudience(normalizedTarget);
+    return summarizeSystemNoticeAudience(normalizedTarget, records);
+};
+
+adminRoutes.sendSystemNotice = async ({ contentByLocale, fallbackLocale = 'en', durationMs, target = 'all' }) => {
+    const variants = normalizeNoticeContentByLocale(contentByLocale);
+    const normalizedTarget = normalizeNoticeTarget(target);
+    if (!variants || fallbackLocale !== 'en' || !normalizedTarget) {
+        throw new Error('invalid_admin_notice_contract');
+    }
+
     const senderTitle = 'TalkX';
-    const normalizedTarget = ['all', 'online', 'mobile'].includes(String(target)) ? String(target) : 'all';
     const ttlMs = clampDuration(durationMs, 10000);
     const deliveryId = uuidv4();
+    const records = await collectSystemNoticeAudience(normalizedTarget);
+    const audience = summarizeSystemNoticeAudience(normalizedTarget, records);
+    const wsLocaleSummary = { tr: 0, en: 0, fallback: 0 };
 
     let wsDelivered = 0;
     if (normalizedTarget === 'all' || normalizedTarget === 'online') {
-        for (const [, client] of activeClients) {
-            if (!client || client.ws.readyState !== WebSocket.OPEN) continue;
-            sendJson(client.ws, {
+        for (const item of records.online) {
+            const locale = variants[item.locale] ? item.locale : fallbackLocale;
+            const content = variants[locale];
+            sendJson(item.client.ws, {
                 type: 'admin_notice',
                 title: senderTitle,
-                noticeTitle,
-                body: cleanBody,
+                noticeTitle: content.title,
+                body: content.body,
+                renderLocale: locale,
+                localeSource: item.source,
+                ...(item.fallback ? { fallbackReason: 'missing_or_unsupported' } : {}),
                 durationMs: ttlMs,
                 deliveryId
             });
             wsDelivered++;
+            wsLocaleSummary[locale] += 1;
+            if (item.fallback) wsLocaleSummary.fallback += 1;
         }
     }
 
@@ -1093,35 +1180,68 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
         failureCount: 0,
         invalidTokens: [],
         errorSummary: {},
-        errorSamples: []
+        errorSamples: [],
+        localeSummary: {}
     };
     if (normalizedTarget === 'all' || normalizedTarget === 'mobile') {
         try {
-            const tokenRes = await pool.query(
-                `SELECT DISTINCT ON ((COALESCE(user_id::text, '') || ':' || COALESCE(NULLIF(device_id, ''), 'no-device'))) push_token
-                 FROM push_devices
-                 WHERE is_active = TRUE
-                 ORDER BY (COALESCE(user_id::text, '') || ':' || COALESCE(NULLIF(device_id, ''), 'no-device')), updated_at DESC`
-            );
-            const tokens = tokenRes.rows.map(r => r.push_token).filter(Boolean);
-            pushResult = await sendPushToTokens(tokens, {
-                title: senderTitle,
-                body: composeAdminPushBody(noticeTitle, cleanBody),
-                ttlSeconds: 86400,
-                collapseKey: 'talkx_admin_notice',
-                channelId: PUSH_CHANNEL_IDS.admin,
-                data: {
-                    type: 'admin_notice',
-                    title: senderTitle,
-                    noticeTitle,
-                    body: cleanBody,
-                    durationMs: String(ttlMs),
-                    deliveryId,
-                    channelId: PUSH_CHANNEL_IDS.admin
+            const groups = new Map();
+            for (const item of records.push) {
+                const key = `${item.locale}:${item.source}:${item.fallback ? 'fallback' : 'direct'}`;
+                const group = groups.get(key) || { ...item, tokens: [] };
+                group.tokens.push(item.token);
+                groups.set(key, group);
+            }
+            const parts = [];
+            for (const group of groups.values()) {
+                const content = variants[group.locale] || variants[fallbackLocale];
+                const selectedPayload = selectLocalizedPayload({
+                    [group.locale]: {
+                        title: senderTitle,
+                        body: composeAdminPushBody(content.title, content.body),
+                        ttlSeconds: 86400,
+                        collapseKey: 'talkx_admin_notice',
+                        channelId: PUSH_CHANNEL_IDS.admin,
+                        data: {
+                            type: 'admin_notice',
+                            title: senderTitle,
+                            noticeTitle: content.title,
+                            body: content.body,
+                            durationMs: String(ttlMs),
+                            deliveryId,
+                            channelId: PUSH_CHANNEL_IDS.admin
+                        }
+                    },
+                    en: {
+                        title: senderTitle,
+                        body: composeAdminPushBody(variants.en.title, variants.en.body),
+                        ttlSeconds: 86400,
+                        collapseKey: 'talkx_admin_notice',
+                        channelId: PUSH_CHANNEL_IDS.admin,
+                        data: {
+                            type: 'admin_notice',
+                            title: senderTitle,
+                            noticeTitle: variants.en.title,
+                            body: variants.en.body,
+                            durationMs: String(ttlMs),
+                            deliveryId,
+                            channelId: PUSH_CHANNEL_IDS.admin
+                        }
+                    }
+                }, {
+                    locale: group.locale,
+                    source: group.source,
+                    fallbackReason: group.fallback ? 'missing_or_unsupported' : null
+                });
+                if (group.fallback && selectedPayload?.data) {
+                    selectedPayload.data.fallbackReason = 'missing_or_unsupported';
                 }
-            });
-            if (pushResult.invalidTokens && pushResult.invalidTokens.length) {
-                disableInvalidPushTokens(pushResult.invalidTokens);
+                const result = await sendPushToTokens(group.tokens, selectedPayload);
+                parts.push({ locale: group.locale, source: group.source, result });
+            }
+            pushResult = mergePushResults(parts);
+            if (pushResult.invalidTokens?.length) {
+                await disableInvalidPushTokens(pushResult.invalidTokens);
             }
         } catch (e) {
             console.error('admin notice push error:', e.message);
@@ -1136,6 +1256,25 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
         }
     }
 
+    const localeSummary = {
+        tr: {
+            wsDelivered: wsLocaleSummary.tr,
+            pushDevices: Number(pushResult.localeSummary?.tr?.tokenCount) || 0,
+            pushSent: Number(pushResult.localeSummary?.tr?.sentCount) || 0,
+            pushFailed: Number(pushResult.localeSummary?.tr?.failureCount) || 0
+        },
+        en: {
+            wsDelivered: wsLocaleSummary.en,
+            pushDevices: Number(pushResult.localeSummary?.en?.tokenCount) || 0,
+            pushSent: Number(pushResult.localeSummary?.en?.sentCount) || 0,
+            pushFailed: Number(pushResult.localeSummary?.en?.failureCount) || 0
+        },
+        fallback: {
+            wsDelivered: wsLocaleSummary.fallback,
+            pushDevices: Number(pushResult.localeSummary?.en?.fallbackCount) || 0
+        }
+    };
+
     await logPushDelivery({
         deliveryId,
         eventType: 'admin_notice',
@@ -1145,11 +1284,19 @@ adminRoutes.sendSystemNotice = async ({ title, body, durationMs, target = 'all' 
         failureCount: pushResult.failureCount || 0,
         invalidTokenCount: (pushResult.invalidTokens || []).length,
         channelId: PUSH_CHANNEL_IDS.admin,
-        meta: buildPushLogMeta('admin_notice', pushResult, { target: normalizedTarget, wsDelivered })
+        meta: buildPushLogMeta('admin_notice', pushResult, {
+            target: normalizedTarget,
+            audience,
+            localeSummary,
+            wsDelivered
+        })
     });
 
     return {
         deliveryId,
+        target: normalizedTarget,
+        audience,
+        localeSummary,
         wsDelivered,
         push: {
             enabled: !!pushResult.enabled,

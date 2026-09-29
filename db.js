@@ -906,6 +906,32 @@ const migrations = Object.freeze([
       CREATE INDEX IF NOT EXISTS idx_support_report_history_report_created
         ON support_report_history(report_id,created_at DESC);
     `
+  }),
+  Object.freeze({
+    version: '009',
+    name: 'admin_notification_locale_targeting',
+    sql: `
+      ALTER TABLE notification_schedules
+        ADD COLUMN IF NOT EXISTS content_by_locale JSONB,
+        ADD COLUMN IF NOT EXISTS target TEXT NOT NULL DEFAULT 'all',
+        ADD COLUMN IF NOT EXISTS fallback_locale TEXT NOT NULL DEFAULT 'en',
+        ADD COLUMN IF NOT EXISTS requires_translation BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS last_delivery_summary JSONB;
+      ALTER TABLE notification_schedules DROP CONSTRAINT IF EXISTS notification_schedules_target_check;
+      ALTER TABLE notification_schedules ADD CONSTRAINT notification_schedules_target_check
+        CHECK (target IN ('all','online','mobile'));
+      ALTER TABLE notification_schedules DROP CONSTRAINT IF EXISTS notification_schedules_fallback_locale_check;
+      ALTER TABLE notification_schedules ADD CONSTRAINT notification_schedules_fallback_locale_check
+        CHECK (fallback_locale IN ('tr','en'));
+      UPDATE notification_schedules
+      SET requires_translation = TRUE,
+          is_active = FALSE,
+          updated_at = NOW()
+      WHERE content_by_locale IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_notification_schedules_delivery_ready
+        ON notification_schedules(is_active,requires_translation,schedule_time)
+        WHERE is_active = TRUE AND requires_translation = FALSE;
+    `
   })
 ]);
 

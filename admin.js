@@ -13,6 +13,12 @@ const {
     unavailableMetric
 } = require('./utils/saleOverviewContract');
 const { getPushDiagnostics } = require('./utils/push');
+const {
+    NOTICE_BODY_MAX,
+    NOTICE_TITLE_MAX,
+    normalizeNoticeContentByLocale,
+    normalizeNoticeTarget
+} = require('./utils/adminNotificationContract');
 const { canRejectDeletion, executeAccountDeletion, POLICY_VERSION: DATA_POLICY_VERSION } = require('./utils/accountDeletion');
 const {
     fetchLegalSettings,
@@ -178,6 +184,25 @@ const normalizeScheduleTimezone = (value) => {
     }
 };
 const clampNoticeDurationSeconds = (value, fallback = 10) => Math.max(3, Math.min(60, Number(value) || fallback));
+const parseAdminNoticePayload = (payload = {}) => {
+    const contentByLocale = normalizeNoticeContentByLocale(payload.contentByLocale);
+    const target = normalizeNoticeTarget(payload.target);
+    if (!contentByLocale) {
+        return {
+            error: `Turkce ve English baslik/metin zorunlu; baslik en fazla ${NOTICE_TITLE_MAX}, metin en fazla ${NOTICE_BODY_MAX} karakter olabilir.`
+        };
+    }
+    if (!target) {
+        return { error: 'Gecersiz bildirim hedefi.' };
+    }
+    return {
+        contentByLocale,
+        target,
+        fallbackLocale: 'en',
+        legacyTitle: contentByLocale.tr.title,
+        legacyBody: contentByLocale.tr.body
+    };
+};
 const normalizeIpForDisplay = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return '';
@@ -1730,21 +1755,53 @@ router.post('/remove-friend', async (req, res) => {
     } finally { db.release(); }
 });
 
-router.post('/notify', async (req, res) => {
-    const title = (req.body.title || '').trim();
-    const body = (req.body.body || '').trim();
-    const durationMs = req.body.durationMs;
-    const target = req.body.target || 'all';
+router.get('/notification-audience', async (req, res) => {
+    const target = normalizeNoticeTarget(req.query?.target);
+    if (!target) {
+        return res.status(400).json({ error: 'Gecersiz bildirim hedefi.' });
+    }
+    if (typeof router.getSystemNoticeAudience !== 'function') {
+        return res.status(503).json({ error: 'Bildirim hedef sayimi hazir degil.' });
+    }
+    try {
+        const audience = await router.getSystemNoticeAudience({ target });
+        return res.json({ success: true, audience });
+    } catch (e) {
+        console.error('admin notification audience error:', e);
+        return res.status(500).json({ error: 'Bildirim hedefi sayilamadi.' });
+    }
+});
 
-    if (!title || !body) {
-        return res.status(400).json({ error: 'title ve body gerekli.' });
+router.post('/notify', async (req, res) => {
+    const notice = parseAdminNoticePayload(req.body);
+    const durationMs = req.body.durationMs;
+    if (notice.error) {
+        return res.status(400).json({ error: notice.error });
     }
     if (typeof router.sendSystemNotice !== 'function') {
         return res.status(503).json({ error: 'Bildirim sistemi hazir degil.' });
     }
 
     try {
-        const result = await router.sendSystemNotice({ title, body, durationMs, target });
+        const result = await router.sendSystemNotice({
+            contentByLocale: notice.contentByLocale,
+            fallbackLocale: notice.fallbackLocale,
+            durationMs,
+            target: notice.target
+        });
+        await logAdminAudit(pool, {
+            actorAdmin: req.adminUser,
+            actionType: 'NOTIFY_SEND_NOW',
+            entityType: 'notification_schedule',
+            entityId: result.deliveryId || null,
+            payload: {
+                target: notice.target,
+                locales: ['tr', 'en'],
+                durationMs,
+                audience: result.audience || null,
+                localeSummary: result.localeSummary || null
+            }
+        });
         res.json({ success: true, ...result });
     } catch (e) {
         console.error('admin notify error:', e);
@@ -1760,6 +1817,11 @@ router.get('/notification-schedules', async (req, res) => {
                 id,
                 title,
                 body,
+                content_by_locale,
+                target,
+                fallback_locale,
+                requires_translation,
+                last_delivery_summary,
                 duration_ms,
                 schedule_time,
                 timezone,
@@ -1780,15 +1842,14 @@ router.get('/notification-schedules', async (req, res) => {
 });
 
 router.post('/notification-schedules', async (req, res) => {
-    const title = String(req.body?.title || '').trim().slice(0, 120);
-    const body = String(req.body?.body || '').trim().slice(0, 400);
+    const notice = parseAdminNoticePayload(req.body);
     const scheduleTime = normalizeScheduleTime(req.body?.scheduleTime);
     const timezone = normalizeScheduleTimezone(req.body?.timezone);
     const durationSeconds = clampNoticeDurationSeconds(req.body?.durationSeconds, 10);
     const isActive = req.body?.isActive === undefined ? true : !!req.body?.isActive;
 
-    if (!title || !body) {
-        return res.status(400).json({ error: 'Baslik ve bildirim metni zorunlu.' });
+    if (notice.error) {
+        return res.status(400).json({ error: notice.error });
     }
     if (!scheduleTime) {
         return res.status(400).json({ error: 'Saat formati gecersiz. HH:MM beklenir.' });
@@ -1802,12 +1863,12 @@ router.post('/notification-schedules', async (req, res) => {
         const insertRes = await pool.query(
             `
             INSERT INTO notification_schedules
-              (title, body, duration_ms, schedule_time, timezone, is_active, created_by, created_at, updated_at)
+              (title, body, content_by_locale, target, fallback_locale, requires_translation, duration_ms, schedule_time, timezone, is_active, created_by, created_at, updated_at)
             VALUES
-              ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-            RETURNING id, title, body, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
+              ($1, $2, $3::jsonb, $4, $5, FALSE, $6, $7, $8, $9, $10, NOW(), NOW())
+            RETURNING id, title, body, content_by_locale, target, fallback_locale, requires_translation, last_delivery_summary, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
             `,
-            [title, body, durationMs, scheduleTime, timezone, isActive, String(req.adminUser || 'admin').slice(0, 120)]
+            [notice.legacyTitle, notice.legacyBody, JSON.stringify(notice.contentByLocale), notice.target, notice.fallbackLocale, durationMs, scheduleTime, timezone, isActive, String(req.adminUser || 'admin').slice(0, 120)]
         );
 
         await logAdminAudit(pool, {
@@ -1816,7 +1877,8 @@ router.post('/notification-schedules', async (req, res) => {
             entityType: 'notification_schedule',
             entityId: insertRes.rows[0]?.id || null,
             payload: {
-                title,
+                locales: ['tr', 'en'],
+                target: notice.target,
                 scheduleTime,
                 timezone,
                 durationMs,
@@ -1836,15 +1898,14 @@ router.put('/notification-schedules/:id', async (req, res) => {
         return res.status(400).json({ error: 'Gecersiz plan kimligi.' });
     }
 
-    const title = String(req.body?.title || '').trim().slice(0, 120);
-    const body = String(req.body?.body || '').trim().slice(0, 400);
+    const notice = parseAdminNoticePayload(req.body);
     const scheduleTime = normalizeScheduleTime(req.body?.scheduleTime);
     const timezone = normalizeScheduleTimezone(req.body?.timezone);
     const durationSeconds = clampNoticeDurationSeconds(req.body?.durationSeconds, 10);
     const isActive = req.body?.isActive === undefined ? true : !!req.body?.isActive;
 
-    if (!title || !body) {
-        return res.status(400).json({ error: 'Baslik ve bildirim metni zorunlu.' });
+    if (notice.error) {
+        return res.status(400).json({ error: notice.error });
     }
     if (!scheduleTime) {
         return res.status(400).json({ error: 'Saat formati gecersiz. HH:MM beklenir.' });
@@ -1861,15 +1922,19 @@ router.put('/notification-schedules/:id', async (req, res) => {
             SET
                 title = $2,
                 body = $3,
-                duration_ms = $4,
-                schedule_time = $5,
-                timezone = $6,
-                is_active = $7,
+                content_by_locale = $4::jsonb,
+                target = $5,
+                fallback_locale = $6,
+                requires_translation = FALSE,
+                duration_ms = $7,
+                schedule_time = $8,
+                timezone = $9,
+                is_active = $10,
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING id, title, body, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
+            RETURNING id, title, body, content_by_locale, target, fallback_locale, requires_translation, last_delivery_summary, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
             `,
-            [scheduleId, title, body, durationMs, scheduleTime, timezone, isActive]
+            [scheduleId, notice.legacyTitle, notice.legacyBody, JSON.stringify(notice.contentByLocale), notice.target, notice.fallbackLocale, durationMs, scheduleTime, timezone, isActive]
         );
         if (!updateRes.rows.length) {
             return res.status(404).json({ error: 'Plan bulunamadi.' });
@@ -1881,7 +1946,8 @@ router.put('/notification-schedules/:id', async (req, res) => {
             entityType: 'notification_schedule',
             entityId: scheduleId,
             payload: {
-                title,
+                locales: ['tr', 'en'],
+                target: notice.target,
                 scheduleTime,
                 timezone,
                 durationMs,
@@ -1906,13 +1972,13 @@ router.post('/notification-schedules/:id/toggle', async (req, res) => {
             `
             UPDATE notification_schedules
             SET is_active = $2, updated_at = NOW()
-            WHERE id = $1
-            RETURNING id, title, body, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
+            WHERE id = $1 AND ($2 = FALSE OR requires_translation = FALSE)
+            RETURNING id, title, body, content_by_locale, target, fallback_locale, requires_translation, last_delivery_summary, duration_ms, schedule_time, timezone, is_active, last_sent_local_date, last_sent_at, created_by, created_at, updated_at
             `,
             [scheduleId, isActive]
         );
         if (!updateRes.rows.length) {
-            return res.status(404).json({ error: 'Plan bulunamadi.' });
+            return res.status(409).json({ error: 'Plan bulunamadi veya TR/EN cevirileri tamamlanmadan aktiflestirilemez.' });
         }
 
         await logAdminAudit(pool, {
@@ -1942,7 +2008,7 @@ router.post('/notification-schedules/:id/run-now', async (req, res) => {
     try {
         const scheduleRes = await pool.query(
             `
-            SELECT id, title, body, duration_ms, schedule_time, timezone, is_active
+            SELECT id, title, body, content_by_locale, target, fallback_locale, requires_translation, duration_ms, schedule_time, timezone, is_active
             FROM notification_schedules
             WHERE id = $1
             LIMIT 1
@@ -1953,12 +2019,17 @@ router.post('/notification-schedules/:id/run-now', async (req, res) => {
             return res.status(404).json({ error: 'Plan bulunamadi.' });
         }
         const schedule = scheduleRes.rows[0];
+        const contentByLocale = normalizeNoticeContentByLocale(schedule.content_by_locale);
+        const target = normalizeNoticeTarget(schedule.target);
+        if (schedule.requires_translation || !contentByLocale || !target) {
+            return res.status(409).json({ error: 'Planin TR/EN icerigi veya hedefi tamamlanmadan calistirilamaz.' });
+        }
         const safeTimezone = normalizeScheduleTimezone(schedule.timezone) || 'Europe/Istanbul';
         const result = await router.sendSystemNotice({
-            title: schedule.title,
-            body: schedule.body,
+            contentByLocale,
+            fallbackLocale: schedule.fallback_locale || 'en',
             durationMs: schedule.duration_ms,
-            target: 'all'
+            target
         });
 
         await pool.query(
@@ -1967,10 +2038,11 @@ router.post('/notification-schedules/:id/run-now', async (req, res) => {
             SET
                 last_sent_at = NOW(),
                 last_sent_local_date = TO_CHAR(NOW() AT TIME ZONE $2, 'YYYY-MM-DD'),
+                last_delivery_summary = $3::jsonb,
                 updated_at = NOW()
             WHERE id = $1
             `,
-            [scheduleId, safeTimezone]
+            [scheduleId, safeTimezone, JSON.stringify(result)]
         );
 
         await logAdminAudit(pool, {
@@ -1980,7 +2052,10 @@ router.post('/notification-schedules/:id/run-now', async (req, res) => {
             entityId: scheduleId,
             payload: {
                 scheduleTime: schedule.schedule_time,
-                timezone: safeTimezone
+                timezone: safeTimezone,
+                target,
+                audience: result.audience || null,
+                localeSummary: result.localeSummary || null
             }
         });
 

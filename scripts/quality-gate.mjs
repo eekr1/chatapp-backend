@@ -7,6 +7,7 @@ import path from 'node:path';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const testDir = path.join(repoRoot, 'test');
 const coreTests = [
+  'admin-notification-contract.test.js',
   'match-country-auto.test.js',
   'wave01-security.test.js',
   'wave02-platform.test.js',
@@ -24,6 +25,7 @@ const coreTests = [
   'wave15-admin-operations.test.js'
 ];
 const criticalTests = [
+  'admin-notification-contract.test.js',
   'match-country-auto.test.js',
   'wave02-platform.test.js',
   'wave05-recovery-presence.test.js',

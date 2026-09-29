@@ -236,7 +236,7 @@ Mevcut parcalar:
 - [x] [P1] DB'yi de kontrol eden readiness endpoint'i ekle.
 - [x] [P1] Health cevabinda deploy commit SHA ve uygulama surumu goster.
 - [ ] [P1] Scheduler'in coklu instance'ta duplicate bildirim uretmesini engelle.
-- [ ] [P1] Bildirim dagitim sozlesmesini QA-010'a gore yerellestir: anlik, planli ve `run-now` akislari TR/EN icerik haritasi kabul etsin; WS istemcilerini `client.lang`, push tokenlarini `profiles.locale` ile segmentlere ayirsin; bilinmeyen dilde Ingilizce fallback kullansin ve teslimat sonucunu dil bazinda raporlasin.
+- [x] [P1] Bildirim dagitim sozlesmesini QA-010'a gore yerellestir: anlik, planli ve `run-now` akislari TR/EN icerik haritasi kabul etsin; WS istemcilerini `client.lang`, push tokenlarini cihaz/profil locale'i ile segmentlere ayirsin; bilinmeyen dilde Ingilizce fallback kullansin ve teslimat sonucunu dil bazinda raporlasin. (Paket F2)
 - [x] [P2] Performans ozet sozlesmesini QA-011'e gore guclendir: esik/SLO, ornek sayisi ve guven durumu, onceki donem farki, `veri yok` semantigi ve etki sirali route ozetini API'den acik tasiyarak adminin ham dakikalik kayitlardan sonuc tahmin etmesini engelle.
 - [ ] [P2] Davranis analitigi sozlesmesini QA-012'ye gore yeniden kur: kisi, deneme, eslesme cifti ve sohbet birimlerini ayir; sirali/cohort funnel, onceki donem farki, dusuk ornek guveni ve match/conversation bazli olay hikayesini backend tarafinda acik uret.
 - [ ] [P1] Yasal metin yayin sozlesmesini QA-013'e gore guvenli hale getir: taslak/onizleme/yayin ayrimi, alan bazli dogrulama, degisiklik ozeti, surum-reaccept etki hesabi, atomik yayin, audit ve geri alma destegi sagla.
@@ -290,7 +290,7 @@ Mevcut parcalar:
 - [ ] [P0] Backup sifreleme, saklama suresi ve erisim yetkisini belirle.
 - [ ] [P1] Tum tablolar icin veri amaci, sahibi, saklama suresi ve silme matrisi olustur.
 - [ ] [P1] Mesaj, report, support media, analytics, push log ve IP/geo retention karari ver.
-- [ ] [P1] `notification_schedules` icin surumlu cok dilli icerik semasi/migration'i tasarla; TR/EN varyantlarini tek baslik-metin yerine dogrulanabilir locale haritasinda veya bagli tabloda sakla, mevcut tek dilli planlari otomatik global gondermeden once pasif/ceviri gerekli durumuna tasi.
+- [x] [P1] `notification_schedules` icin surumlu cok dilli icerik semasi/migration'i tasarla; TR/EN varyantlarini tek baslik-metin yerine dogrulanabilir locale haritasinda sakla, mevcut tek dilli planlari otomatik global gondermeden once pasif/ceviri gerekli durumuna tasi. (`009`, Paket F2)
 - [ ] [P1] Yasal icerigi tek canli `app_settings` JSON kaydindan surumlu yayin gecmisine tasiyacak modeli QA-013'e gore tasarla; belge/dil, taslak-yayin, icerik hash'i, yayinlayan admin, gerekce, zaman, onceki surum ve geri alma baglantisini koru.
 
 - [ ] [P1] QA-015 icin system_message_campaigns ve system_message_recipients migration'ini tasarla; locale, hedef snapshot'i, recipient unique/idempotency, teslim/read/CTA, audit, retention ve kullanici silmeyi netlestir.
@@ -786,12 +786,12 @@ Her bulgu su formatla eklenecek:
 - Jarvis hedefi: Yonetici hangi mesajın hangi dil grubuna, kac kisiye ve hangi fallback ile gidecegini gondermeden once net gorsun; kullanici yalnizca kendi dilindeki temiz bildirimi alsin; teknik dagitim sonucu dil bazli kanitta kalsin.
 - Adimlar: Bildirim Ayarlari sekmesinde Turkce bir baslik ve metin girip `Hemen Gonder` veya planli `Simdi Calistir` kullan; dili English olan bir hesap/cihazda gelen WS ve push bildirimini kontrol et.
 - Beklenen: Turkce locale kullanan hesap/cihaz Turkce varyanti, English locale kullanan hesap/cihaz English varyanti almalidir. Locale bilinmiyor veya gecersizse belgelenmis guvenli fallback English olmalidir. Yonetici global gonderimden once iki varyanti, hedef dagilimini ve fallback sayisini gormelidir.
-- Gerceklesen: Anlik form yalnizca tek `title/body` alani topluyor ve `/admin/notify` istegini `target: all` ile gonderiyor. Planli bildirim semasi tek `title/body` sakliyor; scheduler ve `run-now` ayni metni tum kullanicilara gonderiyor. `sendSystemNotice` tum WebSocket istemcilerine tek metni broadcast ediyor ve aktif push tokenlarini locale join/segmentasyonu olmadan tek payload ile Firebase'e iletiyor. Sonuc olarak Turkce girilen bildirim English kullanicilara da Turkce gidiyor.
+- Gerceklesen: Paket F2 ile anlik, planli, scheduler ve `run-now` akislari ayni zorunlu TR/EN sozlesmesine baglandi. `all/online/mobile` hedefleri allowlist'tir; yonetici gonderimden once benzersiz kullanici, WS, push cihazi ve locale/fallback dagilimini gorur. WS `client.lang`, push cihaz locale'i → profil locale'i → English fallback sirasi ile gruplanir; dil/kanal sonucu audit ve teslim yanitinda ayridir. Eski tek dilli planlar `009` migration'i ile pasif `Ceviri gerekli` durumuna alinir.
 - Dogrulanan mevcut veri:
   - `profiles.locale` alani vardir ve yalnizca `tr`/`en` degerlerini kabul eder; kayit, giris ve profil guncelleme akislari locale'i yazabilir.
   - Aktif WebSocket istemcileri `client.lang` tasir ve bu deger baglanti sirasinda istemci dilinden normalize edilir.
-  - `push_devices` token/device bilgisi tasir fakat locale tasimaz; push segmentasyonu icin `user_id -> profiles.locale` join'i veya esdeger guncel dil snapshot'i gerekir.
-  - `notification_schedules` yalnizca tek `title` ve `body` kolonuna sahiptir; mevcut planlarin hangi dilde oldugu semantik olarak kayitli degildir.
+  - `push_devices` cihaz locale snapshot'i tasir; gecersiz veya eksik deger profil locale'ine, o da yoksa English fallback'e duser.
+  - `notification_schedules` TR/EN `content_by_locale`, hedef, fallback, ceviri gereksinimi ve son teslim ozetini tasir; legacy `title/body` yalniz gecis kanitidir.
 - Icerik ve fallback sozlesmesi:
   - Desteklenen her locale icin ayri baslik ve metin saklanmali: en az `tr.title`, `tr.body`, `en.title`, `en.body`. Sema ileride yeni dilleri eklemeye uygun locale haritasi veya bagli ceviri tablosu olabilir.
   - Global `all` hedefinde TR ve EN varyantlari zorunlu olmali; eksik veya yalniz bosluk iceren varyantla gonderim engellenmelidir.
@@ -836,7 +836,7 @@ Her bulgu su formatla eklenecek:
   - Mevcut ekran: `docs/assets/manual-qa/qa-010-current-admin-notification-settings.png`
   - Ilgili kod: `chatapp-backend/admin.html` (`sendNotice`, `collectNotificationSchedulePayload`, `renderNotificationSettingsTab`); `chatapp-backend/admin.js` (`POST /notify`, notification schedule CRUD/run-now); `chatapp-backend/index.js` (`sendSystemNotice`, `runNotificationSchedulesTick`, `activeClients`); `chatapp-backend/db.js` (`profiles.locale`, `notification_schedules`)
 - Oncelik: P1
-- Durum: Acik
+- Durum: Paket F2 cekirdegi uygulandi ve dogrulandi; kontrollu test gonderimi ile deploy sonrasi gercek Android/iOS cihaz QA'i acik.
 ### QA-011 - Performans ekrani ham veri tablosu degil karar ozeti olmali
 
 - Tarih: 2026-09-02

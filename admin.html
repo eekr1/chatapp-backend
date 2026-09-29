@@ -198,11 +198,23 @@
     .notification-column { min-width:0; border:1px solid var(--border); border-radius:14px; padding:14px; background:rgba(255,255,255,.014); }
     .notification-column h3 { margin:0 0 5px; font-size:15px; }
     .notification-column > p { margin:0 0 12px; color:var(--muted); font-size:11px; line-height:1.5; }
+    .notification-locale-tabs { display:flex; gap:7px; margin-bottom:10px; }
+    .notification-locale-tabs button { flex:1; border:1px solid var(--border); border-radius:9px; padding:8px; background:rgba(255,255,255,.02); color:var(--muted); cursor:pointer; font:inherit; font-size:11px; font-weight:800; }
+    .notification-locale-tabs button.is-active { border-color:var(--cyan); color:var(--cyan); background:rgba(32,216,231,.08); }
+    .notification-locale-panel { display:none; }
+    .notification-locale-panel.is-active { display:block; }
     .char-count { align-self:flex-end; color:var(--muted-2); font-size:10px; }
     .notification-fixed-value { display:flex; align-items:flex-start; gap:9px; border:1px solid var(--border); border-radius:11px; padding:10px; background:rgba(255,255,255,.018); }
     .notification-fixed-value + .notification-fixed-value { margin-top:8px; }
     .notification-fixed-value strong { display:block; font-size:12px; }
     .notification-fixed-value span { display:block; margin-top:3px; color:var(--muted); font-size:10px; line-height:1.45; }
+    .notification-audience { margin-top:10px; border:1px solid rgba(32,216,231,.2); border-radius:12px; padding:11px; background:rgba(32,216,231,.035); }
+    .notification-audience-head { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+    .notification-audience-head strong { font-size:12px; }
+    .notification-audience-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:9px; }
+    .notification-audience-grid div { border:1px solid var(--border); border-radius:9px; padding:8px; background:rgba(0,0,0,.12); }
+    .notification-audience-grid span { display:block; color:var(--muted); font-size:9px; }
+    .notification-audience-grid strong { display:block; margin-top:2px; font-size:14px; }
     .notification-preview-stack { display:flex; flex-direction:column; gap:9px; }
     .device-preview { border:1px solid var(--border); border-radius:15px; padding:11px; background:linear-gradient(160deg,rgba(124,99,255,.12),rgba(32,216,231,.035)); }
     .device-preview-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
@@ -536,6 +548,8 @@
     let currentAnalyticsQuery='';
     let notificationScheduleEditId=null;
     let notificationSchedulesCache=[];
+    let notificationPreviewLocale='tr';
+    let notificationAudienceSnapshot=null;
     let profileSortBy='created_at';
     let profileSortDir='desc';
     let profilePage=1;
@@ -1745,10 +1759,15 @@
 
     function resetNotificationScheduleForm(){
       notificationScheduleEditId=null;
+      notificationPreviewLocale='tr';
+      notificationAudienceSnapshot=null;
       const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v;};
       const setChecked=(id,v)=>{const el=document.getElementById(id); if(el) el.checked=!!v;};
-      set('notification-title','');
-      set('notification-body','');
+      set('notification-title-tr','');
+      set('notification-body-tr','');
+      set('notification-title-en','');
+      set('notification-body-en','');
+      set('notification-target','all');
       set('notification-duration','10');
       set('notification-time','12:00');
       set('notification-timezone','Europe/Istanbul');
@@ -1759,6 +1778,7 @@
       if(saveButton) saveButton.textContent='Planı kaydet';
       cancelImmediateNotice();
       syncNotificationComposer();
+      loadNotificationAudience();
     }
     function editNotificationSchedule(scheduleId){
       const item=(notificationSchedulesCache||[]).find((x)=>String(x.id||'')===String(scheduleId||''));
@@ -1766,8 +1786,12 @@
       notificationScheduleEditId=item.id;
       const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v;};
       const setChecked=(id,v)=>{const el=document.getElementById(id); if(el) el.checked=!!v;};
-      set('notification-title',item.title||'');
-      set('notification-body',item.body||'');
+      const localized=item.content_by_locale&&typeof item.content_by_locale==='object'?item.content_by_locale:{};
+      set('notification-title-tr',localized.tr?.title||item.title||'');
+      set('notification-body-tr',localized.tr?.body||item.body||'');
+      set('notification-title-en',localized.en?.title||'');
+      set('notification-body-en',localized.en?.body||'');
+      set('notification-target',item.target||'all');
       set('notification-duration',String(Math.max(3,Math.min(60,Math.round((Number(item.duration_ms)||10000)/1000)))));
       set('notification-time',item.schedule_time||'12:00');
       set('notification-timezone',item.timezone||'Europe/Istanbul');
@@ -1777,41 +1801,86 @@
       const saveButton=document.getElementById('notification-save-button');
       if(saveButton) saveButton.textContent='Planı güncelle';
       syncNotificationComposer();
+      loadNotificationAudience();
       document.getElementById('notification-composer')?.scrollIntoView({behavior:'smooth',block:'start'});
     }
     function collectNotificationSchedulePayload(){
-      const title=String(val('notification-title')||'').trim();
-      const body=String(val('notification-body')||'').trim();
+      const contentByLocale={
+        tr:{title:String(val('notification-title-tr')||'').trim(),body:String(val('notification-body-tr')||'').trim()},
+        en:{title:String(val('notification-title-en')||'').trim(),body:String(val('notification-body-en')||'').trim()}
+      };
+      const target=String(val('notification-target')||'').trim();
       const durationSeconds=Math.max(3,Math.min(60,Number(val('notification-duration'))||10));
       const scheduleTime=String(val('notification-time')||'').trim();
       const timezone=String(val('notification-timezone')||'').trim()||'Europe/Istanbul';
       const isActive=!!document.getElementById('notification-active')?.checked;
-      if(!title||!body) throw new Error('Başlık ve bildirim metni zorunlu.');
-      if(title.length>120) throw new Error('Başlık en fazla 120 karakter olabilir.');
-      if(body.length>400) throw new Error('Bildirim metni en fazla 400 karakter olabilir.');
+      for(const locale of ['tr','en']){
+        const label=locale==='tr'?'Türkçe':'English';
+        if(!contentByLocale[locale].title||!contentByLocale[locale].body) throw new Error(`${label} başlık ve bildirim metni zorunlu.`);
+        if(contentByLocale[locale].title.length>120) throw new Error(`${label} başlık en fazla 120 karakter olabilir.`);
+        if(contentByLocale[locale].body.length>400) throw new Error(`${label} bildirim metni en fazla 400 karakter olabilir.`);
+      }
+      if(!['all','online','mobile'].includes(target)) throw new Error('Geçerli bir hedef seçin.');
       if(!/^([01]\d|2[0-3]):([0-5]\d)$/.test(scheduleTime)) throw new Error('Saat formatı geçersiz. HH:MM girin.');
-      return { title, body, durationSeconds, scheduleTime, timezone, isActive };
+      return { contentByLocale, target, durationSeconds, scheduleTime, timezone, isActive };
     }
-    function syncNotificationComposer(){
-      const title=String(val('notification-title')||'');
-      const body=String(val('notification-body')||'');
+    function setNotificationPreviewLocale(locale){
+      notificationPreviewLocale=locale==='en'?'en':'tr';
+      document.querySelectorAll('[data-notification-locale-tab]').forEach((button)=>button.classList.toggle('is-active',button.dataset.notificationLocaleTab===notificationPreviewLocale));
+      document.querySelectorAll('[data-notification-locale-panel]').forEach((panel)=>panel.classList.toggle('is-active',panel.dataset.notificationLocalePanel===notificationPreviewLocale));
+      syncNotificationComposer(false);
+    }
+    function renderNotificationAudience(audience){
+      const host=document.getElementById('notification-audience-summary');
+      if(!host) return;
+      if(!audience){host.innerHTML='<p style="margin:0;color:var(--muted);font-size:10px">Hedef sayımı bekleniyor.</p>';return;}
+      const locale=audience.localeDeliveries||{};
+      host.innerHTML=`<div class="notification-audience-head"><strong>Kesin hedef özeti</strong><span class="evidence-chip">${esc(audience.target||'-')}</span></div><div class="notification-audience-grid"><div><span>Benzersiz kullanıcı</span><strong>${Number(audience.recipientCount||0)}</strong></div><div><span>Canlı bağlantı</span><strong>${Number(audience.wsConnections||0)}</strong></div><div><span>Aktif push cihazı</span><strong>${Number(audience.pushDevices||0)}</strong></div><div><span>TR / EN teslim yüzeyi</span><strong>${Number(locale.tr||0)} / ${Number(locale.en||0)}</strong></div></div><p style="margin:8px 0 0;color:var(--muted);font-size:9px">Fallback EN: ${Number(locale.fallback||0)} · Sayım: ${esc(d(audience.countedAt))}</p>`;
+    }
+    async function loadNotificationAudience(){
+      const target=String(val('notification-target')||'all');
+      notificationAudienceSnapshot=null;
+      renderNotificationAudience(null);
+      try{
+        const r=await fetch(`/admin/notification-audience?target=${encodeURIComponent(target)}`);
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Hedef sayımı alınamadı.');
+        notificationAudienceSnapshot=x.audience||null;
+        renderNotificationAudience(notificationAudienceSnapshot);
+      }catch(e){
+        const host=document.getElementById('notification-audience-summary');
+        if(host) host.innerHTML=`<p style="margin:0;color:#ff9eaa;font-size:10px">${esc(e.message||e)}</p>`;
+      }
+    }
+    function syncNotificationComposer(resetReview=true){
+      const locale=notificationPreviewLocale==='en'?'en':'tr';
+      const title=String(val(`notification-title-${locale}`)||'');
+      const body=String(val(`notification-body-${locale}`)||'');
       const duration=Math.max(3,Math.min(60,Number(val('notification-duration'))||10));
       const setText=(id,value)=>{const el=document.getElementById(id);if(el) el.textContent=value;};
-      setText('notification-title-count',`${title.length}/120`);
-      setText('notification-body-count',`${body.length}/400`);
+      for(const code of ['tr','en']){
+        const variantTitle=String(val(`notification-title-${code}`)||'');
+        const variantBody=String(val(`notification-body-${code}`)||'');
+        setText(`notification-title-count-${code}`,`${variantTitle.length}/120`);
+        setText(`notification-body-count-${code}`,`${variantBody.length}/400`);
+      }
       document.querySelectorAll('[data-notification-preview-title]').forEach((el)=>{el.textContent=title.trim()||'TalkX bildirimi';});
       document.querySelectorAll('[data-notification-preview-body]').forEach((el)=>{el.textContent=body.trim()||'Bildirim metni burada görünecek.';});
+      setText('notification-preview-locale',locale.toUpperCase());
       setText('notification-preview-duration',`${duration} saniye görünür`);
-      cancelImmediateNotice();
+      if(resetReview) cancelImmediateNotice();
     }
     function cancelImmediateNotice(){
       document.getElementById('notification-send-review')?.classList.remove('is-open');
     }
-    function prepareImmediateNotice(){
+    async function prepareImmediateNotice(){
       try{
         const payload=collectNotificationSchedulePayload();
+        await loadNotificationAudience();
+        if(!notificationAudienceSnapshot) throw new Error('Kesin hedef sayımı alınmadan gönderim yapılamaz.');
+        const audience=notificationAudienceSnapshot;
         const summary=document.getElementById('notification-send-review-text');
-        if(summary) summary.textContent=`“${payload.title}” bildirimi tüm kullanıcılara, mevcut tek dil sözleşmesiyle gönderilecek. Görünürlük süresi ${payload.durationSeconds} saniye. Kesin alıcı sayısı gönderim sonucunda raporlanacak.`;
+        if(summary) summary.textContent=`TR ve EN varyantları “${payload.target}” hedefine gönderilecek. ${audience.recipientCount} benzersiz kullanıcı, ${audience.wsConnections} canlı bağlantı ve ${audience.pushDevices} aktif push cihazı sayıldı. Görünürlük süresi ${payload.durationSeconds} saniye; English güvenli fallback dilidir.`;
         document.getElementById('notification-send-review')?.classList.add('is-open');
       }catch(error){ alert(error.message||error); }
     }
@@ -1873,11 +1942,11 @@
       const sentCount=list.filter((x)=>x.last_sent_at).length;
       let html=`<div class="admin-page">
         <div class="admin-summary-grid"><article class="admin-summary-card"><div class="label">Toplam plan</div><div class="value">${list.length}</div><div class="meta">Kayıtlı günlük bildirim planı</div></article><article class="admin-summary-card"><div class="label">Aktif plan</div><div class="value">${activeCount}</div><div class="meta">Zamanı geldiğinde gönderilir</div></article><article class="admin-summary-card"><div class="label">Pasif plan</div><div class="value">${list.length-activeCount}</div><div class="meta">Kayıtlı, otomatik gönderim kapalı</div></article><article class="admin-summary-card"><div class="label">Gönderim geçmişi</div><div class="value">${sentCount}</div><div class="meta">En az bir kez çalışmış plan</div></article></div>
-        <section id="notification-composer" class="admin-section"><div class="admin-section-head"><div><h2 id="schedule-form-mode">Yeni bildirim</h2><p>Tek içerikten anlık gönderim yapın veya günlük plan oluşturun.</p></div><span class="evidence-chip">Mevcut sözleşme: tüm kullanıcılar</span></div><div class="admin-section-body">
+        <section id="notification-composer" class="admin-section"><div class="admin-section-head"><div><h2 id="schedule-form-mode">Yeni bildirim</h2><p>TR ve EN içeriği aynı teslimat sözleşmesinde yönetin.</p></div><span class="evidence-chip">English güvenli fallback</span></div><div class="admin-section-body">
           <div class="notification-composer-grid">
-            <section class="notification-column"><h3>İçerik</h3><p>Başlık ve metin anlık gönderim ile plan için ortaktır.</p><div class="workflow-form"><div class="workflow-field is-wide"><label for="notification-title">Bildirim başlığı</label><input id="notification-title" maxlength="120" placeholder="Kısa ve anlaşılır bir başlık" oninput="syncNotificationComposer()"><span id="notification-title-count" class="char-count">0/120</span></div><div class="workflow-field is-wide"><label for="notification-body">Bildirim metni</label><textarea id="notification-body" maxlength="400" placeholder="Kullanıcıya gösterilecek mesaj" oninput="syncNotificationComposer()"></textarea><span id="notification-body-count" class="char-count">0/400</span></div></div></section>
-            <section class="notification-column"><h3>Teslimat ayarları</h3><p>Sözleşmede desteklenen gerçek alanlar.</p><div class="notification-fixed-value"><div><strong>Tüm kullanıcılar</strong><span>Hedef segment seçimi henüz backend sözleşmesinde yok.</span></div></div><div class="notification-fixed-value"><div><strong>Tek içerik dili</strong><span>TR/EN varyantı ayrı backend işi gerektiriyor.</span></div></div><div class="workflow-form" style="margin-top:10px"><div class="workflow-field"><label for="notification-duration">Görünürlük süresi (sn)</label><input id="notification-duration" type="number" min="3" max="60" step="1" value="10" oninput="syncNotificationComposer()"></div><div class="workflow-field"><label for="notification-time">Günlük gönderim saati</label><input id="notification-time" type="time" value="12:00"></div><div class="workflow-field is-wide"><label for="notification-timezone">Zaman dilimi</label><input id="notification-timezone" value="Europe/Istanbul"></div><div class="workflow-field is-wide"><label style="display:flex;align-items:center;gap:7px;text-transform:none;font-size:11px"><input id="notification-active" type="checkbox" checked style="width:auto"> Plan kaydedildiğinde aktif olsun</label></div></div></section>
-            <section class="notification-column"><h3>Cihaz önizlemesi</h3><p>Görsel temsil; kesin platform teslimi gönderim sonucunda ölçülür.</p><div class="notification-preview-stack"><div class="device-preview"><div class="device-preview-head"><span>Android</span><span id="notification-preview-duration">10 saniye görünür</span></div><div class="device-notification"><strong data-notification-preview-title>TalkX bildirimi</strong><p data-notification-preview-body>Bildirim metni burada görünecek.</p></div></div><div class="device-preview"><div class="device-preview-head"><span>iOS</span><span>TalkX</span></div><div class="device-notification"><strong data-notification-preview-title>TalkX bildirimi</strong><p data-notification-preview-body>Bildirim metni burada görünecek.</p></div></div></div></section>
+            <section class="notification-column"><h3>İçerik varyantları</h3><p>Global gönderimde iki dil de zorunludur.</p><div class="notification-locale-tabs"><button type="button" class="is-active" data-notification-locale-tab="tr" onclick="setNotificationPreviewLocale('tr')">Türkçe</button><button type="button" data-notification-locale-tab="en" onclick="setNotificationPreviewLocale('en')">English</button></div><div class="notification-locale-panel is-active" data-notification-locale-panel="tr"><div class="workflow-form"><div class="workflow-field is-wide"><label for="notification-title-tr">Türkçe başlık</label><input id="notification-title-tr" maxlength="120" placeholder="Kısa ve anlaşılır bir başlık" oninput="syncNotificationComposer()"><span id="notification-title-count-tr" class="char-count">0/120</span></div><div class="workflow-field is-wide"><label for="notification-body-tr">Türkçe metin</label><textarea id="notification-body-tr" maxlength="400" placeholder="Türkçe kullanıcıya gösterilecek mesaj" oninput="syncNotificationComposer()"></textarea><span id="notification-body-count-tr" class="char-count">0/400</span></div></div></div><div class="notification-locale-panel" data-notification-locale-panel="en"><div class="workflow-form"><div class="workflow-field is-wide"><label for="notification-title-en">English title</label><input id="notification-title-en" maxlength="120" placeholder="Short and clear title" oninput="syncNotificationComposer()"><span id="notification-title-count-en" class="char-count">0/120</span></div><div class="workflow-field is-wide"><label for="notification-body-en">English message</label><textarea id="notification-body-en" maxlength="400" placeholder="Message shown to English users" oninput="syncNotificationComposer()"></textarea><span id="notification-body-count-en" class="char-count">0/400</span></div></div></div></section>
+            <section class="notification-column"><h3>Teslimat ayarları</h3><p>Hedef değiştiğinde sayım sunucudan yenilenir.</p><div class="workflow-form"><div class="workflow-field is-wide"><label for="notification-target">Hedef segment</label><select id="notification-target" onchange="loadNotificationAudience();cancelImmediateNotice()"><option value="all">Tüm kullanıcılar</option><option value="online">Şu an online</option><option value="mobile">Aktif push cihazları</option></select></div><div class="workflow-field"><label for="notification-duration">Görünürlük süresi (sn)</label><input id="notification-duration" type="number" min="3" max="60" step="1" value="10" oninput="syncNotificationComposer()"></div><div class="workflow-field"><label for="notification-time">Günlük gönderim saati</label><input id="notification-time" type="time" value="12:00"></div><div class="workflow-field is-wide"><label for="notification-timezone">Zaman dilimi</label><input id="notification-timezone" value="Europe/Istanbul"></div><div class="workflow-field is-wide"><label style="display:flex;align-items:center;gap:7px;text-transform:none;font-size:11px"><input id="notification-active" type="checkbox" checked style="width:auto"> Plan kaydedildiğinde aktif olsun</label></div></div><div id="notification-audience-summary" class="notification-audience"><p style="margin:0;color:var(--muted);font-size:10px">Hedef sayımı bekleniyor.</p></div></section>
+            <section class="notification-column"><h3>Cihaz önizlemesi</h3><p>Seçili dil iki platform görünümünde birlikte kontrol edilir.</p><div class="notification-preview-stack"><div class="device-preview"><div class="device-preview-head"><span>Android · <b id="notification-preview-locale">TR</b></span><span id="notification-preview-duration">10 saniye görünür</span></div><div class="device-notification"><strong data-notification-preview-title>TalkX bildirimi</strong><p data-notification-preview-body>Bildirim metni burada görünecek.</p></div></div><div class="device-preview"><div class="device-preview-head"><span>iOS</span><span>TalkX</span></div><div class="device-notification"><strong data-notification-preview-title>TalkX bildirimi</strong><p data-notification-preview-body>Bildirim metni burada görünecek.</p></div></div></div></section>
           </div>
           <div class="notification-actions"><button id="notification-save-button" class="btn btn-refresh" onclick="saveNotificationSchedule()">Planı kaydet</button><button class="btn btn-shadow" onclick="resetNotificationScheduleForm()">Formu temizle</button><button class="btn btn-notify" onclick="prepareImmediateNotice()">Şimdi göndermeyi gözden geçir</button></div>
           <div id="notification-send-review" class="action-review"><p id="notification-send-review-text"></p><div class="case-actions" style="justify-content:flex-start"><button class="btn btn-shadow" onclick="cancelImmediateNotice()">Geri dön</button><button class="btn btn-notify" onclick="sendNotice()">Onayla ve gönder</button></div></div>
@@ -1893,10 +1962,14 @@
       html+='<div class="schedule-list">';
       list.forEach((it)=>{
         const sec=Math.max(3,Math.min(60,Math.round((Number(it.duration_ms)||10000)/1000)));
-        const status=it.is_active?'Aktif':'Pasif';
+        const localized=it.content_by_locale&&typeof it.content_by_locale==='object'?it.content_by_locale:{};
+        const translationNeeded=!!it.requires_translation||!localized.tr?.title||!localized.en?.title;
+        const status=translationNeeded?'Çeviri gerekli':it.is_active?'Aktif':'Pasif';
         const nextToggleLabel=it.is_active?'Pasife al':'Aktifleştir';
         const nextToggleState=!it.is_active;
-        html+=`<article class="schedule-card"><div class="schedule-card-head"><div><h3>${esc(it.title||'Başlıksız plan')}</h3><span class="status-pill ${it.is_active?'is-ok':'is-warn'}" style="margin-top:7px">${status}</span></div><span class="evidence-chip">${sec} sn</span></div><p class="message">${esc(it.body||'Bildirim metni yok')}</p><div class="schedule-meta"><div><span>Her gün</span><strong>${esc(it.schedule_time||'-')}</strong></div><div><span>Zaman dilimi</span><strong>${esc(it.timezone||'-')}</strong></div><div><span>Son gönderim</span><strong>${it.last_sent_at?esc(relativeAge(it.last_sent_at)):'Henüz yok'}</strong></div></div><div class="schedule-card-actions"><details class="schedule-action-menu"><summary>Plan işlemleri</summary><div class="schedule-action-popover"><button class="btn btn-details" onclick="editNotificationSchedule('${it.id}')">Düzenle</button><button class="btn btn-shadow" onclick="toggleNotificationSchedule('${it.id}',${nextToggleState})">${nextToggleLabel}</button><button class="btn btn-notify" onclick="runNotificationScheduleNow('${it.id}')">Şimdi çalıştır</button></div></details><button class="btn btn-delete" onclick="deleteNotificationSchedule('${it.id}')">Planı sil</button></div></article>`;
+        const targetLabel={all:'Tüm kullanıcılar',online:'Şu an online',mobile:'Push cihazları'}[it.target]||'Hedef eksik';
+        const actionButtons=translationNeeded?`<button class="btn btn-details" onclick="editNotificationSchedule('${it.id}')">Çevirileri tamamla</button>`:`<button class="btn btn-details" onclick="editNotificationSchedule('${it.id}')">Düzenle</button><button class="btn btn-shadow" onclick="toggleNotificationSchedule('${it.id}',${nextToggleState})">${nextToggleLabel}</button><button class="btn btn-notify" onclick="runNotificationScheduleNow('${it.id}')">Şimdi çalıştır</button>`;
+        html+=`<article class="schedule-card"><div class="schedule-card-head"><div><h3>${esc(localized.tr?.title||it.title||'Başlıksız plan')}</h3><span class="status-pill ${!translationNeeded&&it.is_active?'is-ok':'is-warn'}" style="margin-top:7px">${status}</span></div><span class="evidence-chip">TR + EN · ${sec} sn</span></div><p class="message">${translationNeeded?'Eski tek dilli plan güvenli biçimde durduruldu. TR ve EN varyantlarını tamamlayın.':`${esc(localized.tr?.body||'')} · EN: ${esc(localized.en?.title||'')}`}</p><div class="schedule-meta"><div><span>Hedef</span><strong>${esc(targetLabel)}</strong></div><div><span>Her gün</span><strong>${esc(it.schedule_time||'-')}</strong></div><div><span>Zaman dilimi</span><strong>${esc(it.timezone||'-')}</strong></div><div><span>Son gönderim</span><strong>${it.last_sent_at?esc(relativeAge(it.last_sent_at)):'Henüz yok'}</strong></div></div><div class="schedule-card-actions"><details class="schedule-action-menu"><summary>Plan işlemleri</summary><div class="schedule-action-popover">${actionButtons}</div></details><button class="btn btn-delete" onclick="deleteNotificationSchedule('${it.id}')">Planı sil</button></div></article>`;
       });
       html+='</div></div></section></div>';
       c.innerHTML=html;
@@ -2827,17 +2900,18 @@
       let payload;
       try{ payload=collectNotificationSchedulePayload(); }
       catch(error){ alert(error.message||error); return; }
-      const {title,body,durationSeconds}=payload;
+      const {contentByLocale,target,durationSeconds}=payload;
       const durationMs=durationSeconds*1000;
       const out=document.getElementById('notification-result');
       if(out){out.classList.add('is-visible');out.innerHTML='<div class="admin-state" style="min-height:110px"><div class="admin-state-icon">•••</div><div><h3>Gönderim başlatıldı</h3><p>WebSocket ve push teslim sonuçları bekleniyor.</p></div></div>';}
       cancelImmediateNotice();
       try{
-        const r=await fetch('/admin/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,body,durationMs,target:'all'})});
+        const r=await fetch('/admin/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contentByLocale,target,durationMs})});
         const raw=await r.text(); let x={}; try{x=raw?JSON.parse(raw):{};}catch{throw new Error(`Sunucu JSON dönmedi (HTTP ${r.status}).`);}
         if(!r.ok||!x.success) throw new Error(x.error||'Bildirim gönderimi başarısız');
         const err=x.push?.errorSummary||{}; const errTxt=Object.keys(err).length?` | hata: ${Object.entries(err).map(([k,v])=>`${k}=${v}`).join(', ')}`:'';
-        if(out) out.innerHTML=`<div class="insight-grid"><article class="insight-card"><h3>Canlı teslim</h3><p>${Number(x.wsDelivered||0)} aktif bağlantıya ulaştı.<span class="next">Kanal: WebSocket</span></p></article><article class="insight-card ${Number(x.push?.failureCount||0)>0?'is-warn':''}"><h3>Push teslimi</h3><p>${Number(x.push?.sentCount||0)} / ${Number(x.push?.tokenCount||0)} cihaz · ${Number(x.push?.failureCount||0)} hata${esc(errTxt)}<span class="next">Kesin sonuç gönderim yanıtıdır.</span></p></article></div>`;
+        const tr=x.localeSummary?.tr||{}; const en=x.localeSummary?.en||{}; const fallback=x.localeSummary?.fallback||{};
+        if(out) out.innerHTML=`<div class="insight-grid"><article class="insight-card"><h3>Kesin hedef</h3><p>${Number(x.audience?.recipientCount||0)} benzersiz kullanıcı.<span class="next">${Number(x.audience?.wsConnections||0)} WS · ${Number(x.audience?.pushDevices||0)} push cihazı</span></p></article><article class="insight-card"><h3>TR / EN teslimi</h3><p>TR: ${Number(tr.wsDelivered||0)} WS + ${Number(tr.pushSent||0)} push · EN: ${Number(en.wsDelivered||0)} WS + ${Number(en.pushSent||0)} push<span class="next">Fallback EN: ${Number(fallback.wsDelivered||0)+Number(fallback.pushDevices||0)}</span></p></article><article class="insight-card ${Number(x.push?.failureCount||0)>0?'is-warn':''}"><h3>Push sonucu</h3><p>${Number(x.push?.sentCount||0)} / ${Number(x.push?.tokenCount||0)} cihaz · ${Number(x.push?.failureCount||0)} hata${esc(errTxt)}<span class="next">Kesin sonuç gönderim yanıtıdır.</span></p></article></div>`;
         loadPushHealth(); loadPushDiagnostics();
       }catch(e){if(out) out.innerHTML=`<div class="admin-state" style="min-height:110px"><div class="admin-state-icon">!</div><div><h3>Gönderim tamamlanamadı</h3><p>${esc(e.message||e)}</p></div></div>`;}
     }
