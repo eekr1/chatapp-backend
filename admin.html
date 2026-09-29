@@ -147,6 +147,22 @@
     .admin-section-head h2, .admin-section-head h3 { margin:0; font-size:16px; }
     .admin-section-head p { margin:4px 0 0; color:var(--muted); font-size:12px; }
     .admin-section-body { padding:14px 15px; }
+    .case-title { display:flex; flex-direction:column; gap:4px; min-width:210px; }
+    .case-title strong { color:var(--text); font-size:13px; }
+    .case-title small, .case-meta { color:var(--muted); font-size:11px; line-height:1.45; }
+    .case-subject { max-width:390px; color:var(--muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+    .case-actions { display:flex; align-items:center; justify-content:flex-end; gap:7px; }
+    .workflow-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .workflow-field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+    .workflow-field.is-wide { grid-column:1/-1; }
+    .workflow-field label { color:var(--muted); font-size:10px; font-weight:700; letter-spacing:.045em; text-transform:uppercase; }
+    .workflow-field input, .workflow-field select, .workflow-field textarea { width:100%; }
+    .workflow-field textarea { min-height:88px; resize:vertical; }
+    .action-review { display:none; margin-top:10px; border:1px solid rgba(255,196,109,.38); border-radius:11px; padding:11px; background:rgba(255,196,109,.07); }
+    .action-review.is-open { display:block; }
+    .action-review p { margin:0 0 10px; color:#f5d9a8; font-size:12px; line-height:1.5; }
+    .evidence-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:999px; padding:4px 8px; color:var(--muted); background:rgba(255,255,255,.025); font-size:11px; font-weight:700; }
+    .evidence-chip.is-ready { color:#a8f1d2; border-color:rgba(69,216,155,.32); background:rgba(69,216,155,.07); }
     .admin-state { display:flex; align-items:flex-start; gap:12px; min-height:170px; padding:32px; border:1px dashed var(--border-strong); border-radius:14px; background:rgba(255,255,255,.012); }
     .admin-state-icon { display:flex; align-items:center; justify-content:center; width:42px; height:42px; flex:0 0 42px; border-radius:13px; color:#b7adff; background:var(--accent-soft); font-size:20px; }
     .admin-state h3 { margin:1px 0 6px; font-size:16px; }
@@ -320,7 +336,8 @@
       .overview-grid, .health-grid, .dashboard-detail-grid, .activity-pair { grid-template-columns:1fr; }
       .push-summary { grid-template-columns:1fr; }
       .dashboard-section-head { align-items:flex-start; flex-direction:column; }
-      .admin-summary-grid, .detail-hero, .detail-kv-grid { grid-template-columns:1fr; }
+      .admin-summary-grid, .detail-hero, .detail-kv-grid, .workflow-form { grid-template-columns:1fr; }
+      .workflow-field.is-wide { grid-column:auto; }
       .admin-state { min-height:140px; padding:22px 18px; }
       .detail-drawer { inset:0; width:100%; border-radius:0; border-left:0; border-right:0; }
       .detail-drawer-head { padding:12px; }
@@ -434,7 +451,7 @@
       </div>
       <button class="detail-drawer-close" type="button" aria-label="Detay panelini kapat" onclick="closeDetailDrawer()">&times;</button>
     </header>
-    <div id="detail-drawer-tabs" class="detail-drawer-tabs" role="tablist" aria-label="Profil detay bölümleri"></div>
+    <div id="detail-drawer-tabs" class="detail-drawer-tabs" role="tablist" aria-label="Detay bölümleri"></div>
     <div id="detail-drawer-body" class="detail-drawer-body"></div>
   </aside>
 
@@ -468,10 +485,15 @@
     let bulkBusy=false;
     let adminNavReturnFocus=null;
     let detailDrawerReturnFocus=null;
-    const SUBJECT_LABELS={connection:'Baglanti',message:'Mesaj',photo:'Foto',other:'Diger'};
-    const BREVO_LABELS={sent:'Gonderildi',failed:'Basarisiz',pending:'Bekliyor'};
-    const WORKFLOW_LABELS={new:'Yeni',investigating:'Inceleniyor',resolved:'Cozuldu',duplicate:'Tekrar',insufficient_info:'Bilgi yetersiz',archived:'Arsivlendi'};
-    const PRIORITY_LABELS={low:'Dusuk',normal:'Normal',high:'Yuksek',critical:'Kritik'};
+    let moderationRows=new Map();
+    const SUBJECT_LABELS={connection:'Bağlantı',message:'Mesaj',photo:'Fotoğraf',other:'Diğer'};
+    const BREVO_LABELS={sent:'Gönderildi',failed:'Başarısız',pending:'Bekliyor',unknown:'Bilinmiyor'};
+    const WORKFLOW_LABELS={new:'Yeni',investigating:'İnceleniyor',resolved:'Çözüldü',duplicate:'Tekrar kayıt',insufficient_info:'Bilgi yetersiz',archived:'Arşivlendi'};
+    const PRIORITY_LABELS={low:'Düşük',normal:'Normal',high:'Yüksek',critical:'Kritik'};
+    const REPORT_REASON_LABELS={spam:'Spam',harassment:'Taciz',hate:'Nefret söylemi',sexual:'Uygunsuz içerik',violence:'Şiddet',scam:'Dolandırıcılık',other:'Diğer'};
+    const MODERATION_STATUS_LABELS={received:'İnceleme bekliyor',investigating:'İnceleniyor',resolved:'Sonuçlandı',dismissed:'İşlem gerektirmedi'};
+    const EVIDENCE_LABELS={metadata_only:'Yalnız metadata',available:'Kanıt mevcut',unavailable:'Kanıt yok',expired:'Kanıt süresi doldu'};
+    const BAN_TYPE_LABELS={temp:'Süreli yasak',perm:'Kalıcı yasak',shadow:'Gölge yasak'};
     const LOCATION_STATE_LABELS={resolved:'Dogrulandi',unresolved:'Cozulemedi',pending:'Bekliyor',stale:'Bayat',provider_error:'Saglayici hatasi',not_available:'Veri yok'};
     const TAB_LABELS={
       dashboard:'Genel Bakış',
@@ -684,11 +706,122 @@
     function renderAppReportPagination(itemsCount){
       const start=itemsCount?((appReportPage-1)*appReportPageSize)+1:0;
       const end=itemsCount?start+itemsCount-1:0;
-      return `<div class="profiles-pagination"><div>Kayit: ${start}-${end} / ${appReportTotal} | Sayfa ${appReportPage}${appReportTotalPages?` / ${appReportTotalPages}`:''}</div><div class="controls"><button class="btn btn-refresh" ${appReportPage<=1?'disabled':''} onclick="changeAppReportPage(-1)">Onceki</button><button class="btn btn-refresh" ${!appReportTotalPages||appReportPage>=appReportTotalPages?'disabled':''} onclick="changeAppReportPage(1)">Sonraki</button></div></div>`;
+      return `<div class="profiles-pagination"><div>Kayıt: ${start}-${end} / ${appReportTotal} · Sayfa ${appReportPage}${appReportTotalPages?` / ${appReportTotalPages}`:''}</div><div class="controls"><button class="btn btn-refresh" ${appReportPage<=1?'disabled':''} onclick="changeAppReportPage(-1)">Önceki</button><button class="btn btn-refresh" ${!appReportTotalPages||appReportPage>=appReportTotalPages?'disabled':''} onclick="changeAppReportPage(1)">Sonraki</button></div></div>`;
+    }
+    function relativeAge(value){
+      const stamp=new Date(value).getTime();
+      if(!Number.isFinite(stamp)) return 'Zaman bilinmiyor';
+      const minutes=Math.max(0,Math.floor((Date.now()-stamp)/60000));
+      if(minutes<1) return 'Az önce';
+      if(minutes<60) return `${minutes} dk önce`;
+      const hours=Math.floor(minutes/60);
+      if(hours<24) return `${hours} sa önce`;
+      const days=Math.floor(hours/24);
+      return `${days} gün önce`;
+    }
+    function relativeUntil(value){
+      const stamp=new Date(value).getTime();
+      if(!Number.isFinite(stamp)) return 'Süre bilinmiyor';
+      const minutes=Math.ceil((stamp-Date.now())/60000);
+      if(minutes<=0) return 'Süresi dolmuş';
+      if(minutes<60) return `${minutes} dk kaldı`;
+      const hours=Math.ceil(minutes/60);
+      if(hours<24) return `${hours} sa kaldı`;
+      return `${Math.ceil(hours/24)} gün kaldı`;
+    }
+    function workflowTone(value){
+      const key=String(value||'').toLowerCase();
+      if(['resolved','dismissed'].includes(key)) return 'is-ok';
+      if(['new','received','investigating','insufficient_info'].includes(key)) return 'is-warn';
+      if(key==='critical') return 'is-danger';
+      return '';
+    }
+    function priorityTone(value){
+      const key=String(value||'').toLowerCase();
+      if(key==='critical') return 'is-danger';
+      if(key==='high') return 'is-warn';
+      return '';
+    }
+    function userReportEvidence(item){
+      const hasContent=!!(item?.subject_message_id||item?.subject_media_id);
+      const raw=String(item?.evidence_availability||'metadata_only').toLowerCase();
+      return {label:hasContent?'İçerik kanıtı mevcut':(EVIDENCE_LABELS[raw]||'Kanıt durumu bilinmiyor'),ready:hasContent||raw==='available'};
+    }
+    function moderationEmpty(title,description){
+      return `<div class="admin-section-body"><div class="admin-state"><div class="admin-state-icon">✓</div><div><h3>${esc(title)}</h3><p>${esc(description)}</p></div></div></div>`;
+    }
+    function renderUserReportsWorkspace(items){
+      const list=Array.isArray(items)?items:[];
+      moderationRows=new Map(list.map((item)=>[String(item.id),item]));
+      const waiting=list.filter((item)=>['received','new','investigating'].includes(String(item.moderation_status||'received').toLowerCase())).length;
+      const withEvidence=list.filter((item)=>userReportEvidence(item).ready).length;
+      const affected=new Set(list.map((item)=>item.reported_user_id).filter(Boolean)).size;
+      let html=`<div class="admin-page"><div class="admin-summary-grid">
+        <article class="admin-summary-card"><div class="label">Görünen vaka</div><div class="value">${list.length}</div><div class="meta">En güncel 50 kayıt içinde</div></article>
+        <article class="admin-summary-card"><div class="label">İnceleme bekleyen</div><div class="value">${waiting}</div><div class="meta">Karar verilmesi gereken vaka</div></article>
+        <article class="admin-summary-card"><div class="label">İçerik kanıtlı</div><div class="value">${withEvidence}</div><div class="meta">Mesaj veya medya kanıtı</div></article>
+        <article class="admin-summary-card"><div class="label">Etkilenen profil</div><div class="value">${affected}</div><div class="meta">Bu listedeki benzersiz hedefler</div></article>
+      </div><section class="admin-section"><div class="admin-section-head"><div><h2>Moderasyon vaka kuyruğu</h2><p>Önce vaka ve kanıtı inceleyin; yaptırım yalnız detay alanından uygulanır.</p></div><span class="status-pill ${waiting?'is-warn':'is-ok'}">${waiting?`${waiting} bekliyor`:'Kuyruk temiz'}</span></div>`;
+      if(!list.length) return `${html}${moderationEmpty('Bekleyen kullanıcı raporu yok','Yeni bir kullanıcı güvenliği vakası oluştuğunda bu kuyrukta görünecek.')}</section></div>`;
+      html+='<div class="table-scroll table-scroll--data"><table><thead><tr><th>Vaka</th><th>Taraflar</th><th>Kanıt</th><th>Durum</th><th>Yaş</th><th>İncele</th></tr></thead><tbody>';
+      list.forEach((item)=>{
+        const evidence=userReportEvidence(item);
+        const category=REPORT_REASON_LABELS[item.reason_category]||'Diğer';
+        const statusKey=String(item.moderation_status||'received').toLowerCase();
+        html+=`<tr><td><div class="case-title"><strong>${esc(category)}</strong><span class="case-subject">${esc(item.reason||'Açıklama paylaşılmadı.')}</span></div></td><td><div class="cell-stack"><span>${esc(item.reporter||'Anonim')} → ${esc(item.reported||'Anonim')}</span><small>Kimlikler güvenli biçimde maskeli</small></div></td><td><span class="evidence-chip ${evidence.ready?'is-ready':''}">${esc(evidence.label)}</span></td><td><span class="status-pill ${workflowTone(statusKey)}">${esc(MODERATION_STATUS_LABELS[statusKey]||'Durum bilinmiyor')}</span></td><td><div class="cell-stack"><span>${esc(relativeAge(item.created_at))}</span><small>${d(item.created_at)}</small></div></td><td><button class="btn btn-details" onclick="openUserReportDetails('${esc(item.id)}')">Vakayı incele</button></td></tr>`;
+      });
+      return `${html}</tbody></table></div></section></div>`;
+    }
+    function renderAppReportsWorkspace(items){
+      const list=Array.isArray(items)?items:[];
+      moderationRows=new Map(list.map((item)=>[String(item.id),item]));
+      const urgent=list.filter((item)=>['high','critical'].includes(String(item.priority||'normal').toLowerCase())).length;
+      const repeated=list.filter((item)=>Number(item.repeat_count||1)>1).length;
+      const withMedia=list.filter((item)=>Number(item.media_count||0)>0).length;
+      let html=`<div class="admin-page"><div class="admin-summary-grid">
+        <article class="admin-summary-card"><div class="label">Açık rapor</div><div class="value">${appReportTotal}</div><div class="meta">Arşiv dışındaki tüm kayıtlar</div></article>
+        <article class="admin-summary-card"><div class="label">Yüksek öncelik</div><div class="value">${urgent}</div><div class="meta">Bu sayfadaki yüksek ve kritik</div></article>
+        <article class="admin-summary-card"><div class="label">Tekrarlanan sorun</div><div class="value">${repeated}</div><div class="meta">Birden fazla rapor kümesi</div></article>
+        <article class="admin-summary-card"><div class="label">Medya kanıtlı</div><div class="value">${withMedia}</div><div class="meta">Bu sayfadaki ekli kanıtlar</div></article>
+      </div><section class="admin-section"><div class="admin-section-head"><div><h2>Uygulama vaka kuyruğu</h2><p>Etki, tekrar, kanıt ve iş akışı durumuna göre sorunları sonuçlandırın.</p></div><span class="status-pill">${appReportTotal} açık rapor</span></div>`;
+      if(!list.length) return `${html}${moderationEmpty('Açık uygulama raporu yok','Arşiv dışındaki uygulama sorunları burada vaka olarak listelenecek.')}${renderAppReportPagination(0)}</section></div>`;
+      html+='<div class="table-scroll table-scroll--data"><table><thead><tr><th>Vaka</th><th>İş akışı</th><th>Etki</th><th>Kanıt</th><th>Yaş</th><th>İncele</th></tr></thead><tbody>';
+      list.forEach((item)=>{
+        const statusKey=String(item.workflow_status||'new').toLowerCase();
+        const priorityKey=String(item.priority||'normal').toLowerCase();
+        html+=`<tr><td><div class="case-title"><strong>${esc(subject(item.subject))}</strong><small>${esc(item.username_snapshot||'Anonim kullanıcı')}</small></div></td><td><div class="cell-stack"><span class="status-pill ${workflowTone(statusKey)}">${esc(WORKFLOW_LABELS[statusKey]||'Durum bilinmiyor')}</span><small><span class="status-pill ${priorityTone(priorityKey)}">${esc(PRIORITY_LABELS[priorityKey]||'Normal')}</span> · ${esc(item.workflow_owner||'Atanmamış')}</small></div></td><td><div class="cell-stack"><span>${Number(item.repeat_count||1)} rapor · ${Number(item.affected_users||0)} kullanıcı</span><small>${Number(item.repeat_count||1)>1?'Tekrarlanan sorun':'Tekil bildirim'}</small></div></td><td><span class="evidence-chip ${Number(item.media_count||0)>0?'is-ready':''}">${Number(item.media_count||0)>0?`${Number(item.media_count)} medya`:'Medya yok'}</span></td><td><div class="cell-stack"><span>${esc(relativeAge(item.created_at))}</span><small>${d(item.created_at)}</small></div></td><td><button class="btn btn-details" onclick="openSupportDetails('${esc(item.id)}')">Vakayı incele</button></td></tr>`;
+      });
+      return `${html}</tbody></table></div><div class="admin-section-body">${renderAppReportPagination(list.length)}</div></section></div>`;
+    }
+    function renderBansWorkspace(items){
+      const list=Array.isArray(items)?items:[];
+      moderationRows=new Map();
+      list.forEach((item,index)=>moderationRows.set(`ban-${index}`,item));
+      const temp=list.filter((item)=>item.ban_type==='temp').length;
+      const permanent=list.filter((item)=>item.ban_type==='perm').length;
+      const shadow=list.filter((item)=>item.ban_type==='shadow').length;
+      let html=`<div class="admin-page"><div class="admin-summary-grid">
+        <article class="admin-summary-card"><div class="label">Aktif yaptırım</div><div class="value">${list.length}</div><div class="meta">Şu anda uygulanan kayıtlar</div></article>
+        <article class="admin-summary-card"><div class="label">Süreli</div><div class="value">${temp}</div><div class="meta">Bitiş zamanı bulunanlar</div></article>
+        <article class="admin-summary-card"><div class="label">Kalıcı</div><div class="value">${permanent}</div><div class="meta">Süresiz normal yasak</div></article>
+        <article class="admin-summary-card"><div class="label">Gölge</div><div class="value">${shadow}</div><div class="meta">Görünmez kısıtlamalar</div></article>
+      </div><section class="admin-section"><div class="admin-section-head"><div><h2>Aktif yaptırımlar</h2><p>Yaptırım türü, süresi, gerekçesi ve kaldırma kararını tek yüzeyden yönetin.</p></div><span class="status-pill ${list.length?'is-warn':'is-ok'}">${list.length?`${list.length} aktif`:'Aktif yaptırım yok'}</span></div>`;
+      if(!list.length) return `${html}${moderationEmpty('Aktif yaptırım bulunmuyor','Şu anda süreli, kalıcı veya gölge yasaklı profil yok. Geçmiş kaldırma işlemleri Audit Log ekranında korunur.')}</section></div>`;
+      html+='<div class="table-scroll table-scroll--data"><table><thead><tr><th>Profil</th><th>Yaptırım</th><th>Süre</th><th>Gerekçe</th><th>İncele</th></tr></thead><tbody>';
+      list.forEach((item,index)=>{
+        const type=String(item.ban_type||'').toLowerCase();
+        html+=`<tr><td><div class="case-title"><strong>${esc(item.nickname||'Bilinmeyen profil')}</strong><small>Yönetilen kullanıcı hesabı</small></div></td><td><span class="status-pill ${type==='perm'?'is-danger':'is-warn'}">${esc(BAN_TYPE_LABELS[type]||'Bilinmeyen yaptırım')}</span></td><td><div class="cell-stack"><span>${item.ban_until?d(item.ban_until):'Süresiz'}</span><small>${item.ban_until?relativeUntil(item.ban_until):'Manuel kaldırma gerekir'}</small></div></td><td><span class="case-subject">${esc(item.reason||'Gerekçe kaydedilmemiş')}</span></td><td><button class="btn btn-details" onclick="openBanDetails('ban-${index}')">Yaptırımı incele</button></td></tr>`;
+      });
+      return `${html}</tbody></table></div></section></div>`;
+    }
+    function renderModerationWorkspace(container,tab,items){
+      if(tab==='reports') container.innerHTML=renderUserReportsWorkspace(items);
+      else if(tab==='app_reports') container.innerHTML=renderAppReportsWorkspace(items);
+      else container.innerHTML=renderBansWorkspace(items);
     }
 
     function isBulkTab(){
-      return currentTab==='reports'||currentTab==='bans'||currentTab==='profiles';
+      return currentTab==='profiles';
     }
     function normalizeBulkUserId(v){
       const id=String(v||'').trim().toLowerCase();
@@ -872,11 +1005,17 @@
     }
 
     function applySearchUI(){
-      const show=currentTab==='profiles'||currentTab==='app_reports';
+      const placeholders={
+        profiles:'Kullanıcı adı veya görünen isim ara...',
+        reports:'Kategori, durum veya kullanıcı ara...',
+        app_reports:'Konu, açıklama, e-posta veya durum ara...',
+        bans:'Kullanıcı, gerekçe veya yaptırım türü ara...'
+      };
+      const show=Object.prototype.hasOwnProperty.call(placeholders,currentTab);
       const w=document.getElementById('search-wrap');const i=document.getElementById('search-input');
       w.style.display=show?'flex':'none';
       if(!show) return;
-      i.placeholder=currentTab==='profiles'?'Kullanici adi veya gorunen isim ara...':'Konu, aciklama, e-posta veya durum ara...';
+      i.placeholder=placeholders[currentTab];
     }
     function applyTabChrome(){
       const showDashboard=currentTab==='dashboard';
@@ -2404,7 +2543,7 @@
         const r=await fetch(`/admin/data?${qs.toString()}`); const x=await r.json(); if(!r.ok) throw new Error(x.error||'Veri alinamadi.'); const items=Array.isArray(x.items)?x.items:[];
         const allowBulk=isBulkTab();
         bulkVisibleUserIds=allowBulk?items.map((it)=>getBulkUserIdFromRow(it)).filter(Boolean):[];
-        if(!items.length&&currentTab!=='profiles'){
+        if(!items.length&&currentTab!=='profiles'&&!['reports','app_reports','bans'].includes(currentTab)){
           c.innerHTML=allowBulk?`${renderBulkToolbar()}<p style="padding:16px">Kayit bulunamadi.</p>`:'<p style="padding:16px">Kayit bulunamadi.</p>';
           if(allowBulk) requestAnimationFrame(updateBulkSelectionUI);
           return;
@@ -2424,6 +2563,10 @@
           appReportPageSize=Math.max(1,Math.min(100,Number(p.pageSize)||appReportPageSize));
           appReportTotal=Math.max(0,Number(p.total)||0);
           appReportTotalPages=Math.max(0,Number(p.totalPages)||0);
+        }
+        if(['reports','app_reports','bans'].includes(currentTab)){
+          renderModerationWorkspace(c,currentTab,items);
+          return;
         }
         let h='';
         if(currentTab==='profiles'){
@@ -2456,14 +2599,10 @@
               h+=`<td class="bulk-select-cell"><input type="checkbox" data-bulk-id="${esc(bulkUserId)}" ${checked} ${disabled} onclick="toggleBulkItem('${bulkUserId}',this.checked)" aria-label="Sec"></td>`;
             }
             if(currentTab==='reports'){
-              const rid=it.reported_user_id||'';
               const evidence=[it.evidence_availability||'metadata_only',it.subject_message_id?'mesaj':'',it.subject_media_id?'medya':''].filter(Boolean).join(' / ');
-              h+=`<td>${d(it.created_at)}</td><td>${esc(it.reporter||'Anon')}</td><td>${esc(it.reported||'Anon')}</td><td><strong>${esc(it.reason_category||'other')}</strong><br/>${esc(it.reason||'')}</td><td>${esc(evidence)}</td><td>${esc(it.moderation_status||'received')}</td><td>
-                <button class="btn btn-ban" onclick="actionBan('${rid}',1,'Rapor: ${esc(it.reason||'')}')">24s</button>
-                <button class="btn btn-perm" onclick="actionBan('${rid}',0,'Rapor: ${esc(it.reason||'')}')">Kalici</button>
-                <button class="btn btn-shadow" onclick="actionShadow('${rid}','Rapor: ${esc(it.reason||'')}')">Golge</button></td>`;
+              h+=`<td>${d(it.created_at)}</td><td>${esc(it.reporter||'Anon')}</td><td>${esc(it.reported||'Anon')}</td><td><strong>${esc(it.reason_category||'other')}</strong><br/>${esc(it.reason||'')}</td><td>${esc(evidence)}</td><td>${esc(it.moderation_status||'received')}</td><td><button class="btn btn-details" onclick="openUserReportDetails('${esc(it.id)}')">Vakayı incele</button></td>`;
             }else if(currentTab==='bans'){
-              h+=`<td>${esc(it.nickname||'Bilinmiyor')}</td><td><span class="badge ${esc(it.ban_type)}">${esc((it.ban_type||'').toUpperCase())}</span></td><td>${it.ban_until?new Date(it.ban_until).toLocaleString():'SURESIZ'}</td><td>${esc(it.reason||'')}</td><td><button class="btn btn-unban" onclick="actionUnban('${it.user_id}')">Yasagi Kaldir</button></td>`;
+              h+=`<td>${esc(it.nickname||'Bilinmiyor')}</td><td><span class="badge ${esc(it.ban_type)}">${esc(BAN_TYPE_LABELS[it.ban_type]||'Bilinmiyor')}</span></td><td>${it.ban_until?d(it.ban_until):'Süresiz'}</td><td>${esc(it.reason||'')}</td><td>Detay alanından yönetilir</td>`;
             }else if(currentTab==='profiles'){
               const location=[it.location_city,it.location_country].filter(Boolean).join(', ')||LOCATION_STATE_LABELS[it.location_state]||'Veri yok';
               h+=`<td><div class="profile-identity"><strong title="${esc(it.username||'-')}">${esc(it.display_name||it.username||'-')}</strong><span title="${esc(it.username||'')}">@${esc(it.username||'-')}</span>${renderProfilePlatformIcon(it.last_platform)}</div></td><td><div class="cell-stack"><span class="status-pill ${profileStateTone(it.account_state)}">${esc(profileStateLabel(it.account_state))}</span><small>${esc(it.active_ban_until?`Bitiş: ${d(it.active_ban_until)}`:'')}</small></div></td><td><div class="cell-stack"><span>${esc(location)}</span><small>${esc(LOCATION_STATE_LABELS[it.location_state]||'Durum bilinmiyor')}</small></div></td><td><div class="cell-stack"><span>${d(it.last_seen_at)}</span><small>Kayıt: ${d(it.created_at)}</small></div></td><td><button class="btn btn-details" onclick="openProfileDetails('${it.id}','${esc(it.username||'-')}')">Profili incele</button></td>`;
@@ -2648,44 +2787,95 @@
       }
     }
 
+    function openUserReportDetails(id){
+      const item=moderationRows.get(String(id));
+      if(!item) return;
+      const evidence=userReportEvidence(item);
+      const category=REPORT_REASON_LABELS[item.reason_category]||'Diğer';
+      const statusKey=String(item.moderation_status||'received').toLowerCase();
+      const safeId=String(item.id||'report').replace(/[^a-zA-Z0-9_-]/g,'');
+      const overviewHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">Vaka durumu</span><span class="status-pill ${workflowTone(statusKey)}">${esc(MODERATION_STATUS_LABELS[statusKey]||'Durum bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Kategori</span><span class="value">${esc(category)}</span></div><div class="detail-kv"><span class="label">Vaka yaşı</span><span class="value">${esc(relativeAge(item.created_at))}</span></div></div><section class="detail-card"><h3>Vaka özeti</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Raporlayan</span><span class="value">${esc(item.reporter||'Anonim')}</span></div><div class="detail-kv"><span class="label">Raporlanan</span><span class="value">${esc(item.reported||'Anonim')}</span></div><div class="detail-kv"><span class="label">Oluşturulma</span><span class="value">${d(item.created_at)}</span></div><div class="detail-kv"><span class="label">Sorumlu</span><span class="value">${esc(item.owner_admin||'Atanmamış')}</span></div></div><div style="margin-top:10px" class="case-subject">${esc(item.reason||'Açıklama paylaşılmadı.')}</div>${item.reported_user_id?`<div style="margin-top:12px"><button class="btn btn-refresh" onclick="openProfileDetails('${esc(item.reported_user_id)}','${esc(item.reported||'profil')}')">Raporlanan profili aç</button></div>`:''}</section>`;
+      const evidenceHtml=`<section class="detail-card"><h3>Kanıt durumu</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Kanıt seviyesi</span><span class="value"><span class="evidence-chip ${evidence.ready?'is-ready':''}">${esc(evidence.label)}</span></span></div><div class="detail-kv"><span class="label">Mesaj kanıtı</span><span class="value">${item.subject_message_id?'Mevcut':'Yok'}</span></div><div class="detail-kv"><span class="label">Medya kanıtı</span><span class="value">${item.subject_media_id?'Mevcut':'Yok'}</span></div><div class="detail-kv"><span class="label">Konuşma referansı</span><span class="value">${esc(maskAdminIdentifier(item.conversation_id))}</span></div></div><p class="state-note" style="margin-top:10px">Kanıt içeriği bu endpoint tarafından sunulmuyorsa karar yalnız metadata sinyaline dayandırılmamalıdır.</p></section>`;
+      const actionHtml=`<section class="danger-zone"><h3>Yaptırım kararı</h3><p class="state-note">Yaptırım doğrudan listeden uygulanmaz. Türü ve gerekçeyi girip hedefi son kez doğrulayın.</p><div class="workflow-form"><div class="workflow-field"><label for="report-sanction-${safeId}">Yaptırım türü</label><select id="report-sanction-${safeId}"><option value="temp">24 saat süreli yasak</option><option value="perm">Kalıcı yasak</option><option value="shadow">Gölge yasak</option></select></div><div class="workflow-field is-wide"><label for="report-reason-${safeId}">Operasyon gerekçesi</label><textarea id="report-reason-${safeId}" placeholder="Kanıt ve karar gerekçesini en az 3 karakterle yazın"></textarea></div></div><button class="btn btn-ban" style="margin-top:10px" onclick="prepareUserReportSanction('${esc(item.id)}')">Kararı gözden geçir</button><div id="report-review-${safeId}" class="action-review"><p id="report-review-text-${safeId}"></p><div class="case-actions" style="justify-content:flex-start"><button class="btn btn-refresh" onclick="cancelUserReportSanction('${esc(item.id)}')">Geri dön</button><button class="btn btn-perm" onclick="confirmUserReportSanction('${esc(item.id)}')">Onayla ve uygula</button></div></div></section>`;
+      openDetailDrawer({title:`${category} vakası`,subtitle:`${item.reporter||'Anonim'} → ${item.reported||'Anonim'} · ${MODERATION_STATUS_LABELS[statusKey]||'Durum bilinmiyor'}`,avatar:'!',tabs:[{id:'case',label:'Vaka',html:overviewHtml},{id:'evidence',label:'Kanıt',html:evidenceHtml},{id:'action',label:'Karar',html:actionHtml}]});
+    }
+    function prepareUserReportSanction(id){
+      const item=moderationRows.get(String(id));
+      if(!item) return;
+      const safeId=String(item.id||'report').replace(/[^a-zA-Z0-9_-]/g,'');
+      const type=document.getElementById(`report-sanction-${safeId}`)?.value||'temp';
+      const reason=(document.getElementById(`report-reason-${safeId}`)?.value||'').trim();
+      if(reason.length<3){ alert('En az 3 karakterlik operasyon gerekçesi gerekli.'); return; }
+      const review=document.getElementById(`report-review-${safeId}`);
+      const text=document.getElementById(`report-review-text-${safeId}`);
+      if(text) text.textContent=`Hedef: ${item.reported||'Maskeli profil'} · Karar: ${BAN_TYPE_LABELS[type]||type} · Gerekçe: ${reason}`;
+      review?.classList.add('is-open');
+    }
+    function cancelUserReportSanction(id){
+      const safeId=String(id||'report').replace(/[^a-zA-Z0-9_-]/g,'');
+      document.getElementById(`report-review-${safeId}`)?.classList.remove('is-open');
+    }
+    async function confirmUserReportSanction(id){
+      const item=moderationRows.get(String(id));
+      if(!item?.reported_user_id) return;
+      const safeId=String(item.id||'report').replace(/[^a-zA-Z0-9_-]/g,'');
+      const type=document.getElementById(`report-sanction-${safeId}`)?.value||'temp';
+      const reason=(document.getElementById(`report-reason-${safeId}`)?.value||'').trim();
+      if(reason.length<3) return;
+      try{
+        await apiPost('/admin/ban',{userId:item.reported_user_id,days:type==='temp'?1:0,type:type==='shadow'?'shadow':undefined,reason});
+        closeDetailDrawer();
+      }catch(error){ alert(`Yaptırım uygulanamadı: ${error.message||error}`); }
+    }
+    function openBanDetails(key){
+      const item=moderationRows.get(String(key));
+      if(!item) return;
+      const type=String(item.ban_type||'').toLowerCase();
+      const safeKey=String(key).replace(/[^a-zA-Z0-9_-]/g,'');
+      const overviewHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">Yaptırım</span><span class="status-pill ${type==='perm'?'is-danger':'is-warn'}">${esc(BAN_TYPE_LABELS[type]||'Bilinmeyen yaptırım')}</span></div><div class="detail-kv"><span class="label">Hedef profil</span><span class="value">${esc(item.nickname||'Bilinmeyen profil')}</span></div><div class="detail-kv"><span class="label">Bitiş</span><span class="value">${item.ban_until?d(item.ban_until):'Süresiz'}</span></div></div><section class="detail-card"><h3>Karar kaydı</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Uygulayan</span><span class="value">${esc(item.created_by||'Yönetici')}</span></div><div class="detail-kv"><span class="label">Başlangıç</span><span class="value">${d(item.created_at)}</span></div></div><div class="case-subject" style="margin-top:10px">${esc(item.reason||'Gerekçe kaydedilmemiş')}</div></section>`;
+      const removalHtml=`<section class="danger-zone"><h3>Yaptırımı kaldır</h3><p class="state-note">Bu işlem aktif yasağı kaldırır ve gerekçeyi yönetim audit kaydına ekler.</p><div class="workflow-field"><label for="unban-reason-${safeKey}">Kaldırma gerekçesi</label><textarea id="unban-reason-${safeKey}" placeholder="Neden kaldırıldığını açıklayın"></textarea></div><label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12px"><input id="unban-confirm-${safeKey}" type="checkbox"> <span>Hedefin <strong>${esc(item.nickname||'bu profil')}</strong> olduğunu ve aktif yaptırımın kaldırılacağını onaylıyorum.</span></label><button class="btn btn-unban" style="margin-top:10px" onclick="confirmUnbanFromDrawer('${esc(key)}')">Gerekçeyle kaldır</button></section>`;
+      openDetailDrawer({title:item.nickname||'Yaptırım',subtitle:BAN_TYPE_LABELS[type]||'Aktif yaptırım',avatar:'!',tabs:[{id:'overview',label:'Yaptırım',html:overviewHtml},{id:'remove',label:'Kaldırma',html:removalHtml}]});
+    }
+    async function confirmUnbanFromDrawer(key){
+      const item=moderationRows.get(String(key));
+      if(!item?.user_id) return;
+      const safeKey=String(key).replace(/[^a-zA-Z0-9_-]/g,'');
+      const reason=(document.getElementById(`unban-reason-${safeKey}`)?.value||'').trim();
+      const confirmed=!!document.getElementById(`unban-confirm-${safeKey}`)?.checked;
+      if(reason.length<3){ alert('En az 3 karakterlik kaldırma gerekçesi gerekli.'); return; }
+      if(!confirmed){ alert('Hedef ve etki onayını işaretleyin.'); return; }
+      try{ await apiPost('/admin/unban',{userId:item.user_id,reason}); closeDetailDrawer(); }
+      catch(error){ alert(`Yaptırım kaldırılamadı: ${error.message||error}`); }
+    }
+
     async function openSupportDetails(id){
-      openModal('Uygulama Raporu Detayi','<p>Yukleniyor...</p>');
+      openDetailDrawer({title:'Uygulama raporu',subtitle:'Vaka bilgileri yükleniyor',avatar:'!',tabs:[],loading:true});
       try{
         const r=await fetch(`/admin/support-report/${id}`); const x=await r.json(); if(!r.ok) throw new Error(x.error||'hata');
         const it=x.item||{}; const media=Array.isArray(x.media)?x.media:[]; const history=Array.isArray(x.history)?x.history:[]; const group=x.group||{};
-        let body=`<section class="detail-section"><h3>Problem ve Operasyon Ozeti</h3><div class="grid">
-          <div class="item"><strong>Rapor ID</strong>${esc(it.id||'-')}</div>
-          <div class="item"><strong>Konu</strong>${esc(subject(it.subject))}</div>
-          <div class="item"><strong>Operasyon Durumu</strong>${esc(WORKFLOW_LABELS[it.workflow_status]||it.workflow_status||'Yeni')}</div>
-          <div class="item"><strong>Oncelik</strong>${esc(PRIORITY_LABELS[it.priority]||it.priority||'Normal')}</div>
-          <div class="item"><strong>Sahip</strong>${esc(it.workflow_owner||'Atanmadi')}</div>
-          <div class="item"><strong>Etki / Tekrar</strong>${Number(group.report_count||1)} rapor / ${Number(group.affected_users||0)} kullanici</div>
-          <div class="item"><strong>Ilk / Son Gorulme</strong>${d(group.first_seen)} / ${d(group.last_seen)}</div>
-          <div class="item"><strong>Server Kayit Zamani</strong>${d(it.created_at)}</div>
-          <div class="item"><strong>Kullanici</strong>${esc(it.username_snapshot||'-')}</div>
-          <div class="item"><strong>E-posta Teslimi</strong>${esc(brevo(it.delivery_status))}</div>
-          <div class="item"><strong>App Versiyon</strong>${esc(it.app_version||'-')}</div>
-          <div class="item"><strong>Platform</strong>${esc(it.platform||'-')}</div>
-          <div class="item"><strong>Cihaz Modeli</strong>${esc(it.device_model||'-')}</div>
-          <div class="item"><strong>Istemci Bildirim Zamani</strong>${d(it.client_timestamp)}</div>
-          <div class="item"><strong>Ag Tipi</strong>${esc(it.network_type||'-')}</div>
-          <div class="item"><strong>Son Hata Kodu</strong>${esc(it.last_error_code||'-')}</div>
-        </div><div style="margin-top:10px"><button class="btn btn-details" onclick="actionSupportWorkflow('${it.id}',${Number(it.workflow_revision||1)},'${esc(it.workflow_status||'new')}','${esc(it.priority||'normal')}')">Durum / Not Guncelle</button> <button class="btn btn-delete" onclick="archiveSupportReport('${it.id}',${Number(it.workflow_revision||1)},'${esc(it.priority||'normal')}')">Arsivle</button></div></section>
-        <section class="detail-section"><h3>Kullanici Bildirimi</h3><div class="desc">${esc(it.description||'-')}</div></section>
-        <section class="detail-section"><h3>Medya Kaniti</h3>`;
-        if(!media.length) body+='<p>Medya yok.</p>';
+        const safeId=String(it.id||id).replace(/[^a-zA-Z0-9_-]/g,'');
+        const statusKey=String(it.workflow_status||'new').toLowerCase();
+        const priorityKey=String(it.priority||'normal').toLowerCase();
+        const overviewHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">İş akışı</span><span class="status-pill ${workflowTone(statusKey)}">${esc(WORKFLOW_LABELS[statusKey]||'Durum bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Öncelik</span><span class="status-pill ${priorityTone(priorityKey)}">${esc(PRIORITY_LABELS[priorityKey]||'Normal')}</span></div><div class="detail-kv"><span class="label">Etki</span><span class="value">${Number(group.report_count||1)} rapor · ${Number(group.affected_users||0)} kullanıcı</span></div></div><section class="detail-card"><h3>Vaka özeti</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Konu</span><span class="value">${esc(subject(it.subject))}</span></div><div class="detail-kv"><span class="label">Kullanıcı</span><span class="value">${esc(it.username_snapshot||'Anonim')}</span></div><div class="detail-kv"><span class="label">İlk görülme</span><span class="value">${d(group.first_seen||it.created_at)}</span></div><div class="detail-kv"><span class="label">Son görülme</span><span class="value">${d(group.last_seen||it.updated_at)}</span></div><div class="detail-kv"><span class="label">Sorumlu</span><span class="value">${esc(it.workflow_owner||'Atanmamış')}</span></div><div class="detail-kv"><span class="label">E-posta teslimi</span><span class="value">${esc(brevo(it.delivery_status))}</span></div></div></section>`;
+        const reportHtml=`<section class="detail-card"><h3>Kullanıcı bildirimi</h3><div class="desc">${esc(it.description||'Açıklama paylaşılmadı.')}</div><div class="detail-kv-grid" style="margin-top:10px"><div class="detail-kv"><span class="label">Bildirim zamanı</span><span class="value">${d(it.client_timestamp||it.created_at)}</span></div><div class="detail-kv"><span class="label">Sunucu kayıt zamanı</span><span class="value">${d(it.created_at)}</span></div></div></section>`;
+        let evidenceHtml='<section class="detail-card"><h3>Medya kanıtı</h3>';
+        if(!media.length) evidenceHtml+='<div class="admin-state"><div class="admin-state-icon">○</div><div><h3>Medya eklenmemiş</h3><p>Bu vaka kullanıcı açıklaması ve teknik sinyaller üzerinden incelenebilir.</p></div></div>';
         else{
-          body+='<div class="media">';
-          media.forEach(m=>{
+          evidenceHtml+='<div class="media">';
+          media.forEach((m)=>{
             const src=`/admin/support-report-media/${m.id}/content`;
-            const prev=m.media_kind==='video'?`<video controls src="${src}"></video>`:`<img src="${src}" alt="${esc(m.file_name||'medya')}" />`;
-            body+=`<div class="m">${prev}<div style="font-size:12px;color:#9aa8c0;margin-top:6px"><strong>${esc(m.file_name||'-')}</strong><br/>${esc(m.mime_type||'-')} | ${(Number(m.size_bytes||0)/1024).toFixed(1)} KB</div></div>`;
+            const preview=m.media_kind==='video'?`<video controls src="${src}"></video>`:`<img src="${src}" alt="${esc(m.file_name||'medya')}" />`;
+            evidenceHtml+=`<div class="m">${preview}<div class="case-meta" style="margin-top:6px"><strong>${esc(m.file_name||'Kanıt')}</strong><br>${esc(m.mime_type||'Tür bilinmiyor')} · ${(Number(m.size_bytes||0)/1024).toFixed(1)} KB</div></div>`;
           });
-          body+='</div>';
+          evidenceHtml+='</div>';
         }
-        body+=`</section><section class="detail-section"><h3>Islem Gecmisi</h3>${history.length?`<ul class="list-compact">${history.map((row)=>`<li>${d(row.created_at)} | ${esc(row.actor_admin||'-')} | ${esc(row.from_status||'-')} → ${esc(row.to_status||'-')} | ${esc(row.reason||'-')}</li>`).join('')}</ul>`:'<p class="state-note">Henuz workflow islemi yok.</p>'}</section><details class="technical-evidence"><summary>Maskeli teknik kaniti ac</summary><div class="grid"><div class="item"><strong>Maskeli E-posta</strong>${esc(it.contact_email||'Veri yok')}</div><div class="item"><strong>Maskeli IP</strong>${esc(it.ip||'Veri yok')}</div><div class="item"><strong>Maskeli User-Agent</strong>${esc(it.user_agent||'Veri yok')}</div><div class="item"><strong>Maskeli Brevo ID</strong>${esc(it.brevo_message_id||'Veri yok')}</div><div class="item"><strong>Teslim Hatasi</strong>${esc(it.brevo_error||'Yok')}</div><div class="item"><strong>Fingerprint</strong>${esc(it.problem_fingerprint?`${String(it.problem_fingerprint).slice(0,12)}…`:'Standalone')}</div></div></details>`;
-        document.getElementById('m_body').innerHTML=body;
-      }catch(e){document.getElementById('m_body').innerHTML=`<p>Detay yuklenemedi: ${esc(e.message||e)}</p>`;}
+        evidenceHtml+=`</section><section class="detail-card"><h3>İşlem geçmişi</h3>${history.length?`<ul class="detail-list">${history.map((row)=>`<li><strong>${d(row.created_at)} · ${esc(row.actor_admin||'Yönetici')}</strong><br>${esc(WORKFLOW_LABELS[row.from_status]||row.from_status||'Başlangıç')} → ${esc(WORKFLOW_LABELS[row.to_status]||row.to_status||'Durum bilinmiyor')}<br>${esc(row.reason||'Gerekçe kaydedilmemiş')}</li>`).join('')}</ul>`:'<p class="state-note">Henüz iş akışı işlemi yok.</p>'}</section>`;
+        const statusOptions=Object.entries(WORKFLOW_LABELS).map(([value,label])=>`<option value="${value}" ${value===statusKey?'selected':''}>${esc(label)}</option>`).join('');
+        const priorityOptions=Object.entries(PRIORITY_LABELS).map(([value,label])=>`<option value="${value}" ${value===priorityKey?'selected':''}>${esc(label)}</option>`).join('');
+        const workflowHtml=`<section class="detail-card"><h3>İş akışını güncelle</h3><div class="workflow-form"><div class="workflow-field"><label for="support-status-${safeId}">Yeni durum</label><select id="support-status-${safeId}">${statusOptions}</select></div><div class="workflow-field"><label for="support-priority-${safeId}">Öncelik</label><select id="support-priority-${safeId}">${priorityOptions}</select></div><div class="workflow-field is-wide"><label for="support-owner-${safeId}">Sorumlu</label><input id="support-owner-${safeId}" value="${esc(it.workflow_owner||'')}" placeholder="Yönetici veya ekip adı"></div><div class="workflow-field is-wide"><label for="support-note-${safeId}">Not ve gerekçe</label><textarea id="support-note-${safeId}" placeholder="Kararın gerekçesini yazın">${esc(it.workflow_note||'')}</textarea></div></div><button class="btn btn-details" style="margin-top:10px" onclick="saveSupportWorkflowFromDrawer('${esc(it.id)}',${Number(it.workflow_revision||1)})">İş akışını güncelle</button></section><section class="danger-zone"><h3>Raporu arşivle</h3><p class="state-note">Arşivleme geri alınabilir; kayıt ve işlem geçmişi silinmez.</p><div class="workflow-field"><label for="support-archive-reason-${safeId}">Arşiv gerekçesi</label><textarea id="support-archive-reason-${safeId}" placeholder="Neden arşivlendiğini açıklayın"></textarea></div><label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12px"><input id="support-archive-confirm-${safeId}" type="checkbox"> <span>Bu raporun açık vaka kuyruğundan kaldırılacağını onaylıyorum.</span></label><button class="btn btn-delete" style="margin-top:10px" onclick="archiveSupportReportFromDrawer('${esc(it.id)}',${Number(it.workflow_revision||1)},'${esc(priorityKey)}')">Gerekçeyle arşivle</button></section>`;
+        const technicalHtml=`<section class="detail-card"><h3>Ortam özeti</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Platform</span><span class="value">${esc(it.platform||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Uygulama sürümü</span><span class="value">${esc(it.app_version||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Cihaz modeli</span><span class="value">${esc(it.device_model||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Ağ türü</span><span class="value">${esc(it.network_type||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Son hata kodu</span><span class="value">${esc(it.last_error_code||'Yok')}</span></div><div class="detail-kv"><span class="label">Maskeli rapor kimliği</span><span class="value">${esc(maskAdminIdentifier(it.id))}</span></div></div></section><details class="technical-evidence"><summary>Maskeli teknik kanıtı göster</summary><div class="detail-kv-grid" style="margin-top:10px"><div class="detail-kv"><span class="label">Maskeli e-posta</span><span class="value">${esc(it.contact_email||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Maskeli IP</span><span class="value">${esc(it.ip||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Maskeli User-Agent</span><span class="value">${esc(it.user_agent||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Maskeli teslim kimliği</span><span class="value">${esc(it.brevo_message_id||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Teslim hatası</span><span class="value">${esc(it.brevo_error||'Yok')}</span></div><div class="detail-kv"><span class="label">Sorun kümesi</span><span class="value">${esc(it.problem_fingerprint?`${String(it.problem_fingerprint).slice(0,12)}…`:'Tekil kayıt')}</span></div></div></details>`;
+        openDetailDrawer({title:subject(it.subject),subtitle:`${WORKFLOW_LABELS[statusKey]||'Yeni'} · ${PRIORITY_LABELS[priorityKey]||'Normal'} · ${Number(group.report_count||1)} rapor`,avatar:'!',tabs:[{id:'overview',label:'Özet',html:overviewHtml},{id:'report',label:'Kullanıcı bildirimi',html:reportHtml},{id:'evidence',label:'Kanıt & geçmiş',html:evidenceHtml},{id:'workflow',label:'İş akışı',html:workflowHtml},{id:'technical',label:'Teknik',html:technicalHtml}]});
+      }catch(e){openDetailDrawer({title:'Uygulama raporu',subtitle:'Vaka ayrıntısı okunamadı',avatar:'!',tabs:[{id:'error',label:'Durum',html:`<div class="admin-state"><div class="admin-state-icon">!</div><div><h3>Rapor ayrıntısı yüklenemedi</h3><p>${esc(e.message||e)}</p></div></div>`}]});}
     }
 
     async function patchSupportWorkflow(id,payload){
@@ -2694,27 +2884,29 @@
       if(!r.ok||!x.success) throw new Error(x.error||'Workflow guncellenemedi');
       return x;
     }
-    async function actionSupportWorkflow(id,revision,currentStatus,currentPriority){
-      const status=(prompt('Yeni durum: new, investigating, resolved, duplicate, insufficient_info, archived',currentStatus)||'').trim();
-      if(!status) return;
-      const priority=(prompt('Oncelik: low, normal, high, critical',currentPriority)||'').trim();
-      if(!priority) return;
-      const reason=(prompt('Gerekce (zorunlu):')||'').trim();
-      if(reason.length<3){alert('En az 3 karakter gerekce gerekli.');return;}
+    async function saveSupportWorkflowFromDrawer(id,revision){
+      const safeId=String(id||'report').replace(/[^a-zA-Z0-9_-]/g,'');
+      const status=document.getElementById(`support-status-${safeId}`)?.value||'new';
+      const priority=document.getElementById(`support-priority-${safeId}`)?.value||'normal';
+      const owner=(document.getElementById(`support-owner-${safeId}`)?.value||'').trim();
+      const reason=(document.getElementById(`support-note-${safeId}`)?.value||'').trim();
+      if(reason.length<3){alert('En az 3 karakterlik not ve gerekçe gerekli.');return;}
       try{
-        await patchSupportWorkflow(id,{expectedRevision:revision,status,priority,reason,note:reason});
-        closeModal();
+        await patchSupportWorkflow(id,{expectedRevision:revision,status,priority,owner,reason,note:reason});
+        closeDetailDrawer();
         loadContent(); loadStats();
-      }catch(e){alert(`Workflow hatasi: ${e.message}`);}
+      }catch(e){alert(`İş akışı güncellenemedi: ${e.message}`);}
     }
-    async function archiveSupportReport(id,revision,priority){
-      const reason=(prompt('Arsiv gerekcesi:')||'').trim();
-      if(reason.length<3) return;
-      if(!confirm('Rapor reversible olarak arsivlensin mi? Veri silinmeyecek.')) return;
+    async function archiveSupportReportFromDrawer(id,revision,priority){
+      const safeId=String(id||'report').replace(/[^a-zA-Z0-9_-]/g,'');
+      const reason=(document.getElementById(`support-archive-reason-${safeId}`)?.value||'').trim();
+      const confirmed=!!document.getElementById(`support-archive-confirm-${safeId}`)?.checked;
+      if(reason.length<3){alert('En az 3 karakterlik arşiv gerekçesi gerekli.');return;}
+      if(!confirmed){alert('Arşivleme etkisini onaylayın.');return;}
       try{
         await patchSupportWorkflow(id,{expectedRevision:revision,status:'archived',priority,reason,note:reason});
-        closeModal(); loadContent(); loadStats();
-      }catch(e){alert(`Arsivleme hatasi: ${e.message}`);}
+        closeDetailDrawer(); loadContent(); loadStats();
+      }catch(e){alert(`Arşivleme hatası: ${e.message}`);}
     }
 
     async function sendNotice(){
@@ -2740,9 +2932,6 @@
       if(!r.ok) throw new Error(x.error||'Istek basarisiz');
       loadContent(); loadStats(); loadPerformanceSummaryCard();
     }
-    async function actionBan(userId,days,reason){ if(!confirm('Kullaniciyi yasaklamak istiyor musunuz?')) return; await apiPost('/admin/ban',{userId,days,reason}); }
-    async function actionShadow(userId,reason){ if(!confirm('Kullaniciyi golge yasaga almak istiyor musunuz?')) return; await apiPost('/admin/ban',{userId,days:0,type:'shadow',reason}); }
-    async function actionUnban(userId){ if(!confirm('Yasagi kaldirmak istiyor musunuz?')) return; await apiPost('/admin/unban',{userId}); }
     async function postBulkAction(body){
       const r=await fetch('/admin/bulk-user-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const raw=await r.text();

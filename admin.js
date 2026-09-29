@@ -761,6 +761,16 @@ router.get('/data', async (req, res) => {
 
     try {
         if (type === 'reports') {
+            const reportParams = [];
+            let reportWhere = '';
+            if (search) {
+                reportParams.push(`%${search}%`);
+                reportWhere = `WHERE (COALESCE(r.reason, '') ILIKE $1
+                    OR COALESCE(r.reason_category, '') ILIKE $1
+                    OR COALESCE(r.moderation_status, '') ILIKE $1
+                    OR COALESCE(u1.username, '') ILIKE $1
+                    OR COALESCE(u2.username, '') ILIKE $1)`;
+            }
             const result = await pool.query(`
                 SELECT r.id,r.reported_user_id,r.conversation_id,r.reason,r.reason_category,r.created_at,
                        r.subject_message_id,r.subject_media_id,r.evidence_availability,
@@ -770,17 +780,27 @@ router.get('/data', async (req, res) => {
                 FROM reports r
                 LEFT JOIN users u1 ON r.reporter_user_id = u1.id
                 LEFT JOIN users u2 ON r.reported_user_id = u2.id
+                ${reportWhere}
                 ORDER BY r.created_at DESC LIMIT 50
-            `);
+            `, reportParams);
             res.json({ items: result.rows });
         } else if (type === 'bans') {
+            const banParams = [];
+            let banSearch = '';
+            if (search) {
+                banParams.push(`%${search}%`);
+                banSearch = `AND (COALESCE(u.username, '') ILIKE $1
+                    OR COALESCE(b.reason, '') ILIKE $1
+                    OR COALESCE(b.ban_type, '') ILIKE $1)`;
+            }
             const result = await pool.query(`
                 SELECT b.*, u.username as nickname 
                 FROM bans b
                 LEFT JOIN users u ON b.user_id = u.id
-                WHERE (b.ban_until > NOW()) OR (b.ban_type IN ('perm', 'shadow'))
+                WHERE ((b.ban_until > NOW()) OR (b.ban_type IN ('perm', 'shadow')))
+                ${banSearch}
                 ORDER BY b.created_at DESC
-            `);
+            `, banParams);
             res.json({ items: result.rows });
         } else if (type === 'profiles') {
             const sortBy = normalizeProfileSortBy(req.query.sortBy);
@@ -1382,17 +1402,21 @@ router.post('/ban', async (req, res) => {
 });
 
 router.post('/unban', async (req, res) => {
-    const { userId } = req.body;
+    const userId = String(req.body?.userId || '').trim();
+    const reason = String(req.body?.reason || '').trim().slice(0, 500);
+    if (!isUuid(userId) || reason.length < 3) {
+        return res.status(400).json({ error: 'Gecerli kullanici ve en az 3 karakter kaldirma gerekcesi gerekli.' });
+    }
     try {
-        await pool.query('DELETE FROM bans WHERE user_id = $1', [userId]);
+        const result = await pool.query('DELETE FROM bans WHERE user_id = $1', [userId]);
         await logAdminAudit(pool, {
             actorAdmin: req.adminUser,
             actionType: 'UNBAN',
             entityType: 'user',
             entityId: userId,
-            payload: {}
+            payload: { reason, removedCount: result.rowCount }
         });
-        res.json({ success: true });
+        res.json({ success: true, removedCount: result.rowCount });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

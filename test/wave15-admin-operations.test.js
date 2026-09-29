@@ -95,3 +95,21 @@ test('support workflow mutations are moderation actions, not sensitive reads', (
     assert.equal(capabilityFor('PATCH', '/support-report/id/workflow'), ADMIN_CAPABILITIES.ACTION);
     assert.equal(capabilityFor('DELETE', '/support-report/id'), ADMIN_CAPABILITIES.ACTION);
 });
+
+test('moderation workspaces require evidence review and visible reasons before actions', () => {
+    const api = fs.readFileSync(path.join(__dirname, '..', 'admin.js'), 'utf8');
+    const ui = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+    assert.match(ui, /function renderUserReportsWorkspace\(items\)/);
+    assert.match(ui, /function openUserReportDetails\(id\)/);
+    assert.match(ui, /Kararı gözden geçir/);
+    assert.doesNotMatch(ui, /function actionBan\(/);
+    assert.doesNotMatch(ui, /function actionShadow\(/);
+    assert.match(ui, /function renderAppReportsWorkspace\(items\)/);
+    assert.match(ui, /function saveSupportWorkflowFromDrawer\(id,revision\)/);
+    assert.match(ui, /Gerekçeyle arşivle/);
+    assert.doesNotMatch(ui, /Yeni durum: new, investigating/);
+    assert.match(ui, /function renderBansWorkspace\(items\)/);
+    assert.match(ui, /function confirmUnbanFromDrawer\(key\)/);
+    assert.match(api, /reason\.length < 3/);
+    assert.match(api, /payload: \{ reason, removedCount: result\.rowCount \}/);
+});

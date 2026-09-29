@@ -86,9 +86,9 @@ Bildirimler ve Yasal Metinler aynı besteci kabuğunu kullanacak: içerik, kapsa
 | ADM2-01 | Genel Bakış | Teknik kaynak adları ve düşük örneklem dili hâlâ fazla ham | Yönetici dili + açılır teknik kanıt | P1 |
 | ADM2-02 | Profiller | Filtre zayıf, platform pill'i gereksiz uzuyor, durum/konum teknik | Tarama odaklı liste + detay drawer | P0 |
 | ADM2-03 | Profil Detayı | Etiket/değer birleşiyor, uzun modal, ham oturum/cihaz verisi | Sekmeli responsive drawer | P0 |
-| ADM2-04 | Kullanıcı Raporları | Ham enumlar ve doğrudan üç yaptırım butonu | Vaka kuyruğu + güvenli yaptırım akışı | P0 |
-| ADM2-05 | Uygulama Raporları | Liste daha iyi ama detay ham grid ve uzun modal | Vaka özeti + kanıt + geçmiş drawer'ı | P0 |
-| ADM2-06 | Yasaklar ve Gölge | Boş sayfa durumu ve geçmiş/aktif ayrımı yok | Yaptırım merkezi | P1 |
+| ADM2-04 | Kullanıcı Raporları | Ham enumlar ve doğrudan üç yaptırım butonu | Vaka kuyruğu + güvenli yaptırım akışı — uygulandı ve doğrulandı | P0 |
+| ADM2-05 | Uygulama Raporları | Liste daha iyi ama detay ham grid ve uzun modal | Vaka özeti + kanıt + geçmiş drawer'ı — uygulandı ve doğrulandı | P0 |
+| ADM2-06 | Yasaklar ve Gölge | Boş sayfa durumu ve geçmiş/aktif ayrımı yok | Yaptırım merkezi — uygulandı ve doğrulandı | P1 |
 | ADM2-07 | Silme Talepleri | İngilizce durum, `0.0s`, zayıf SLA ve empty state | SLA kuyruğu + güvenli karar drawer'ı | P1 |
 | ADM2-08 | Bildirimler | Etiketsiz tek satır formlar, hedef/önizleme/etki yok | Bildirim bestecisi | P1 |
 | ADM2-09 | Anlık Online | Cihaz ID'si ana tabloda, stale/auto-refresh bağlamı yok | Canlı operasyon özeti | P1 |
@@ -200,7 +200,7 @@ Profil detayı paneldeki en bozuk yüzeylerden biri:
 
 ## ADM2-04 — Kullanıcı Raporları
 
-- **Durum:** Acil revizyon
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P0
 
 ### Canlı bulgu
@@ -216,7 +216,7 @@ Profil detayı paneldeki en bozuk yüzeylerden biri:
 
 ## ADM2-05 — Uygulama Raporları ve Detayı
 
-- **Durum:** Acil revizyon
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P0
 
 ### Canlı bulgu
@@ -232,7 +232,7 @@ Liste önceki sürüme göre daha anlamlıdır; sorun, detay modalında tekrar o
 
 ## ADM2-06 — Yasaklar ve Gölge
 
-- **Durum:** Revizyon bekliyor
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P1
 
 ### Canlı bulgu
@@ -381,7 +381,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 1. [x] **Paket A — ADM2-00 ortak içerik sistemi:** section, durum, tablo/list, drawer, kanıt ve danger-zone temeli.
 2. [x] **Paket B — ADM2-02/03 Profiller:** liste + profil detay drawer'ı; etiket/değer ve hassas veri sorunu kapatıldı.
-3. [ ] **Paket C — ADM2-04/05/06 Moderasyon:** kullanıcı raporu, uygulama raporu ve yaptırım merkezi.
+3. [x] **Paket C — ADM2-04/05/06 Moderasyon:** kullanıcı raporu, uygulama raporu ve yaptırım merkezi.
 4. [ ] **Paket D — ADM2-07/09/12 Operasyon kanıtı:** silme talepleri, online ve audit.
 5. [ ] **Paket E — ADM2-10/11 Sistem içgörüsü:** performans ve davranış analitiği.
 6. [ ] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
@@ -397,6 +397,16 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 - Mevcut profil endpoint'i alan bazlı sunucu filtresi sağlamadığı için sahte yalnız-sayfa filtresi eklenmedi; arama, sıralama ve sayfalama gerçek toplam üzerinden çalışmaya devam ediyor.
 - Doğrulama: masaüstü ve 390×844 responsive kontrolü, sıfır yatay sayfa/drawer taşması, drawer odak dönüşü ve Escape kapanışı, altı sekmenin tamamı, temiz tarayıcı konsolu, `108/108` backend testi ve kalite kapısı.
 
+### Uygulama kaydı — Paket C
+
+- Kullanıcı raporları, ham enum ve satır içi yaptırım butonlarından çıkarılıp insan dili kullanan özet kartları ile vaka kuyruğuna taşındı.
+- Vaka drawer'ında özet, kanıt ve karar birbirinden ayrıldı; yaptırım için tür, operasyon gerekçesi ve ikinci onay adımı zorunlu hale getirildi.
+- Uygulama raporu detayı uzun modal yerine özet, kullanıcı bildirimi, kanıt/geçmiş, iş akışı ve teknik sekmeleri bulunan sağ drawer'a taşındı.
+- Durum, öncelik, sorumlu ve not değişiklikleri görünür iş akışı formuna; arşivleme gerekçe ve açık onay isteyen ayrı riskli alana alındı.
+- Yasaklar ve gölge ekranı aktif yaptırım özetine, okunur süre/tür bilgisine ve gerekçeli kaldırma drawer'ına dönüştürüldü; kaldırma gerekçesi audit kaydına eklendi.
+- Kullanıcı raporları ve yaptırımlar için gerçek sunucu araması eklendi; liste ekranlarından doğrudan yaptırım uygulanması kaldırıldı.
+- Doğrulama: masaüstü görsel inceleme, 390×844 ve 320×720 responsive kontrolleri, sıfır yatay sayfa/drawer taşması, temiz uygulama konsolu ve `109/109` backend testi.
+
 ## Paket sınırları
 
 - Her paket kendi otomatik testini ve masaüstü/mobil görsel QA'ini tamamlamadan sonraki pakete geçmez.
@@ -406,9 +416,9 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Otomatik doğrulama
 
-- [x] `npm test` tam geçer. (`108/108`)
+- [x] `npm test` tam geçer. (`109/109`)
 - [x] `npm run quality:all` geçer. (kritik paket `60/60`; yüksek/kritik güvenlik kaydı yok)
-- [ ] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini korur.
+- [x] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini ve moderasyon onay akışını korur.
 - [ ] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.
 - [ ] Riskli işlemler gerekçe + açık hedef + audit sonucu olmadan çalışmaz.
 
