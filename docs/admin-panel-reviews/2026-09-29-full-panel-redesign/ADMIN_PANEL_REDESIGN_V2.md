@@ -90,7 +90,7 @@ Bildirimler ve Yasal Metinler aynı besteci kabuğunu kullanacak: içerik, kapsa
 | ADM2-05 | Uygulama Raporları | Liste daha iyi ama detay ham grid ve uzun modal | Vaka özeti + kanıt + geçmiş drawer'ı — uygulandı ve doğrulandı | P0 |
 | ADM2-06 | Yasaklar ve Gölge | Boş sayfa durumu ve geçmiş/aktif ayrımı yok | Yaptırım merkezi — uygulandı ve doğrulandı | P1 |
 | ADM2-07 | Silme Talepleri | İngilizce durum, `0.0s`, zayıf SLA ve empty state | SLA kuyruğu + güvenli karar drawer'ı — uygulandı ve doğrulandı | P1 |
-| ADM2-08 | Bildirimler | Etiketsiz tek satır formlar, hedef/önizleme/etki yok | Bildirim bestecisi | P1 |
+| ADM2-08 | Bildirimler | Etiketsiz tek satır formlar, hedef/önizleme/etki yok | Bildirim bestecisi — uygulandı ve doğrulandı | P1 |
 | ADM2-09 | Anlık Online | Cihaz ID'si ana tabloda, stale/auto-refresh bağlamı yok | Canlı operasyon özeti — uygulandı ve doğrulandı | P1 |
 | ADM2-10 | Performans | Ham durum satırı ve dakika dakika tablo | Sağlık özeti + grafik + route kanıtı — uygulandı ve doğrulandı | P1 |
 | ADM2-11 | Davranış Analitiği | KPI/funnel tekrar ediyor, dev sıfır tabloları ve raw JSON | Yolculuk/funnel + sapma + kanıt — uygulandı ve doğrulandı | P1 |
@@ -265,7 +265,7 @@ Filtrede `requested/rejected/completed` enumları, metriklerde `0.0s` ve boş li
 
 ## ADM2-08 — Bildirimler
 
-- **Durum:** Revizyon bekliyor
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P1
 
 ### Canlı bulgu
@@ -384,7 +384,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 3. [x] **Paket C — ADM2-04/05/06 Moderasyon:** kullanıcı raporu, uygulama raporu ve yaptırım merkezi.
 4. [x] **Paket D — ADM2-07/09/12 Operasyon kanıtı:** silme talepleri, online ve audit.
 5. [x] **Paket E — ADM2-10/11 Sistem içgörüsü:** performans ve davranış analitiği.
-6. [ ] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
+6. [x] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
 7. [ ] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
 8. [ ] **Paket H — ADM2-01 Genel Bakış cilası ve tam regresyon:** teknik kaynak dili, no-data ve son görsel bütünlük.
 
@@ -426,6 +426,15 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 - Teknik event kodları ve metadata ana tablodan çıkarıldı. Son olay detayı ayrı drawer'da, hassas tanımlayıcılar maskeli; kullanıcı listesi tam kimlik göstermeden yetkili admin kanıtı olarak korunuyor.
 - Doğrulama: iki ekranın masaüstü ve drawer görsel incelemesi, sıfır yatay sayfa/drawer taşması, teknik tanımlayıcı maskesi, temiz uygulama konsolu ve `111/111` backend testi.
 
+### Uygulama kaydı — Paket F
+
+- Bildirim ekranındaki iki dağınık tek satır form, içerik, teslimat ayarları ve cihaz önizlemesini bir araya getiren tek bir besteciye dönüştürüldü.
+- Başlık ve metin için canlı karakter sayaçları; Android ve iOS için anlık önizleme eklendi. Zaman, saat dilimi, görünürlük süresi ve planın aktifliği anlaşılır alanlara ayrıldı.
+- Mevcut sunucu sözleşmesine sadık kalındı: hedef tüm kullanıcılar, içerik tek dil ve kesin alıcı sayısı yalnız gerçek gönderim sonucunda biliniyor. Desteklenmeyen hedef segmenti, TR/EN varyantı veya sahte tahmin kontrolü eklenmedi.
+- Anlık gönderim, önce etkiyi açıkça gösteren gözden geçirme adımına alındı; gönderim sonucu başarı, hata ve ulaşılan alıcı sayısıyla yapılandırılmış biçimde gösteriliyor.
+- Planlar okunur kartlara taşındı. Düzenleme, aktiflik değişimi ve şimdi çalıştırma eylemleri menüde toplandı; silme ayrı ve onaylı tehlikeli işlem olarak bırakıldı.
+- Doğrulama: masaüstü ve 320×720 mobil görsel inceleme, sıfır yatay taşma, temiz tarayıcı konsolu ve `112/112` backend testi.
+
 ## Paket sınırları
 
 - Her paket kendi otomatik testini ve masaüstü/mobil görsel QA'ini tamamlamadan sonraki pakete geçmez.
@@ -435,7 +444,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Otomatik doğrulama
 
-- [x] `npm test` tam geçer. (`111/111`)
+- [x] `npm test` tam geçer. (`112/112`)
 - [x] `npm run quality:all` geçer. (kritik paket `60/60`; yüksek/kritik güvenlik kaydı yok)
 - [x] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini ve moderasyon onay akışını korur.
 - [x] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.

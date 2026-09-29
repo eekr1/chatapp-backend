@@ -159,7 +159,7 @@
     .workflow-field.is-wide { grid-column:1/-1; }
     .workflow-field label { color:var(--muted); font-size:10px; font-weight:700; letter-spacing:.045em; text-transform:uppercase; }
     .workflow-field input, .workflow-field select, .workflow-field textarea { width:100%; }
-    .workflow-field textarea { min-height:88px; resize:vertical; }
+    .workflow-field textarea { min-height:88px; resize:vertical; border:1px solid var(--border); border-radius:10px; padding:9px 10px; background:rgba(21,28,40,0.74); color:var(--text); }
     .action-review { display:none; margin-top:10px; border:1px solid rgba(255,196,109,.38); border-radius:11px; padding:11px; background:rgba(255,196,109,.07); }
     .action-review.is-open { display:block; }
     .action-review p { margin:0 0 10px; color:#f5d9a8; font-size:12px; line-height:1.5; }
@@ -194,6 +194,40 @@
     .delta { display:inline-flex; margin-top:7px; border-radius:999px; padding:3px 7px; color:var(--muted); background:rgba(255,255,255,.04); font-size:10px; font-weight:700; }
     .delta.is-up { color:#a8f1d2; background:rgba(69,216,155,.08); }
     .delta.is-down { color:#ffb4c0; background:rgba(255,102,126,.08); }
+    .notification-composer-grid { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(250px,.78fr) minmax(250px,.82fr); gap:12px; align-items:start; }
+    .notification-column { min-width:0; border:1px solid var(--border); border-radius:14px; padding:14px; background:rgba(255,255,255,.014); }
+    .notification-column h3 { margin:0 0 5px; font-size:15px; }
+    .notification-column > p { margin:0 0 12px; color:var(--muted); font-size:11px; line-height:1.5; }
+    .char-count { align-self:flex-end; color:var(--muted-2); font-size:10px; }
+    .notification-fixed-value { display:flex; align-items:flex-start; gap:9px; border:1px solid var(--border); border-radius:11px; padding:10px; background:rgba(255,255,255,.018); }
+    .notification-fixed-value + .notification-fixed-value { margin-top:8px; }
+    .notification-fixed-value strong { display:block; font-size:12px; }
+    .notification-fixed-value span { display:block; margin-top:3px; color:var(--muted); font-size:10px; line-height:1.45; }
+    .notification-preview-stack { display:flex; flex-direction:column; gap:9px; }
+    .device-preview { border:1px solid var(--border); border-radius:15px; padding:11px; background:linear-gradient(160deg,rgba(124,99,255,.12),rgba(32,216,231,.035)); }
+    .device-preview-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .device-notification { border:1px solid rgba(255,255,255,.11); border-radius:12px; padding:11px; background:rgba(8,11,20,.82); box-shadow:0 10px 26px rgba(0,0,0,.22); }
+    .device-notification strong { display:block; margin-bottom:5px; font-size:12px; overflow-wrap:anywhere; }
+    .device-notification p { margin:0; color:var(--muted); font-size:11px; line-height:1.45; overflow-wrap:anywhere; }
+    .notification-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .notification-result { display:none; margin-top:12px; }
+    .notification-result.is-visible { display:block; }
+    .schedule-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .schedule-card { min-width:0; border:1px solid var(--border); border-radius:14px; padding:13px; background:rgba(255,255,255,.014); }
+    .schedule-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .schedule-card h3 { margin:0; font-size:14px; overflow-wrap:anywhere; }
+    .schedule-card .message { margin:9px 0; min-height:36px; color:var(--muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+    .schedule-meta { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+    .schedule-meta div { border:1px solid var(--border); border-radius:9px; padding:8px; background:rgba(255,255,255,.012); }
+    .schedule-meta span { display:block; color:var(--muted-2); font-size:9px; text-transform:uppercase; letter-spacing:.04em; }
+    .schedule-meta strong { display:block; margin-top:4px; font-size:11px; overflow-wrap:anywhere; }
+    .schedule-card-actions { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; }
+    .schedule-action-menu { position:relative; }
+    .schedule-action-menu summary { list-style:none; cursor:pointer; border:1px solid var(--border); border-radius:9px; padding:7px 10px; color:var(--text); background:var(--surface-2); font-size:11px; font-weight:700; }
+    .schedule-action-menu summary::-webkit-details-marker { display:none; }
+    .schedule-action-menu[open] .schedule-action-popover { display:flex; }
+    .schedule-action-popover { display:none; position:absolute; left:0; bottom:calc(100% + 6px); z-index:6; min-width:170px; flex-direction:column; gap:5px; border:1px solid var(--border-strong); border-radius:11px; padding:7px; background:#151a2a; box-shadow:var(--shadow); }
+    .schedule-action-popover .btn { width:100%; margin:0; text-align:left; }
     .admin-state { display:flex; align-items:flex-start; gap:12px; min-height:170px; padding:32px; border:1px dashed var(--border-strong); border-radius:14px; background:rgba(255,255,255,.012); }
     .admin-state-icon { display:flex; align-items:center; justify-content:center; width:42px; height:42px; flex:0 0 42px; border-radius:13px; color:#b7adff; background:var(--accent-soft); font-size:20px; }
     .admin-state h3 { margin:1px 0 6px; font-size:16px; }
@@ -367,7 +401,7 @@
       .overview-grid, .health-grid, .dashboard-detail-grid, .activity-pair { grid-template-columns:1fr; }
       .push-summary { grid-template-columns:1fr; }
       .dashboard-section-head { align-items:flex-start; flex-direction:column; }
-      .admin-summary-grid, .detail-hero, .detail-kv-grid, .workflow-form, .insight-grid, .journey-grid { grid-template-columns:1fr; }
+      .admin-summary-grid, .detail-hero, .detail-kv-grid, .workflow-form, .insight-grid, .journey-grid, .notification-composer-grid, .schedule-list { grid-template-columns:1fr; }
       .journey-step:not(:last-child)::after { display:none; }
       .filter-grid { grid-template-columns:1fr; }
       .workflow-field.is-wide { grid-column:auto; }
@@ -1713,14 +1747,18 @@
       notificationScheduleEditId=null;
       const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v;};
       const setChecked=(id,v)=>{const el=document.getElementById(id); if(el) el.checked=!!v;};
-      set('schedule-title','');
-      set('schedule-body','');
-      set('schedule-duration','10');
-      set('schedule-time','12:00');
-      set('schedule-timezone','Europe/Istanbul');
-      setChecked('schedule-active',true);
+      set('notification-title','');
+      set('notification-body','');
+      set('notification-duration','10');
+      set('notification-time','12:00');
+      set('notification-timezone','Europe/Istanbul');
+      setChecked('notification-active',true);
       const mode=document.getElementById('schedule-form-mode');
-      if(mode) mode.textContent='Yeni Plan';
+      if(mode) mode.textContent='Yeni bildirim';
+      const saveButton=document.getElementById('notification-save-button');
+      if(saveButton) saveButton.textContent='Planı kaydet';
+      cancelImmediateNotice();
+      syncNotificationComposer();
     }
     function editNotificationSchedule(scheduleId){
       const item=(notificationSchedulesCache||[]).find((x)=>String(x.id||'')===String(scheduleId||''));
@@ -1728,25 +1766,54 @@
       notificationScheduleEditId=item.id;
       const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v;};
       const setChecked=(id,v)=>{const el=document.getElementById(id); if(el) el.checked=!!v;};
-      set('schedule-title',item.title||'');
-      set('schedule-body',item.body||'');
-      set('schedule-duration',String(Math.max(3,Math.min(60,Math.round((Number(item.duration_ms)||10000)/1000)))));
-      set('schedule-time',item.schedule_time||'12:00');
-      set('schedule-timezone',item.timezone||'Europe/Istanbul');
-      setChecked('schedule-active',item.is_active!==false);
+      set('notification-title',item.title||'');
+      set('notification-body',item.body||'');
+      set('notification-duration',String(Math.max(3,Math.min(60,Math.round((Number(item.duration_ms)||10000)/1000)))));
+      set('notification-time',item.schedule_time||'12:00');
+      set('notification-timezone',item.timezone||'Europe/Istanbul');
+      setChecked('notification-active',item.is_active!==false);
       const mode=document.getElementById('schedule-form-mode');
-      if(mode) mode.textContent='Plan Duzenle';
+      if(mode) mode.textContent='Plan düzenleniyor';
+      const saveButton=document.getElementById('notification-save-button');
+      if(saveButton) saveButton.textContent='Planı güncelle';
+      syncNotificationComposer();
+      document.getElementById('notification-composer')?.scrollIntoView({behavior:'smooth',block:'start'});
     }
     function collectNotificationSchedulePayload(){
-      const title=String(val('schedule-title')||'').trim();
-      const body=String(val('schedule-body')||'').trim();
-      const durationSeconds=Math.max(3,Math.min(60,Number(val('schedule-duration'))||10));
-      const scheduleTime=String(val('schedule-time')||'').trim();
-      const timezone=String(val('schedule-timezone')||'').trim()||'Europe/Istanbul';
-      const isActive=!!document.getElementById('schedule-active')?.checked;
-      if(!title||!body) throw new Error('Baslik ve bildirim metni zorunlu.');
-      if(!/^([01]\d|2[0-3]):([0-5]\d)$/.test(scheduleTime)) throw new Error('Saat formati gecersiz. HH:MM girin.');
+      const title=String(val('notification-title')||'').trim();
+      const body=String(val('notification-body')||'').trim();
+      const durationSeconds=Math.max(3,Math.min(60,Number(val('notification-duration'))||10));
+      const scheduleTime=String(val('notification-time')||'').trim();
+      const timezone=String(val('notification-timezone')||'').trim()||'Europe/Istanbul';
+      const isActive=!!document.getElementById('notification-active')?.checked;
+      if(!title||!body) throw new Error('Başlık ve bildirim metni zorunlu.');
+      if(title.length>120) throw new Error('Başlık en fazla 120 karakter olabilir.');
+      if(body.length>400) throw new Error('Bildirim metni en fazla 400 karakter olabilir.');
+      if(!/^([01]\d|2[0-3]):([0-5]\d)$/.test(scheduleTime)) throw new Error('Saat formatı geçersiz. HH:MM girin.');
       return { title, body, durationSeconds, scheduleTime, timezone, isActive };
+    }
+    function syncNotificationComposer(){
+      const title=String(val('notification-title')||'');
+      const body=String(val('notification-body')||'');
+      const duration=Math.max(3,Math.min(60,Number(val('notification-duration'))||10));
+      const setText=(id,value)=>{const el=document.getElementById(id);if(el) el.textContent=value;};
+      setText('notification-title-count',`${title.length}/120`);
+      setText('notification-body-count',`${body.length}/400`);
+      document.querySelectorAll('[data-notification-preview-title]').forEach((el)=>{el.textContent=title.trim()||'TalkX bildirimi';});
+      document.querySelectorAll('[data-notification-preview-body]').forEach((el)=>{el.textContent=body.trim()||'Bildirim metni burada görünecek.';});
+      setText('notification-preview-duration',`${duration} saniye görünür`);
+      cancelImmediateNotice();
+    }
+    function cancelImmediateNotice(){
+      document.getElementById('notification-send-review')?.classList.remove('is-open');
+    }
+    function prepareImmediateNotice(){
+      try{
+        const payload=collectNotificationSchedulePayload();
+        const summary=document.getElementById('notification-send-review-text');
+        if(summary) summary.textContent=`“${payload.title}” bildirimi tüm kullanıcılara, mevcut tek dil sözleşmesiyle gönderilecek. Görünürlük süresi ${payload.durationSeconds} saniye. Kesin alıcı sayısı gönderim sonucunda raporlanacak.`;
+        document.getElementById('notification-send-review')?.classList.add('is-open');
+      }catch(error){ alert(error.message||error); }
     }
     async function saveNotificationSchedule(){
       try{
@@ -1802,86 +1869,36 @@
       const c=document.getElementById('content');
       const list=Array.isArray(items)?items:[];
       notificationSchedulesCache=list;
-      let html=`
-        <div class="metrics">
-          <div class="metric"><div class="k">Toplam Plan</div><div class="n">${list.length}</div></div>
-          <div class="metric"><div class="k">Aktif Plan</div><div class="n">${list.filter((x)=>x.is_active).length}</div></div>
-          <div class="metric"><div class="k">Pasif Plan</div><div class="n">${list.filter((x)=>!x.is_active).length}</div></div>
-        </div>
-
-        <h3>Anlik Bildirim Gonder</h3>
-        <div class="row">
-          <input id="notify-title" type="text" placeholder="Bildirim basligi" style="min-width:220px">
-          <input id="notify-body" type="text" placeholder="Bildirim metni" style="min-width:360px">
-          <input id="notify-duration" type="number" min="3" max="60" step="1" value="10" style="width:130px">
-          <button class="btn btn-notify" onclick="sendNotice()">Hemen Gonder</button>
-          <span id="notify-result" style="font-size:12px;color:#9aa8c0"></span>
-        </div>
-
-        <h3><span id="schedule-form-mode">Yeni Plan</span></h3>
-        <div class="panel" style="padding:12px">
-          <div class="row">
-            <input id="schedule-title" type="text" placeholder="Plan basligi" style="min-width:220px">
-            <input id="schedule-body" type="text" placeholder="Plan bildirimi metni" style="min-width:380px">
-            <input id="schedule-duration" type="number" min="3" max="60" step="1" value="10" style="width:120px">
-            <input id="schedule-time" type="time" value="12:00" style="width:130px">
-            <input id="schedule-timezone" type="text" value="Europe/Istanbul" style="min-width:180px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#9aa8c0"><input id="schedule-active" type="checkbox" checked>Aktif</label>
-            <button class="btn btn-refresh" onclick="saveNotificationSchedule()">Kaydet</button>
-            <button class="btn btn-shadow" onclick="resetNotificationScheduleForm()">Temizle</button>
+      const activeCount=list.filter((x)=>x.is_active).length;
+      const sentCount=list.filter((x)=>x.last_sent_at).length;
+      let html=`<div class="admin-page">
+        <div class="admin-summary-grid"><article class="admin-summary-card"><div class="label">Toplam plan</div><div class="value">${list.length}</div><div class="meta">Kayıtlı günlük bildirim planı</div></article><article class="admin-summary-card"><div class="label">Aktif plan</div><div class="value">${activeCount}</div><div class="meta">Zamanı geldiğinde gönderilir</div></article><article class="admin-summary-card"><div class="label">Pasif plan</div><div class="value">${list.length-activeCount}</div><div class="meta">Kayıtlı, otomatik gönderim kapalı</div></article><article class="admin-summary-card"><div class="label">Gönderim geçmişi</div><div class="value">${sentCount}</div><div class="meta">En az bir kez çalışmış plan</div></article></div>
+        <section id="notification-composer" class="admin-section"><div class="admin-section-head"><div><h2 id="schedule-form-mode">Yeni bildirim</h2><p>Tek içerikten anlık gönderim yapın veya günlük plan oluşturun.</p></div><span class="evidence-chip">Mevcut sözleşme: tüm kullanıcılar</span></div><div class="admin-section-body">
+          <div class="notification-composer-grid">
+            <section class="notification-column"><h3>İçerik</h3><p>Başlık ve metin anlık gönderim ile plan için ortaktır.</p><div class="workflow-form"><div class="workflow-field is-wide"><label for="notification-title">Bildirim başlığı</label><input id="notification-title" maxlength="120" placeholder="Kısa ve anlaşılır bir başlık" oninput="syncNotificationComposer()"><span id="notification-title-count" class="char-count">0/120</span></div><div class="workflow-field is-wide"><label for="notification-body">Bildirim metni</label><textarea id="notification-body" maxlength="400" placeholder="Kullanıcıya gösterilecek mesaj" oninput="syncNotificationComposer()"></textarea><span id="notification-body-count" class="char-count">0/400</span></div></div></section>
+            <section class="notification-column"><h3>Teslimat ayarları</h3><p>Sözleşmede desteklenen gerçek alanlar.</p><div class="notification-fixed-value"><div><strong>Tüm kullanıcılar</strong><span>Hedef segment seçimi henüz backend sözleşmesinde yok.</span></div></div><div class="notification-fixed-value"><div><strong>Tek içerik dili</strong><span>TR/EN varyantı ayrı backend işi gerektiriyor.</span></div></div><div class="workflow-form" style="margin-top:10px"><div class="workflow-field"><label for="notification-duration">Görünürlük süresi (sn)</label><input id="notification-duration" type="number" min="3" max="60" step="1" value="10" oninput="syncNotificationComposer()"></div><div class="workflow-field"><label for="notification-time">Günlük gönderim saati</label><input id="notification-time" type="time" value="12:00"></div><div class="workflow-field is-wide"><label for="notification-timezone">Zaman dilimi</label><input id="notification-timezone" value="Europe/Istanbul"></div><div class="workflow-field is-wide"><label style="display:flex;align-items:center;gap:7px;text-transform:none;font-size:11px"><input id="notification-active" type="checkbox" checked style="width:auto"> Plan kaydedildiğinde aktif olsun</label></div></div></section>
+            <section class="notification-column"><h3>Cihaz önizlemesi</h3><p>Görsel temsil; kesin platform teslimi gönderim sonucunda ölçülür.</p><div class="notification-preview-stack"><div class="device-preview"><div class="device-preview-head"><span>Android</span><span id="notification-preview-duration">10 saniye görünür</span></div><div class="device-notification"><strong data-notification-preview-title>TalkX bildirimi</strong><p data-notification-preview-body>Bildirim metni burada görünecek.</p></div></div><div class="device-preview"><div class="device-preview-head"><span>iOS</span><span>TalkX</span></div><div class="device-notification"><strong data-notification-preview-title>TalkX bildirimi</strong><p data-notification-preview-body>Bildirim metni burada görünecek.</p></div></div></div></section>
           </div>
-        </div>
-      `;
-
-      html+='<h3>Planli Bildirimler</h3>';
+          <div class="notification-actions"><button id="notification-save-button" class="btn btn-refresh" onclick="saveNotificationSchedule()">Planı kaydet</button><button class="btn btn-shadow" onclick="resetNotificationScheduleForm()">Formu temizle</button><button class="btn btn-notify" onclick="prepareImmediateNotice()">Şimdi göndermeyi gözden geçir</button></div>
+          <div id="notification-send-review" class="action-review"><p id="notification-send-review-text"></p><div class="case-actions" style="justify-content:flex-start"><button class="btn btn-shadow" onclick="cancelImmediateNotice()">Geri dön</button><button class="btn btn-notify" onclick="sendNotice()">Onayla ve gönder</button></div></div>
+          <div id="notification-result" class="notification-result"></div>
+        </div></section>
+        <section class="admin-section"><div class="admin-section-head"><div><h2>Planlı bildirimler</h2><p>Plan içeriği, çalışma zamanı ve son gönderim sonucu.</p></div><span class="evidence-chip">${list.length} plan</span></div><div class="admin-section-body">`;
       if(!list.length){
-        html+='<p class="deletion-row-note">Kayitli plan bulunamadi.</p>';
+        html+=`<div class="admin-state"><div class="admin-state-icon">○</div><div><h3>Kayıtlı plan yok</h3><p>Bestecide içerik ve zaman ayarlarını tamamlayıp ilk planı kaydedebilirsiniz.</p></div></div></div></section></div>`;
         c.innerHTML=html;
         resetNotificationScheduleForm();
         return;
       }
-
-      html+=`
-        <table>
-          <thead>
-            <tr>
-              <th>Durum</th>
-              <th>Saat</th>
-              <th>Timezone</th>
-              <th>Baslik</th>
-              <th>Metin</th>
-              <th>Sure (sn)</th>
-              <th>Son Gonderim</th>
-              <th>Islem</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
+      html+='<div class="schedule-list">';
       list.forEach((it)=>{
         const sec=Math.max(3,Math.min(60,Math.round((Number(it.duration_ms)||10000)/1000)));
         const status=it.is_active?'Aktif':'Pasif';
-        const statusBadge=it.is_active?'sent':'failed';
-        const nextToggleLabel=it.is_active?'Pasif Yap':'Aktif Yap';
+        const nextToggleLabel=it.is_active?'Pasife al':'Aktifleştir';
         const nextToggleState=!it.is_active;
-        html+=`
-          <tr>
-            <td><span class="badge ${statusBadge}">${status}</span></td>
-            <td>${esc(it.schedule_time||'-')}</td>
-            <td>${esc(it.timezone||'-')}</td>
-            <td>${esc(it.title||'-')}</td>
-            <td>${esc(it.body||'-')}</td>
-            <td>${sec}</td>
-            <td>${d(it.last_sent_at)}<br/><small>${esc(it.last_sent_local_date||'-')}</small></td>
-            <td>
-              <button class="btn btn-details" onclick="editNotificationSchedule('${it.id}')">Duzenle</button>
-              <button class="btn btn-shadow" onclick="toggleNotificationSchedule('${it.id}',${nextToggleState})">${nextToggleLabel}</button>
-              <button class="btn btn-notify" onclick="runNotificationScheduleNow('${it.id}')">Simdi Calistir</button>
-              <button class="btn btn-delete" onclick="deleteNotificationSchedule('${it.id}')">Sil</button>
-            </td>
-          </tr>
-        `;
+        html+=`<article class="schedule-card"><div class="schedule-card-head"><div><h3>${esc(it.title||'Başlıksız plan')}</h3><span class="status-pill ${it.is_active?'is-ok':'is-warn'}" style="margin-top:7px">${status}</span></div><span class="evidence-chip">${sec} sn</span></div><p class="message">${esc(it.body||'Bildirim metni yok')}</p><div class="schedule-meta"><div><span>Her gün</span><strong>${esc(it.schedule_time||'-')}</strong></div><div><span>Zaman dilimi</span><strong>${esc(it.timezone||'-')}</strong></div><div><span>Son gönderim</span><strong>${it.last_sent_at?esc(relativeAge(it.last_sent_at)):'Henüz yok'}</strong></div></div><div class="schedule-card-actions"><details class="schedule-action-menu"><summary>Plan işlemleri</summary><div class="schedule-action-popover"><button class="btn btn-details" onclick="editNotificationSchedule('${it.id}')">Düzenle</button><button class="btn btn-shadow" onclick="toggleNotificationSchedule('${it.id}',${nextToggleState})">${nextToggleLabel}</button><button class="btn btn-notify" onclick="runNotificationScheduleNow('${it.id}')">Şimdi çalıştır</button></div></details><button class="btn btn-delete" onclick="deleteNotificationSchedule('${it.id}')">Planı sil</button></div></article>`;
       });
-      html+='</tbody></table>';
+      html+='</div></div></section></div>';
       c.innerHTML=html;
       resetNotificationScheduleForm();
     }
@@ -2807,20 +2824,22 @@
     }
 
     async function sendNotice(){
-      const title=(document.getElementById('notify-title').value||'').trim();
-      const body=(document.getElementById('notify-body').value||'').trim();
-      const sec=Number(document.getElementById('notify-duration').value||10);
-      const durationMs=Math.max(3000,Math.min(60000,Math.round(sec*1000)));
-      if(!title||!body){alert('Baslik ve metin gerekli.');return;}
-      const out=document.getElementById('notify-result'); out.innerText='Gonderiliyor...';
+      let payload;
+      try{ payload=collectNotificationSchedulePayload(); }
+      catch(error){ alert(error.message||error); return; }
+      const {title,body,durationSeconds}=payload;
+      const durationMs=durationSeconds*1000;
+      const out=document.getElementById('notification-result');
+      if(out){out.classList.add('is-visible');out.innerHTML='<div class="admin-state" style="min-height:110px"><div class="admin-state-icon">•••</div><div><h3>Gönderim başlatıldı</h3><p>WebSocket ve push teslim sonuçları bekleniyor.</p></div></div>';}
+      cancelImmediateNotice();
       try{
         const r=await fetch('/admin/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,body,durationMs,target:'all'})});
-        const raw=await r.text(); let x={}; try{x=raw?JSON.parse(raw):{};}catch{throw new Error(`Sunucu JSON donmedi (HTTP ${r.status}).`);}
-        if(!r.ok||!x.success) throw new Error(x.error||'Bildirim gonderimi basarisiz');
+        const raw=await r.text(); let x={}; try{x=raw?JSON.parse(raw):{};}catch{throw new Error(`Sunucu JSON dönmedi (HTTP ${r.status}).`);}
+        if(!r.ok||!x.success) throw new Error(x.error||'Bildirim gönderimi başarısız');
         const err=x.push?.errorSummary||{}; const errTxt=Object.keys(err).length?` | hata: ${Object.entries(err).map(([k,v])=>`${k}=${v}`).join(', ')}`:'';
-        out.innerText=`WS: ${x.wsDelivered||0} | Push: ${x.push?.sentCount||0}/${x.push?.tokenCount||0} (hata ${x.push?.failureCount||0})${errTxt}`;
+        if(out) out.innerHTML=`<div class="insight-grid"><article class="insight-card"><h3>Canlı teslim</h3><p>${Number(x.wsDelivered||0)} aktif bağlantıya ulaştı.<span class="next">Kanal: WebSocket</span></p></article><article class="insight-card ${Number(x.push?.failureCount||0)>0?'is-warn':''}"><h3>Push teslimi</h3><p>${Number(x.push?.sentCount||0)} / ${Number(x.push?.tokenCount||0)} cihaz · ${Number(x.push?.failureCount||0)} hata${esc(errTxt)}<span class="next">Kesin sonuç gönderim yanıtıdır.</span></p></article></div>`;
         loadPushHealth(); loadPushDiagnostics();
-      }catch(e){out.innerText='Hata'; alert('Hata: '+e.message);}
+      }catch(e){if(out) out.innerHTML=`<div class="admin-state" style="min-height:110px"><div class="admin-state-icon">!</div><div><h3>Gönderim tamamlanamadı</h3><p>${esc(e.message||e)}</p></div></div>`;}
     }
 
     async function apiPost(url,body){
