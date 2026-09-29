@@ -239,7 +239,7 @@ Mevcut parcalar:
 - [x] [P1] Bildirim dagitim sozlesmesini QA-010'a gore yerellestir: anlik, planli ve `run-now` akislari TR/EN icerik haritasi kabul etsin; WS istemcilerini `client.lang`, push tokenlarini cihaz/profil locale'i ile segmentlere ayirsin; bilinmeyen dilde Ingilizce fallback kullansin ve teslimat sonucunu dil bazinda raporlasin. (Paket F2)
 - [x] [P2] Performans ozet sozlesmesini QA-011'e gore guclendir: esik/SLO, ornek sayisi ve guven durumu, onceki donem farki, `veri yok` semantigi ve etki sirali route ozetini API'den acik tasiyarak adminin ham dakikalik kayitlardan sonuc tahmin etmesini engelle.
 - [ ] [P2] Davranis analitigi sozlesmesini QA-012'ye gore yeniden kur: kisi, deneme, eslesme cifti ve sohbet birimlerini ayir; sirali/cohort funnel, onceki donem farki, dusuk ornek guveni ve match/conversation bazli olay hikayesini backend tarafinda acik uret.
-- [ ] [P1] Yasal metin yayin sozlesmesini QA-013'e gore guvenli hale getir: taslak/onizleme/yayin ayrimi, alan bazli dogrulama, degisiklik ozeti, surum-reaccept etki hesabi, atomik yayin, audit ve geri alma destegi sagla.
+- [x] [P1] Yasal metin yayin sozlesmesini QA-013'e gore guvenli hale getir: taslak/onizleme/yayin ayrimi, alan bazli dogrulama, degisiklik ozeti, surum-reaccept etki hesabi, atomik yayin, audit ve geri alma destegi sagla. (`010`, Paket G)
 - [x] [P1] Eslesme arama yasam dongusunu QA-014 icin aciklastir: queue onay zamani/search kimligi, iptal onayi, reconnect sonrasi kuyrukta kalma veya yeniden katilma semantigi ve match_offer gecisini frontend'in tahmin etmeyecegi bir event sozlesmesiyle tasir.
 - [ ] [P1] QA-017 Global / kendi ulkem eslesme sozlesmesini kur: sunucu otoriteli `GLOBAL|COUNTRY` scope, canonical ISO ulke kodu, scope ve ulke tasiyan `searchId`, tek aktif kuyruk, atomik scope degisimi, ayni scope ile requeue/reconnect, stale event reddi ve kullanici onayli Global fallback eventlerini mevcut block/cooldown/match_offer kurallariyla birlestir.
 - [ ] [P1] QA-015 Sistem mesaji altyapisini kur: campaign/recipient modeli, locale, hedef snapshot'i, kalici inbox API'si, read receipt, versiyonlu WebSocket, push dikkat katmani, idempotency, batch/backoff, yetki ve audit.
@@ -274,7 +274,7 @@ Mevcut parcalar:
 - [ ] [P1] Bildirim Ayarlari ekranini QA-010'a gore cok dilli hale getir: anlik ve planli bildirimlerde Turkce/English baslik-metin alanlari, hedef/fallback ozeti, dil bazli alici tahmini, iki dil onizlemesi, test gonderimi ve dil bazli teslimat sonucu olmadan global gonderime izin verme.
 - [ ] [P2] Performans ekranini QA-011 Jarvis modeline gore yeniden tasarla: sistem durumu, esiklere uzaklik, degisim, veri guveni ve etkili route'lari ilk gorunumde ozetle; ham dakika/route tablolarini acilir kanit katmanina tasi; `yavas istek` esigini ve yetersiz ornek durumunu acik goster.
 - [ ] [P2] Davranis Analitigi ekranini QA-012 Jarvis modeline gore yeniden tasarla: ana kaybi/anomaliyi ve donusumu ozetle; saatlik tablo, event/platform dagilimi, kullanici tablosu ve raw olay akisini varsayilan gorunumden kaldirip filtrelenebilir kanit katmanina tasi; olaylari match/conversation hikayesi olarak grupla.
-- [ ] [P1] Yasal Metinler ekranini QA-013'e gore soft ve kontrollu editor olarak yeniden tasarla: belge kartlariyla durum ozeti, tek belge odagi, TR/EN karsilastirma, son kullanici onizlemesi, dirty-state, diff, surum/reaccept etki uyarisi ve onayli yayin akisi olmadan canli kaydi degistirme.
+- [x] [P1] Yasal Metinler ekranini QA-013'e gore soft ve kontrollu editor olarak yeniden tasarla: belge kartlariyla durum ozeti, tek belge odagi, TR/EN karsilastirma, son kullanici onizlemesi, dirty-state, diff, surum/reaccept etki uyarisi ve onayli yayin akisi olmadan canli kaydi degistirme. (Paket G)
 
 - [ ] [P1] Sistem Mesajlari ekranini QA-015'e gore tasarla: tek/sectili kisi, ulke/dil/platform/aktiflik/kayit tarihi/herkes hedefleri; TR/EN; alici-dil-push onizlemesi; kendime test; son onay ve teslim/okunma Jarvis ozeti.
 - [ ] [P1] Release Health ekranini QA-016 Jarvis modeline gore tasarla: aktif Web/Android surum sagligi, crash-free session, yeni/regresyon hatalari, etkilenen kullanici ve ekranlari etki sirasiyla ozetle; ham stack/device/breadcrumb kanitini maskeli acilir detayda tut; no-data ve dusuk ornek durumunu acik goster.
@@ -291,7 +291,7 @@ Mevcut parcalar:
 - [ ] [P1] Tum tablolar icin veri amaci, sahibi, saklama suresi ve silme matrisi olustur.
 - [ ] [P1] Mesaj, report, support media, analytics, push log ve IP/geo retention karari ver.
 - [x] [P1] `notification_schedules` icin surumlu cok dilli icerik semasi/migration'i tasarla; TR/EN varyantlarini tek baslik-metin yerine dogrulanabilir locale haritasinda sakla, mevcut tek dilli planlari otomatik global gondermeden once pasif/ceviri gerekli durumuna tasi. (`009`, Paket F2)
-- [ ] [P1] Yasal icerigi tek canli `app_settings` JSON kaydindan surumlu yayin gecmisine tasiyacak modeli QA-013'e gore tasarla; belge/dil, taslak-yayin, icerik hash'i, yayinlayan admin, gerekce, zaman, onceki surum ve geri alma baglantisini koru.
+- [x] [P1] Yasal icerigi tek canli `app_settings` JSON kaydindan surumlu yayin gecmisine tasiyacak modeli QA-013'e gore tasarla; belge/dil, taslak-yayin, icerik hash'i, yayinlayan admin, gerekce, zaman, onceki surum ve geri alma baglantisini koru. (`010`, Paket G)
 
 - [ ] [P1] QA-015 icin system_message_campaigns ve system_message_recipients migration'ini tasarla; locale, hedef snapshot'i, recipient unique/idempotency, teslim/read/CTA, audit, retention ve kullanici silmeyi netlestir.
 - [ ] [P1] QA-016 istemci hata verisi sahipligi ve retention modelini kararlastir: self-hosted ise client_error_events/release_health_rollups benzeri surumlu sema; dis saglayici ise yerel ozet/kimlik baglantisi, silme, kaynak haritasi erisimi, bolge ve maliyet sinirlarini belgeleyip hassas veri toplamama kuralini koru.
@@ -976,6 +976,8 @@ Her bulgu su formatla eklenecek:
 - Oncelik: P2
 - Durum: Acik
 ### QA-013 - Yasal Metinler soft bir editor ve guvenli yayin merkezi olmali
+
+**Durum:** Paket G otomatik ve yerel görsel QA ile tamamlandı; deploy sonrası public Web/Android eşitliği manuel kapanış bekliyor.
 
 - Tarih: 2026-09-02
 - Alan: Admin / Yasal Metinler / TR-EN Icerik / Yayin / Audit / UX / Backend / Veritabani

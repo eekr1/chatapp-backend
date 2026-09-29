@@ -84,12 +84,52 @@
     .media { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:10px; }
     .media .m { border:1px solid var(--border); border-radius:10px; padding:8px; background:rgba(255,255,255,0.02); }
     .media img, .media video { width:100%; max-height:220px; object-fit:contain; background:#0a0f18; border-radius:8px; }
-    .legal-editor { display:flex; flex-direction:column; gap:12px; }
-    .legal-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
+    .legal-editor { display:flex; flex-direction:column; gap:16px; }
+    .legal-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px; border:1px solid var(--border); border-radius:16px; background:linear-gradient(135deg,rgba(124,99,255,.14),rgba(32,216,231,.05)); }
+    .legal-hero h2 { margin:0 0 6px; font-size:20px; }
+    .legal-hero p { margin:0; color:var(--muted); max-width:700px; font-size:13px; line-height:1.55; }
+    .legal-live-pill { flex:0 0 auto; border:1px solid rgba(69,216,155,.35); color:var(--success); background:rgba(69,216,155,.08); border-radius:999px; padding:7px 10px; font-size:11px; font-weight:800; }
+    .legal-cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .legal-card { text-align:left; color:var(--text); border:1px solid var(--border); border-radius:14px; padding:14px; background:rgba(255,255,255,.025); cursor:pointer; min-width:0; }
+    .legal-card:hover,.legal-card.is-active { border-color:var(--accent); background:var(--accent-soft); }
+    .legal-card-head { display:flex; justify-content:space-between; gap:8px; align-items:center; margin-bottom:10px; }
+    .legal-card strong { font-size:13px; }
+    .legal-card small { display:block; color:var(--muted); line-height:1.45; }
+    .legal-state { border-radius:999px; padding:3px 7px; font-size:10px; color:var(--success); background:rgba(69,216,155,.1); white-space:nowrap; }
+    .legal-state.is-dirty { color:var(--warning); background:rgba(255,196,109,.1); }
+    .legal-workbench { display:grid; grid-template-columns:minmax(0,1fr) 310px; gap:14px; align-items:start; }
+    .legal-editor-panel,.legal-side-panel { border:1px solid var(--border); border-radius:16px; background:rgba(255,255,255,.018); padding:16px; }
+    .legal-panel-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px; }
+    .legal-panel-head h3 { margin:0 0 5px; }
+    .legal-panel-head p { margin:0; color:var(--muted); font-size:12px; }
+    .legal-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
     .legal-field { display:flex; flex-direction:column; gap:6px; }
     .legal-field label { font-size:12px; color:var(--muted); font-weight:600; }
-    .legal-field textarea { border:1px solid var(--border); border-radius:10px; padding:10px; resize:vertical; min-height:110px; font-family:Consolas,monospace; font-size:12px; background:rgba(21,28,40,0.74); color:var(--text); }
+    .legal-field input,.legal-field select,.legal-field textarea { width:100%; }
+    .legal-field textarea { border:1px solid var(--border); border-radius:10px; padding:10px; resize:vertical; min-height:240px; font-family:inherit; font-size:13px; line-height:1.55; background:rgba(21,28,40,0.74); color:var(--text); }
     .legal-status { font-size:12px; color:var(--muted); }
+    .legal-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:14px; }
+    .legal-publish-box { display:flex; flex-direction:column; gap:10px; }
+    .legal-publish-box h4,.legal-history h4 { margin:0; font-size:13px; }
+    .legal-check { display:flex; gap:8px; align-items:flex-start; color:var(--muted); font-size:11px; line-height:1.4; }
+    .legal-check input { width:auto; margin-top:2px; }
+    .legal-preview { border:1px solid var(--border); border-radius:12px; padding:11px; background:rgba(0,0,0,.16); font-size:12px; }
+    .legal-preview strong { display:block; margin-bottom:6px; }
+    .legal-diff-list { display:flex; flex-direction:column; gap:5px; margin-top:8px; color:var(--muted); }
+    .legal-history { margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+    .legal-history-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+    .legal-history-item { border:1px solid var(--border); border-radius:10px; padding:9px; font-size:11px; color:var(--muted); }
+    .legal-history-item strong { color:var(--text); display:block; margin-bottom:3px; }
+    .legal-consumer-preview { margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+    .legal-consumer-preview-head { display:flex; justify-content:space-between; gap:10px; margin-bottom:10px; }
+    .legal-consumer-preview-head strong { font-size:13px; }
+    .legal-consumer-preview-head span { color:var(--muted); font-size:11px; }
+    .legal-preview-devices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .legal-device { border:1px solid var(--border); border-radius:14px; padding:13px; min-height:155px; background:linear-gradient(180deg,#101421,#0b0e18); overflow:hidden; }
+    .legal-device small { color:var(--cyan); font-weight:800; letter-spacing:.08em; }
+    .legal-device h4 { margin:12px 0 8px; font-size:15px; }
+    .legal-device p { margin:0; color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; line-height:1.55; max-height:120px; overflow:auto; }
+    .legal-counter { color:var(--muted-2); font-size:10px; font-weight:500; margin-left:auto; }
     .deletion-row-note { font-size:12px; color:var(--muted); margin-bottom:8px; }
     .warn { border:1px solid #89444e; background:#371f24; color:#ffbdc4; border-radius:8px; padding:10px; font-size:12px; }
     .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:8px 0 12px; }
@@ -414,6 +454,10 @@
       .push-summary { grid-template-columns:1fr; }
       .dashboard-section-head { align-items:flex-start; flex-direction:column; }
       .admin-summary-grid, .detail-hero, .detail-kv-grid, .workflow-form, .insight-grid, .journey-grid, .notification-composer-grid, .schedule-list { grid-template-columns:1fr; }
+      .legal-cards,.legal-grid,.legal-workbench,.legal-preview-devices { grid-template-columns:1fr; }
+      .legal-hero { flex-direction:column; }
+      .legal-live-pill { align-self:flex-start; }
+      .legal-field textarea { min-height:190px; }
       .journey-step:not(:last-child)::after { display:none; }
       .filter-grid { grid-template-columns:1fr; }
       .workflow-field.is-wide { grid-column:auto; }
@@ -1347,6 +1391,7 @@
     async function switchTab(tab,ev,updateHash=true){
       if(!Object.prototype.hasOwnProperty.call(TAB_LABELS,tab)) tab='dashboard';
       const tabChanged=currentTab!==tab;
+      if(tabChanged&&currentTab==='legal'&&legalHasUnsavedChanges&&!confirm('Kaydedilmemiş yasal metin değişiklikleri var. Bu sayfadan ayrılmak istiyor musunuz?')) return;
       if(tabChanged){ clearBulkSelectionState(); closeDetailDrawer(); }
       currentTab=tab;
       setActiveNav(tab);
@@ -1367,246 +1412,220 @@
     }
     function stopOnlineUsersAutoRefresh(){ if(!onlineUsersRefreshTimer) return; clearInterval(onlineUsersRefreshTimer); onlineUsersRefreshTimer=null; }
 
-    function renderLegalEditor(item,updatedAt){
-      const footer=item?.footer||{};
-      const footerUrls=footer?.urls||{};
-      const footerTr=footer?.tr||{};
-      const footerEn=footer?.en||{};
-      const versions=item?.versions||{};
-      const docs=item?.documents||{};
-      const privacy=docs.privacy||{};
-      const terms=docs.terms||{};
-      const childSafety=docs.childSafety||{};
-      const c=document.getElementById('content');
-      c.innerHTML=`
-        <div class="legal-editor">
-          <div class="legal-status">Son guncelleme: ${updatedAt?d(updatedAt):'-'}</div>
-          <div id="legal-placeholder-warning" class="warn" style="display:none"></div>
-          <div class="legal-grid">
-            <div class="legal-field">
-              <label>Footer TR slogan</label>
-              <input id="legal_footer_tr_tagline" type="text" value="${esc(footerTr.tagline||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Footer TR gizlilik etiketi</label>
-              <input id="legal_footer_tr_privacy_label" type="text" value="${esc(footerTr.privacyLabel||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Footer TR sartlar etiketi</label>
-              <input id="legal_footer_tr_terms_label" type="text" value="${esc(footerTr.termsLabel||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Footer EN tagline</label>
-              <input id="legal_footer_en_tagline" type="text" value="${esc(footerEn.tagline||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Footer EN privacy label</label>
-              <input id="legal_footer_en_privacy_label" type="text" value="${esc(footerEn.privacyLabel||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Footer EN terms label</label>
-              <input id="legal_footer_en_terms_label" type="text" value="${esc(footerEn.termsLabel||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Gizlilik URL</label>
-              <input id="legal_footer_url_privacy" type="text" value="${esc(footerUrls.privacy||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Sartlar URL</label>
-              <input id="legal_footer_url_terms" type="text" value="${esc(footerUrls.terms||'')}" />
-            </div>
-          </div>
+    const LEGAL_META={
+      privacy:{title:'Gizlilik Politikası',hint:'Kişisel veri işleme ve gizlilik metni'},
+      terms:{title:'Kullanım Şartları',hint:'Hizmet koşulları ve kullanıcı yükümlülükleri'},
+      childSafety:{title:'Çocuk Güvenliği',hint:'CSAE / CSAM güvenlik standartları'},
+      footer:{title:'Footer ve Bağlantılar',hint:'Uygulama alt alanı, etiketler ve URL’ler'}
+    };
+    let legalCenterState=null;
+    let legalSelectedKey='privacy';
+    let legalPreviewState=null;
+    let legalHasUnsavedChanges=false;
+    window.addEventListener('beforeunload',(event)=>{
+      if(!legalHasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue='';
+    });
 
-          <div class="legal-grid">
-            <div class="legal-field">
-              <label>Terms versiyon</label>
-              <input id="legal_terms_version" type="text" value="${esc(versions.terms||'v1')}" />
-            </div>
-            <div class="legal-field">
-              <label>Privacy versiyon</label>
-              <input id="legal_privacy_version" type="text" value="${esc(versions.privacy||'v1')}" />
-            </div>
-          </div>
-
-          <div class="legal-grid">
-            <div class="legal-field">
-              <label>Privacy TR baslik</label>
-              <input id="legal_privacy_tr_title" type="text" value="${esc(privacy?.tr?.title||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Privacy EN baslik</label>
-              <input id="legal_privacy_en_title" type="text" value="${esc(privacy?.en?.title||'')}" />
-            </div>
-          </div>
-          <div class="legal-grid">
-            <div class="legal-field">
-              <label>Privacy TR icerik</label>
-              <textarea id="legal_privacy_tr_content">${esc(privacy?.tr?.content||'')}</textarea>
-            </div>
-            <div class="legal-field">
-              <label>Privacy EN icerik</label>
-              <textarea id="legal_privacy_en_content">${esc(privacy?.en?.content||'')}</textarea>
-            </div>
-          </div>
-
-          <div class="legal-grid">
-            <div class="legal-field">
-              <label>Terms TR baslik</label>
-              <input id="legal_terms_tr_title" type="text" value="${esc(terms?.tr?.title||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Terms EN baslik</label>
-              <input id="legal_terms_en_title" type="text" value="${esc(terms?.en?.title||'')}" />
-            </div>
-          </div>
-          <div class="legal-grid">
-            <div class="legal-field">
-              <label>Terms TR icerik</label>
-              <textarea id="legal_terms_tr_content">${esc(terms?.tr?.content||'')}</textarea>
-            </div>
-            <div class="legal-field">
-              <label>Terms EN icerik</label>
-              <textarea id="legal_terms_en_content">${esc(terms?.en?.content||'')}</textarea>
-            </div>
-          </div>
-
-          <div class="legal-grid">
-            <div class="legal-field">
-              <label>Child Safety TR baslik</label>
-              <input id="legal_child_safety_tr_title" type="text" value="${esc(childSafety?.tr?.title||'')}" />
-            </div>
-            <div class="legal-field">
-              <label>Child Safety EN baslik</label>
-              <input id="legal_child_safety_en_title" type="text" value="${esc(childSafety?.en?.title||'')}" />
-            </div>
-          </div>
-          <div class="legal-grid">
-            <div class="legal-field">
-              <label>Child Safety TR icerik</label>
-              <textarea id="legal_child_safety_tr_content">${esc(childSafety?.tr?.content||'')}</textarea>
-            </div>
-            <div class="legal-field">
-              <label>Child Safety EN icerik</label>
-              <textarea id="legal_child_safety_en_content">${esc(childSafety?.en?.content||'')}</textarea>
-            </div>
-          </div>
-
-          <div class="row" style="margin-top:4px">
-            <button class="btn btn-refresh" onclick="saveLegalContent()">Kaydet</button>
-            <span id="legal-save-status" class="legal-status"></span>
-          </div>
+    function legalDocumentFields(key,section){
+      if(key==='footer'){
+        const footer=section?.footer||{};
+        return `<div class="legal-grid">
+          <div class="legal-field"><label>TR slogan <span class="legal-counter"></span></label><input id="legal_tr_tagline" data-limit="240" maxlength="240" value="${esc(footer?.tr?.tagline||'')}" /></div>
+          <div class="legal-field"><label>EN tagline <span class="legal-counter"></span></label><input id="legal_en_tagline" data-limit="240" maxlength="240" value="${esc(footer?.en?.tagline||'')}" /></div>
+          <div class="legal-field"><label>TR gizlilik etiketi <span class="legal-counter"></span></label><input id="legal_tr_privacy" data-limit="80" maxlength="80" value="${esc(footer?.tr?.privacyLabel||'')}" /></div>
+          <div class="legal-field"><label>EN privacy label <span class="legal-counter"></span></label><input id="legal_en_privacy" data-limit="80" maxlength="80" value="${esc(footer?.en?.privacyLabel||'')}" /></div>
+          <div class="legal-field"><label>TR şartlar etiketi <span class="legal-counter"></span></label><input id="legal_tr_terms" data-limit="80" maxlength="80" value="${esc(footer?.tr?.termsLabel||'')}" /></div>
+          <div class="legal-field"><label>EN terms label <span class="legal-counter"></span></label><input id="legal_en_terms" data-limit="80" maxlength="80" value="${esc(footer?.en?.termsLabel||'')}" /></div>
+          <div class="legal-field"><label>Gizlilik URL <span class="legal-counter"></span></label><input id="legal_url_privacy" data-limit="500" maxlength="500" value="${esc(footer?.urls?.privacy||'')}" /></div>
+          <div class="legal-field"><label>Şartlar URL <span class="legal-counter"></span></label><input id="legal_url_terms" data-limit="500" maxlength="500" value="${esc(footer?.urls?.terms||'')}" /></div>
         </div>`;
-
-      const fields=c.querySelectorAll('input[id^="legal_"], textarea[id^="legal_"]');
-      fields.forEach((el)=>el.addEventListener('input',updateLegalPlaceholderWarning));
-      updateLegalPlaceholderWarning();
+      }
+      const document=section?.document||{};
+      const versionField=['privacy','terms'].includes(key)
+        ? `<div class="legal-field" style="margin-bottom:12px"><label>Belge sürümü <span class="legal-counter"></span></label><input id="legal_version" data-limit="40" maxlength="40" value="${esc(section?.version||'')}" /></div>`:'';
+      return `${versionField}<div class="legal-grid">
+        <div class="legal-field"><label>Türkçe başlık <span class="legal-counter"></span></label><input id="legal_tr_title" data-limit="180" maxlength="180" value="${esc(document?.tr?.title||'')}" /><label>Türkçe içerik <span class="legal-counter"></span></label><textarea id="legal_tr_content" data-limit="30000" maxlength="30000">${esc(document?.tr?.content||'')}</textarea></div>
+        <div class="legal-field"><label>English title <span class="legal-counter"></span></label><input id="legal_en_title" data-limit="180" maxlength="180" value="${esc(document?.en?.title||'')}" /><label>English content <span class="legal-counter"></span></label><textarea id="legal_en_content" data-limit="30000" maxlength="30000">${esc(document?.en?.content||'')}</textarea></div>
+      </div>`;
     }
 
-    const LEGAL_PLACEHOLDER_PATTERNS=[
-      /panelden\s+guncellenebilir/i,
-      /can\s+be\s+updated\s+from\s+the\s+admin\s+panel/i,
-      /placeholder/i,
-      /lorem ipsum/i
-    ];
+    function renderLegalEditor(){
+      if(!legalCenterState) return;
+      const current=legalCenterState.documents?.[legalSelectedKey]||{};
+      const meta=LEGAL_META[legalSelectedKey];
+      const c=document.getElementById('content');
+      c.innerHTML=`<div class="legal-editor">
+        <section class="legal-hero">
+          <div><h2>Yasal İçerik Yayın Merkezi</h2><p>Metinleri önce taslak olarak hazırlayın; farkı ve kullanıcı etkisini incelemeden canlı içeriğe dokunulmaz.</p></div>
+          <span class="legal-live-pill">● CANLI KORUMALI</span>
+        </section>
+        <div class="legal-cards">${Object.entries(LEGAL_META).map(([key,value])=>{
+          const item=legalCenterState.documents?.[key]||{};
+          const version=item.section?.version?`Sürüm ${esc(item.section.version)} · `:'';
+          const published=item.latestPublication?.published_at?`Son yayın ${d(item.latestPublication.published_at)}`:'Henüz merkezden yayın yok';
+          return `<button class="legal-card ${key===legalSelectedKey?'is-active':''}" onclick="selectLegalDocument('${key}')"><div class="legal-card-head"><strong>${esc(value.title)}</strong><span class="legal-state ${item.dirty?'is-dirty':''}">${item.dirty?'Taslak değişti':'Canlı ile aynı'}</span></div><small>${esc(value.hint)}</small><small style="margin-top:8px">${version}Revizyon ${Number(item.revision||0)}</small><small>${published}</small></button>`;
+        }).join('')}</div>
+        <div class="legal-workbench">
+          <section class="legal-editor-panel">
+            <div class="legal-panel-head"><div><h3>${esc(meta.title)}</h3><p>TR ve EN içerikleri aynı ekranda karşılaştırarak düzenleyin.</p></div><span class="legal-status">Taslak r${Number(current.revision||0)}</span></div>
+            <div id="legal-placeholder-warning" class="warn" style="display:none"></div>
+            ${legalDocumentFields(legalSelectedKey,current.section)}
+            <div class="legal-actions"><button class="btn btn-refresh" onclick="saveLegalDraft()">Taslağı kaydet</button><span id="legal-save-status" class="legal-status">Canlı son güncelleme: ${legalCenterState.liveUpdatedAt?d(legalCenterState.liveUpdatedAt):'-'}</span></div>
+            <div class="legal-consumer-preview"><div class="legal-consumer-preview-head"><strong>Son kullanıcı önizlemesi</strong><span>Düz metin · güvenli görünüm</span></div><div id="legal-consumer-preview"></div></div>
+          </section>
+          <aside class="legal-side-panel">
+            <div class="legal-publish-box"><h4>Yayın kontrolü</h4>
+              <div class="legal-field"><label>Değişiklik sınıfı</label><select id="legal_change_class"><option value="typo_format">Yazım / biçim</option><option value="clarification">Açıklama</option><option value="material">Maddi değişiklik</option></select></div>
+              <div class="legal-field"><label>Yayın nedeni</label><textarea id="legal_publish_reason" style="min-height:86px" placeholder="Ne değişti ve neden yayınlanıyor?"></textarea></div>
+              ${['privacy','terms'].includes(legalSelectedKey)?'<label class="legal-check"><input id="legal_preserve_acceptance" type="checkbox" /> Sürüm değişmiyorsa mevcut kullanıcı onaylarının korunmasını bilinçli olarak kabul ediyorum.</label>':''}
+              <button class="btn btn-shadow" onclick="previewLegalPublication()">Farkı ve etkiyi incele</button>
+              <div id="legal-preview"></div>
+            </div>
+            <div class="legal-history"><h4>Yayın geçmişi</h4><div id="legal-history-list" class="legal-history-list"><span class="legal-status">Yükleniyor...</span></div></div>
+          </aside>
+        </div>
+      </div>`;
+      c.querySelectorAll('.legal-editor-panel input,.legal-editor-panel textarea').forEach((el)=>el.addEventListener('input',markLegalDirty));
+      updateLegalCounters();
+      updateLegalPlaceholderWarning();
+      renderLegalConsumerPreview();
+      loadLegalHistory();
+    }
 
+    function selectLegalDocument(key){
+      if(key===legalSelectedKey) return;
+      if(legalHasUnsavedChanges&&!confirm('Kaydedilmemiş değişiklikler var. Başka belgeye geçilsin mi?')) return;
+      legalSelectedKey=key; legalPreviewState=null; legalHasUnsavedChanges=false; renderLegalEditor();
+    }
+
+    function collectLegalSection(){
+      if(legalSelectedKey==='footer') return {footer:{urls:{privacy:val('legal_url_privacy'),terms:val('legal_url_terms')},tr:{tagline:val('legal_tr_tagline'),privacyLabel:val('legal_tr_privacy'),termsLabel:val('legal_tr_terms')},en:{tagline:val('legal_en_tagline'),privacyLabel:val('legal_en_privacy'),termsLabel:val('legal_en_terms')}}};
+      return {version:['privacy','terms'].includes(legalSelectedKey)?val('legal_version'):null,document:{tr:{title:val('legal_tr_title'),content:val('legal_tr_content')},en:{title:val('legal_en_title'),content:val('legal_en_content')}}};
+    }
+
+    function markLegalDirty(){
+      legalHasUnsavedChanges=true;
+      legalPreviewState=null;
+      const status=document.getElementById('legal-save-status');
+      if(status) status.innerText='Kaydedilmemiş değişiklik var';
+      const preview=document.getElementById('legal-preview');
+      if(preview) preview.innerHTML='';
+      updateLegalCounters();
+      updateLegalPlaceholderWarning();
+      renderLegalConsumerPreview();
+    }
+
+    function updateLegalCounters(){
+      document.querySelectorAll('.legal-editor-panel [data-limit]').forEach((field)=>{
+        const counter=field.previousElementSibling?.querySelector('.legal-counter');
+        if(counter) counter.innerText=`${String(field.value||'').length}/${field.dataset.limit}`;
+      });
+    }
+
+    function renderLegalConsumerPreview(){
+      const host=document.getElementById('legal-consumer-preview');
+      if(!host) return;
+      const section=collectLegalSection();
+      if(legalSelectedKey==='footer'){
+        host.innerHTML=`<div class="legal-preview-devices"><div class="legal-device"><small>TR FOOTER</small><h4>${esc(section.footer.tr.tagline)}</h4><p>${esc(section.footer.tr.privacyLabel)} · ${esc(section.footer.tr.termsLabel)}\n${esc(section.footer.urls.privacy)} · ${esc(section.footer.urls.terms)}</p></div><div class="legal-device"><small>EN FOOTER</small><h4>${esc(section.footer.en.tagline)}</h4><p>${esc(section.footer.en.privacyLabel)} · ${esc(section.footer.en.termsLabel)}\n${esc(section.footer.urls.privacy)} · ${esc(section.footer.urls.terms)}</p></div></div>`;
+        return;
+      }
+      host.innerHTML=`<div class="legal-preview-devices"><div class="legal-device"><small>TR · MOBİL</small><h4>${esc(section.document.tr.title)}</h4><p>${esc(section.document.tr.content)}</p></div><div class="legal-device"><small>EN · MOBILE</small><h4>${esc(section.document.en.title)}</h4><p>${esc(section.document.en.content)}</p></div></div>`;
+    }
+
+    const LEGAL_PLACEHOLDER_PATTERNS=[/panelden\s+guncellenebilir/i,/can\s+be\s+updated\s+from\s+the\s+admin\s+panel/i,/placeholder/i,/lorem ipsum/i];
     function updateLegalPlaceholderWarning(){
       const host=document.getElementById('legal-placeholder-warning');
       if(!host) return;
-      const payload=collectLegalPayload();
-      const texts=[
-        payload?.footer?.tr?.tagline,
-        payload?.footer?.tr?.privacyLabel,
-        payload?.footer?.tr?.termsLabel,
-        payload?.footer?.en?.tagline,
-        payload?.footer?.en?.privacyLabel,
-        payload?.footer?.en?.termsLabel,
-        payload?.documents?.privacy?.tr?.title,
-        payload?.documents?.privacy?.tr?.content,
-        payload?.documents?.privacy?.en?.title,
-        payload?.documents?.privacy?.en?.content,
-        payload?.documents?.terms?.tr?.title,
-        payload?.documents?.terms?.tr?.content,
-        payload?.documents?.terms?.en?.title,
-        payload?.documents?.terms?.en?.content,
-        payload?.documents?.childSafety?.tr?.title,
-        payload?.documents?.childSafety?.tr?.content,
-        payload?.documents?.childSafety?.en?.title,
-        payload?.documents?.childSafety?.en?.content
-      ].filter(Boolean);
-      const hasPlaceholder=texts.some((text)=>LEGAL_PLACEHOLDER_PATTERNS.some((re)=>re.test(String(text))));
-      if(!hasPlaceholder){
-        host.style.display='none';
-        host.innerHTML='';
-        return;
-      }
-      host.style.display='block';
-      host.innerHTML='Uyari: Legal metinlerde placeholder gorunumu var. Production icin final hukuki metni girin.';
-    }
-
-    function collectLegalPayload(){
-      return {
-        footer:{
-          urls:{
-            privacy:val('legal_footer_url_privacy'),
-            terms:val('legal_footer_url_terms')
-          },
-          tr:{
-            tagline:val('legal_footer_tr_tagline'),
-            privacyLabel:val('legal_footer_tr_privacy_label'),
-            termsLabel:val('legal_footer_tr_terms_label')
-          },
-          en:{
-            tagline:val('legal_footer_en_tagline'),
-            privacyLabel:val('legal_footer_en_privacy_label'),
-            termsLabel:val('legal_footer_en_terms_label')
-          }
-        },
-        versions:{
-          terms:val('legal_terms_version'),
-          privacy:val('legal_privacy_version')
-        },
-        documents:{
-          privacy:{
-            tr:{title:val('legal_privacy_tr_title'),content:val('legal_privacy_tr_content')},
-            en:{title:val('legal_privacy_en_title'),content:val('legal_privacy_en_content')}
-          },
-          terms:{
-            tr:{title:val('legal_terms_tr_title'),content:val('legal_terms_tr_content')},
-            en:{title:val('legal_terms_en_title'),content:val('legal_terms_en_content')}
-          },
-          childSafety:{
-            tr:{title:val('legal_child_safety_tr_title'),content:val('legal_child_safety_tr_content')},
-            en:{title:val('legal_child_safety_en_title'),content:val('legal_child_safety_en_content')}
-          }
-        }
-      };
+      const section=collectLegalSection();
+      const hasPlaceholder=JSON.stringify(section).split('\\n').some((text)=>LEGAL_PLACEHOLDER_PATTERNS.some((re)=>re.test(text)));
+      host.style.display=hasPlaceholder?'block':'none';
+      host.innerText=hasPlaceholder?'Uyarı: Taslakta geçici içerik algılandı. Yayından önce nihai hukuki metni girin.':'';
     }
 
     async function loadLegalEditor(){
       const c=document.getElementById('content');
-      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Yasal metinler yukleniyor...</p>';
+      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Yayın merkezi yükleniyor...</p>';
       try{
-        const r=await fetch('/admin/legal'); const x=await r.json();
-        if(!r.ok) throw new Error(x.error||'Yasal metinler okunamadi.');
-        renderLegalEditor(x.item||{},x.updatedAt||null);
-      }catch(e){
-        c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Yasal metinler yuklenemedi: ${esc(e.message||e)}</p>`;
-      }
+        const r=await fetch('/admin/legal-center'); const x=await r.json();
+        if(!r.ok) throw new Error(x.error||'Yasal içerikler okunamadı.');
+        legalCenterState=x; legalPreviewState=null; legalHasUnsavedChanges=false; renderLegalEditor();
+      }catch(e){ c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Yayın merkezi yüklenemedi: ${esc(e.message||e)}</p>`; }
     }
 
-    async function saveLegalContent(){
+    async function saveLegalDraft(){
+      const current=legalCenterState?.documents?.[legalSelectedKey]||{};
       const status=document.getElementById('legal-save-status');
-      if(status) status.innerText='Kaydediliyor...';
+      if(status) status.innerText='Taslak kaydediliyor...';
       try{
-        const payload=collectLegalPayload();
-        const r=await fetch('/admin/legal',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const r=await fetch(`/admin/legal-drafts/${encodeURIComponent(legalSelectedKey)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({expectedRevision:Number(current.revision||0),section:collectLegalSection()})});
         const x=await r.json().catch(()=>({}));
-        if(!r.ok||!x.success) throw new Error(x.error||'Kayit basarisiz');
-        if(status) status.innerText=`Kaydedildi: ${d(x.updatedAt||new Date().toISOString())}`;
-      }catch(e){
-        if(status) status.innerText='Kayit basarisiz';
-        alert(`Yasal metinler kaydedilemedi: ${e.message}`);
-      }
+        if(!r.ok||!x.success) throw new Error(x.error||'Taslak kaydedilemedi.');
+        await loadLegalEditor();
+      }catch(e){ if(status) status.innerText='Taslak kaydedilemedi'; alert(e.message); }
+    }
+
+    function legalPublicationRequest(confirmPublish=false){
+      const current=legalCenterState?.documents?.[legalSelectedKey]||{};
+      return {documentKey:legalSelectedKey,expectedRevision:Number(current.revision||0),changeClass:val('legal_change_class'),reason:val('legal_publish_reason'),preserveAcceptance:document.getElementById('legal_preserve_acceptance')?.checked===true,confirmPublish};
+    }
+
+    async function previewLegalPublication(){
+      const host=document.getElementById('legal-preview');
+      host.innerHTML='<div class="legal-preview">Etki hesaplanıyor...</div>';
+      try{
+        const r=await fetch('/admin/legal-publications/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(legalPublicationRequest())});
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Önizleme oluşturulamadı.');
+        legalPreviewState=x;
+        const fields=(x.diff?.fields||[]).slice(0,8).map((f)=>`<span>${esc(f.field)} · ${Number(f.characterDelta)>=0?'+':''}${Number(f.characterDelta||0)} karakter</span>`).join('');
+        host.innerHTML=`<div class="legal-preview"><strong>${Number(x.diff?.changedFieldCount||0)} alan değişti</strong><span>${x.versionChanged?`Sürüm: ${esc(x.versionBefore)} → ${esc(x.versionAfter)}`:'Sürüm değişmiyor'}</span><div class="legal-diff-list">${fields}</div><p style="color:${x.requiresReaccept?'var(--warning)':'var(--success)'}">${x.requiresReaccept?`${Number(x.affectedUserCount||0)} hesap yeniden onay verecek.`:'Kullanıcı onayları etkilenmeyecek.'}</p><button class="btn btn-ban" onclick="publishLegalContent()">Yayını onayla</button></div>`;
+      }catch(e){ legalPreviewState=null; host.innerHTML=`<div class="warn">${esc(e.message)}</div>`; }
+    }
+
+    async function publishLegalContent(){
+      if(!legalPreviewState) return;
+      if(!confirm(`${LEGAL_META[legalSelectedKey].title} canlıya yayınlanacak. Bu işlem yayın geçmişine kalıcı olarak kaydedilir. Devam edilsin mi?`)) return;
+      const host=document.getElementById('legal-preview');
+      try{
+        const r=await fetch('/admin/legal-publications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(legalPublicationRequest(true))});
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Yayın başarısız.');
+        await loadLegalEditor();
+      }catch(e){ host.innerHTML=`<div class="warn">${esc(e.message)}</div>`; }
+    }
+
+    async function loadLegalHistory(){
+      const host=document.getElementById('legal-history-list');
+      try{
+        const r=await fetch(`/admin/legal-publications?documentKey=${encodeURIComponent(legalSelectedKey)}`); const x=await r.json();
+        if(!r.ok) throw new Error(x.error||'Geçmiş okunamadı.');
+        host.innerHTML=(x.items||[]).length?(x.items||[]).map((item)=>`<div class="legal-history-item"><strong>${d(item.published_at)} · ${esc(item.change_class)}</strong><span>${esc(item.reason)} · ${esc(item.published_by)}</span><div class="legal-actions"><button class="btn btn-details" onclick="viewLegalPublication('${esc(item.id)}')">Kanıtı gör</button><button class="btn btn-shadow" onclick="restoreLegalDraft('${esc(item.id)}')">Taslağa al</button></div><div id="legal-history-${esc(item.id)}"></div></div>`).join(''):'<span class="legal-status">Henüz yayın geçmişi yok.</span>';
+      }catch(e){ host.innerHTML=`<span class="legal-status">${esc(e.message)}</span>`; }
+    }
+
+    async function viewLegalPublication(publicationId){
+      const host=document.getElementById(`legal-history-${publicationId}`);
+      if(!host) return;
+      try{
+        const r=await fetch(`/admin/legal-publications/${encodeURIComponent(publicationId)}`); const x=await r.json();
+        if(!r.ok) throw new Error(x.error||'Yayın kanıtı okunamadı.');
+        const section=x.item?.section||{};
+        const evidence=legalSelectedKey==='footer'?JSON.stringify(section.footer,null,2):`${section.document?.tr?.title||''}\n${section.document?.tr?.content||''}\n\n${section.document?.en?.title||''}\n${section.document?.en?.content||''}`;
+        host.innerHTML=`<div class="legal-preview" style="margin-top:8px"><strong>Hash ${esc(String(x.item?.content_hash||'').slice(0,12))}</strong><p style="white-space:pre-wrap;max-height:180px;overflow:auto">${esc(evidence)}</p></div>`;
+      }catch(e){ host.innerHTML=`<div class="warn" style="margin-top:8px">${esc(e.message)}</div>`; }
+    }
+
+    async function restoreLegalDraft(publicationId){
+      const current=legalCenterState?.documents?.[legalSelectedKey]||{};
+      try{
+        const r=await fetch(`/admin/legal-publications/${encodeURIComponent(publicationId)}/rollback-draft`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expectedRevision:Number(current.revision||0)})});
+        const x=await r.json().catch(()=>({}));
+        if(!r.ok||!x.success) throw new Error(x.error||'Geçmiş taslağa alınamadı.');
+        await loadLegalEditor();
+      }catch(e){ alert(e.message); }
     }
 
     function deletionStatusTone(status){

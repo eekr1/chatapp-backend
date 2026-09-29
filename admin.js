@@ -22,9 +22,18 @@ const {
 const { canRejectDeletion, executeAccountDeletion, POLICY_VERSION: DATA_POLICY_VERSION } = require('./utils/accountDeletion');
 const {
     fetchLegalSettings,
-    validateLegalContentPayload,
     saveLegalSettings
 } = require('./utils/legalContent');
+const {
+    LEGAL_DOCUMENT_KEYS,
+    LEGAL_CHANGE_CLASSES,
+    assertDocumentKey,
+    extractLegalSection,
+    applyLegalSection,
+    hashLegalContent,
+    buildLegalDiff,
+    evaluateLegalPublication
+} = require('./utils/legalPublishing');
 const {
     SUPPORT_PRIORITIES,
     isSafeSupportMediaType,
@@ -758,26 +767,318 @@ router.get('/legal', async (req, res) => {
 });
 
 router.put('/legal', async (req, res) => {
-    const validation = validateLegalContentPayload(req.body);
-    if (!validation.ok) {
-        return res.status(400).json({ error: validation.error });
-    }
+    return res.status(409).json({ error: 'Dogrudan canli guncelleme kapatildi. Taslak ve yayinlama akislarini kullanin.' });
+});
 
+const legalErrorStatus = (error) => {
+    if (error?.code === 'LEGAL_REVISION_CONFLICT') return 409;
+    if (error?.code === 'LEGAL_NOT_FOUND') return 404;
+    if (error?.code) return 500;
+    return 400;
+};
+
+const legalReason = (value) => {
+    const reason = String(value || '').trim();
+    if (reason.length < 8) throw new Error('Yayin nedeni en az 8 karakter olmalidir.');
+    if (reason.length > 500) throw new Error('Yayin nedeni en fazla 500 karakter olabilir.');
+    return reason;
+};
+
+const loadLegalDraft = async (db, documentKey, liveContent, { lock = false } = {}) => {
+    const result = await db.query(
+        `SELECT document_key,draft_content,draft_revision,base_publication_id,rollback_of_publication_id,updated_by,updated_at
+         FROM legal_content_workspaces WHERE document_key=$1${lock ? ' FOR UPDATE' : ''}`,
+        [documentKey]
+    );
+    if (!result.rows.length) {
+        return {
+            documentKey,
+            section: extractLegalSection(liveContent, documentKey),
+            revision: 0,
+            basePublicationId: null,
+            rollbackOfPublicationId: null,
+            updatedBy: null,
+            updatedAt: null
+        };
+    }
+    const row = result.rows[0];
+    return {
+        documentKey,
+        section: row.draft_content,
+        revision: Number(row.draft_revision),
+        basePublicationId: row.base_publication_id || null,
+        rollbackOfPublicationId: row.rollback_of_publication_id || null,
+        updatedBy: row.updated_by || null,
+        updatedAt: row.updated_at || null
+    };
+};
+
+const countLegalReacceptImpact = async (db, nextContent, requiresReaccept) => {
+    if (!requiresReaccept) return 0;
+    const result = await db.query(
+        `SELECT COUNT(*)::int AS count
+         FROM users u
+         LEFT JOIN LATERAL (
+           SELECT terms_version,privacy_version
+           FROM legal_acceptances la
+           WHERE la.user_id=u.id
+           ORDER BY la.accepted_at DESC,la.id DESC
+           LIMIT 1
+         ) latest ON TRUE
+         WHERE COALESCE(u.status,'active') <> 'deleted'
+           AND (latest.terms_version IS DISTINCT FROM $1 OR latest.privacy_version IS DISTINCT FROM $2)`,
+        [nextContent.versions.terms, nextContent.versions.privacy]
+    );
+    return Number(result.rows[0]?.count || 0);
+};
+
+const legalPreview = async (db, body, { lock = false } = {}) => {
+    const documentKey = assertDocumentKey(body?.documentKey);
+    const changeClass = String(body?.changeClass || '').trim();
+    if (!LEGAL_CHANGE_CLASSES.includes(changeClass)) throw new Error('Degisiklik sinifi secilmelidir.');
+    const reason = legalReason(body?.reason);
+    const expectedRevision = Number(body?.expectedRevision);
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new Error('Gecersiz taslak revizyonu.');
+    const { item: liveContent } = await fetchLegalSettings(db, { lock: lock ? 'update' : false });
+    const draft = await loadLegalDraft(db, documentKey, liveContent, { lock });
+    if (draft.revision !== expectedRevision) {
+        const error = new Error('Taslak baska bir yonetici tarafindan degistirildi. Sayfayi yenileyin.');
+        error.code = 'LEGAL_REVISION_CONFLICT';
+        throw error;
+    }
+    const evaluation = evaluateLegalPublication({ liveContent, draftSection: draft.section, documentKey, changeClass });
+    if ((documentKey === 'privacy' || documentKey === 'terms') && !evaluation.versionChanged && body?.preserveAcceptance !== true) {
+        throw new Error('Surum korunuyorsa mevcut onaylari koruma karari acikca isaretlenmelidir.');
+    }
+    const affectedUserCount = await countLegalReacceptImpact(db, evaluation.nextContent, evaluation.requiresReaccept);
+    return { documentKey, changeClass, reason, expectedRevision, draft, liveContent, affectedUserCount, ...evaluation };
+};
+
+router.get('/legal-center', async (req, res) => {
     try {
-        const updatedAt = await saveLegalSettings(pool, validation.value);
-        await logAdminAudit(pool, {
-            actorAdmin: req.adminUser,
-            actionType: 'LEGAL_UPDATE',
-            entityType: 'app_settings',
-            entityId: 'legal_content_v1',
-            payload: {
-                versions: validation.value?.versions || {},
-                updatedAt
-            }
-        });
-        res.json({ success: true, item: validation.value, updatedAt });
+        const { item, updatedAt } = await fetchLegalSettings(pool);
+        const [workspaceResult, publicationResult] = await Promise.all([
+            pool.query(`SELECT document_key,draft_content,draft_revision,base_publication_id,rollback_of_publication_id,updated_by,updated_at FROM legal_content_workspaces`),
+            pool.query(`SELECT DISTINCT ON (document_key) id,document_key,version,change_class,requires_reaccept,affected_user_count,published_by,published_at FROM legal_content_publications ORDER BY document_key,published_at DESC,id DESC`)
+        ]);
+        const workspaceByKey = new Map(workspaceResult.rows.map((row) => [row.document_key, row]));
+        const latestByKey = Object.fromEntries(publicationResult.rows.map((row) => [row.document_key, row]));
+        const documents = {};
+        for (const documentKey of LEGAL_DOCUMENT_KEYS) {
+            const row = workspaceByKey.get(documentKey);
+            const section = row?.draft_content || extractLegalSection(item, documentKey);
+            const draftContent = applyLegalSection(item, documentKey, section);
+            documents[documentKey] = {
+                section,
+                revision: Number(row?.draft_revision || 0),
+                dirty: buildLegalDiff(item, draftContent, documentKey).changed,
+                updatedBy: row?.updated_by || null,
+                updatedAt: row?.updated_at || null,
+                latestPublication: latestByKey[documentKey] || null
+            };
+        }
+        res.json({ live: item, liveUpdatedAt: updatedAt, documents });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.put('/legal-drafts/:documentKey', async (req, res) => {
+    const db = await pool.connect();
+    try {
+        const documentKey = assertDocumentKey(req.params.documentKey);
+        const expectedRevision = Number(req.body?.expectedRevision);
+        if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new Error('Gecersiz taslak revizyonu.');
+        await db.query('BEGIN');
+        const { item: liveContent } = await fetchLegalSettings(db);
+        const current = await loadLegalDraft(db, documentKey, liveContent, { lock: true });
+        if (current.revision !== expectedRevision) {
+            const error = new Error('Taslak baska bir yonetici tarafindan degistirildi. Sayfayi yenileyin.');
+            error.code = 'LEGAL_REVISION_CONFLICT';
+            throw error;
+        }
+        const section = req.body?.section;
+        applyLegalSection(liveContent, documentKey, section);
+        const nextRevision = current.revision + 1;
+        const result = await db.query(
+            `INSERT INTO legal_content_workspaces (document_key,draft_content,draft_revision,base_publication_id,rollback_of_publication_id,updated_by,updated_at)
+             VALUES ($1,$2::jsonb,$3,$4,NULL,$5,NOW())
+             ON CONFLICT (document_key) DO UPDATE SET
+               draft_content=EXCLUDED.draft_content,draft_revision=EXCLUDED.draft_revision,
+               rollback_of_publication_id=NULL,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+             RETURNING updated_at`,
+            [documentKey, JSON.stringify(section), nextRevision, current.basePublicationId, String(req.adminUser || 'admin').slice(0, 120)]
+        );
+        await logAdminAudit(db, {
+            actorAdmin: req.adminUser,
+            actionType: 'LEGAL_DRAFT_SAVE',
+            entityType: 'legal_content',
+            entityId: documentKey,
+            payload: { revision: nextRevision }
+        });
+        await db.query('COMMIT');
+        res.json({ success: true, revision: nextRevision, updatedAt: result.rows[0]?.updated_at || null });
+    } catch (e) {
+        try { await db.query('ROLLBACK'); } catch {}
+        res.status(legalErrorStatus(e)).json({ error: e.message });
+    } finally {
+        db.release();
+    }
+});
+
+router.post('/legal-publications/preview', async (req, res) => {
+    try {
+        const preview = await legalPreview(pool, req.body);
+        res.json({
+            success: true,
+            documentKey: preview.documentKey,
+            revision: preview.expectedRevision,
+            diff: preview.diff,
+            versionBefore: preview.versionBefore,
+            versionAfter: preview.versionAfter,
+            versionChanged: preview.versionChanged,
+            requiresReaccept: preview.requiresReaccept,
+            affectedUserCount: preview.affectedUserCount,
+            contentHash: hashLegalContent(preview.nextContent)
+        });
+    } catch (e) {
+        res.status(legalErrorStatus(e)).json({ error: e.message });
+    }
+});
+
+router.post('/legal-publications', async (req, res) => {
+    if (req.body?.confirmPublish !== true) return res.status(400).json({ error: 'Yayin onayi zorunludur.' });
+    const db = await pool.connect();
+    try {
+        await db.query('BEGIN');
+        const preview = await legalPreview(db, req.body, { lock: true });
+        const previousResult = await db.query(
+            `SELECT id FROM legal_content_publications WHERE document_key=$1 ORDER BY published_at DESC,id DESC LIMIT 1`,
+            [preview.documentKey]
+        );
+        const publicationResult = await db.query(
+            `INSERT INTO legal_content_publications
+             (document_key,content,content_hash,version,change_class,reason,requires_reaccept,affected_user_count,previous_publication_id,rollback_of_publication_id,published_by)
+             VALUES ($1,$2::jsonb,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+             RETURNING id,published_at`,
+            [
+                preview.documentKey, JSON.stringify(preview.nextContent), hashLegalContent(preview.nextContent), preview.versionAfter,
+                preview.changeClass, preview.reason, preview.requiresReaccept, preview.affectedUserCount,
+                previousResult.rows[0]?.id || null, preview.draft.rollbackOfPublicationId,
+                String(req.adminUser || 'admin').slice(0, 120)
+            ]
+        );
+        const publication = publicationResult.rows[0];
+        const updatedAt = await saveLegalSettings(db, preview.nextContent);
+        const persisted = await fetchLegalSettings(db);
+        if (hashLegalContent(persisted.item) !== hashLegalContent(preview.nextContent)) {
+            throw new Error('Canli yasal icerik dogrulamasi basarisiz.');
+        }
+        const nextRevision = preview.draft.revision + 1;
+        await db.query(
+            `UPDATE legal_content_workspaces SET draft_content=$2::jsonb,draft_revision=$3,base_publication_id=$4,
+             rollback_of_publication_id=NULL,updated_by=$5,updated_at=NOW() WHERE document_key=$1`,
+            [preview.documentKey, JSON.stringify(extractLegalSection(preview.nextContent, preview.documentKey)), nextRevision, publication.id, String(req.adminUser || 'admin').slice(0, 120)]
+        );
+        await logAdminAudit(db, {
+            actorAdmin: req.adminUser,
+            actionType: preview.draft.rollbackOfPublicationId ? 'LEGAL_ROLLBACK_PUBLISH' : 'LEGAL_PUBLISH',
+            entityType: 'legal_content',
+            entityId: preview.documentKey,
+            payload: {
+                publicationId: publication.id,
+                changeClass: preview.changeClass,
+                reason: preview.reason,
+                requiresReaccept: preview.requiresReaccept,
+                affectedUserCount: preview.affectedUserCount,
+                changedFields: preview.diff.fields.map((field) => field.field),
+                contentHash: hashLegalContent(preview.nextContent)
+            }
+        });
+        await db.query('COMMIT');
+        res.json({ success: true, publicationId: publication.id, publishedAt: publication.published_at, updatedAt, revision: nextRevision });
+    } catch (e) {
+        try { await db.query('ROLLBACK'); } catch {}
+        res.status(legalErrorStatus(e)).json({ error: e.message });
+    } finally {
+        db.release();
+    }
+});
+
+router.get('/legal-publications', async (req, res) => {
+    try {
+        const documentKey = assertDocumentKey(req.query.documentKey);
+        const result = await pool.query(
+            `SELECT id,document_key,content_hash,version,change_class,reason,requires_reaccept,affected_user_count,
+                    previous_publication_id,rollback_of_publication_id,published_by,published_at
+             FROM legal_content_publications WHERE document_key=$1 ORDER BY published_at DESC,id DESC LIMIT 30`,
+            [documentKey]
+        );
+        res.json({ items: result.rows });
+    } catch (e) {
+        res.status(legalErrorStatus(e)).json({ error: e.message });
+    }
+});
+
+router.get('/legal-publications/:id', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id,document_key,content,content_hash,version,change_class,reason,requires_reaccept,affected_user_count,
+                    previous_publication_id,rollback_of_publication_id,published_by,published_at
+             FROM legal_content_publications WHERE id=$1 LIMIT 1`,
+            [req.params.id]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Yayin kaydi bulunamadi.' });
+        const row = result.rows[0];
+        res.json({ item: { ...row, section: extractLegalSection(row.content, row.document_key), content: undefined } });
+    } catch (e) {
+        res.status(500).json({ error: 'Yayin kaniti okunamadi.' });
+    }
+});
+
+router.post('/legal-publications/:id/rollback-draft', async (req, res) => {
+    const db = await pool.connect();
+    try {
+        const expectedRevision = Number(req.body?.expectedRevision);
+        if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new Error('Gecersiz taslak revizyonu.');
+        await db.query('BEGIN');
+        const history = await db.query(`SELECT id,document_key,content FROM legal_content_publications WHERE id=$1 FOR SHARE`, [req.params.id]);
+        if (!history.rows.length) {
+            const error = new Error('Yayin kaydi bulunamadi.');
+            error.code = 'LEGAL_NOT_FOUND';
+            throw error;
+        }
+        const row = history.rows[0];
+        const { item: liveContent } = await fetchLegalSettings(db);
+        const current = await loadLegalDraft(db, row.document_key, liveContent, { lock: true });
+        if (current.revision !== expectedRevision) {
+            const error = new Error('Taslak baska bir yonetici tarafindan degistirildi. Sayfayi yenileyin.');
+            error.code = 'LEGAL_REVISION_CONFLICT';
+            throw error;
+        }
+        const section = extractLegalSection(row.content, row.document_key);
+        const nextRevision = current.revision + 1;
+        await db.query(
+            `INSERT INTO legal_content_workspaces (document_key,draft_content,draft_revision,base_publication_id,rollback_of_publication_id,updated_by,updated_at)
+             VALUES ($1,$2::jsonb,$3,$4,$5,$6,NOW())
+             ON CONFLICT (document_key) DO UPDATE SET draft_content=EXCLUDED.draft_content,draft_revision=EXCLUDED.draft_revision,
+               rollback_of_publication_id=EXCLUDED.rollback_of_publication_id,updated_by=EXCLUDED.updated_by,updated_at=NOW()`,
+            [row.document_key, JSON.stringify(section), nextRevision, current.basePublicationId, row.id, String(req.adminUser || 'admin').slice(0, 120)]
+        );
+        await logAdminAudit(db, {
+            actorAdmin: req.adminUser,
+            actionType: 'LEGAL_ROLLBACK_DRAFT',
+            entityType: 'legal_content',
+            entityId: row.document_key,
+            payload: { sourcePublicationId: row.id, revision: nextRevision }
+        });
+        await db.query('COMMIT');
+        res.json({ success: true, documentKey: row.document_key, revision: nextRevision });
+    } catch (e) {
+        try { await db.query('ROLLBACK'); } catch {}
+        res.status(legalErrorStatus(e)).json({ error: e.message });
+    } finally {
+        db.release();
     }
 });
 

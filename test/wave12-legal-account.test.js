@@ -92,5 +92,6 @@ test('Wave 12 sources keep reduced Sale scope and idempotent account commands', 
     assert.match(profile, /Idempotency-Key/);
     assert.match(support, /ON CONFLICT \(submission_scope_hash, submission_id\)/);
     assert.match(index, /LEGAL_STATUS_UNAVAILABLE/);
-    assert.doesNotMatch(db, /legal_drafts|legal_publications/);
+    assert.match(db, /legal_content_workspaces/);
+    assert.match(db, /legal_content_publications/);
 });

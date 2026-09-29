@@ -932,6 +932,39 @@ const migrations = Object.freeze([
         ON notification_schedules(is_active,requires_translation,schedule_time)
         WHERE is_active = TRUE AND requires_translation = FALSE;
     `
+  }),
+  Object.freeze({
+    version: '010',
+    name: 'legal_publication_workflow',
+    sql: `
+      CREATE TABLE IF NOT EXISTS legal_content_publications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        document_key TEXT NOT NULL CHECK (document_key IN ('privacy','terms','childSafety','footer')),
+        content JSONB NOT NULL,
+        content_hash TEXT NOT NULL,
+        version TEXT,
+        change_class TEXT NOT NULL CHECK (change_class IN ('typo_format','clarification','material','rollback')),
+        reason TEXT NOT NULL,
+        requires_reaccept BOOLEAN NOT NULL DEFAULT FALSE,
+        affected_user_count INTEGER NOT NULL DEFAULT 0 CHECK (affected_user_count >= 0),
+        previous_publication_id UUID REFERENCES legal_content_publications(id) ON DELETE RESTRICT,
+        rollback_of_publication_id UUID REFERENCES legal_content_publications(id) ON DELETE RESTRICT,
+        published_by TEXT NOT NULL,
+        published_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_legal_publications_document_time
+        ON legal_content_publications(document_key,published_at DESC,id DESC);
+
+      CREATE TABLE IF NOT EXISTS legal_content_workspaces (
+        document_key TEXT PRIMARY KEY CHECK (document_key IN ('privacy','terms','childSafety','footer')),
+        draft_content JSONB NOT NULL,
+        draft_revision INTEGER NOT NULL DEFAULT 1 CHECK (draft_revision > 0),
+        base_publication_id UUID REFERENCES legal_content_publications(id) ON DELETE RESTRICT,
+        rollback_of_publication_id UUID REFERENCES legal_content_publications(id) ON DELETE RESTRICT,
+        updated_by TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `
   })
 ]);
 

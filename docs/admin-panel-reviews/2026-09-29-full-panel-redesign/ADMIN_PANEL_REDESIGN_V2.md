@@ -386,7 +386,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 5. [x] **Paket E — ADM2-10/11 Sistem içgörüsü:** performans ve davranış analitiği.
 6. [x] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
 7. [x] **Paket F2 — ADM2-08 Çok dilli hedefli teslimat:** zorunlu TR/EN varyantları, `all/online/mobile` hedefleri, kesin alıcı önizlemesi, locale/fallback sonuçları ve güvenli eski-plan geçişi.
-8. [ ] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
+8. [x] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
 9. [ ] **Paket H — ADM2-01 Genel Bakış cilası ve tam regresyon:** teknik kaynak dili, no-data ve son görsel bütünlük.
 
 ### Uygulama kaydı — Paket A + Paket B
@@ -445,6 +445,16 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 - Anlık gönderim audit kaydı hedefi, dilleri, kesin hedef özetini ve locale sonucunu içerir; bildirim metni veya push tokenı audit'e yazılmaz. Plan create/update/run-now ve scheduler aynı ortak sözleşmeyi kullanır.
 - Doğrulama: masaüstü ile 320×720 mobil görsel inceleme, TR/EN canlı önizleme, hedef sayımı, güvenli eski-plan kartı, sıfır yatay taşma, temiz tarayıcı konsolu, `115/115` tam test ve `63/63` kritik test.
 
+### Uygulama kaydı — Paket G
+
+- Yasal Metinler tek uzun canlı formdan çıkarılıp Gizlilik, Kullanım Şartları, Çocuk Güvenliği ve Footer/Bağlantılar durum kartlarına; bir seferde tek belge açan TR/EN çalışma alanına dönüştürüldü.
+- `010` migration'ı belge bazlı revizyonlu taslak alanını ve değişmez tam yayın snapshot geçmişini ekledi. İçerik hash'i, yayınlayan admin, gerekçe, sınıf, önceki yayın ve geri alma bağlantısı korunur.
+- Taslak kaydı public `/api/legal` içeriğine dokunmaz. Canlı yayın yalnız kaydedilmiş revizyon, alan doğrulaması, placeholder engeli, diff, etki önizlemesi, açık kabul koruma kararı ve ikinci yayın onayından sonra atomik olarak yapılır.
+- Terms/Privacy maddi değişikliği sürüm artışı olmadan reddedilir. Sürüm değişiminde yeniden onay vermesi beklenen hesap sayısı backend tarafından hesaplanır; yayın sonrası canlı içerik hash'i transaction içinde yeniden doğrulanır.
+- Eski yayına dönüş sessiz overwrite değildir: snapshot önce taslağa alınır, ardından normal önizleme ve onaylı yayın akışından geçerek yeni, bağlantılı bir yayın olayı üretir. Optimistic revision kontrolü eski admin ekranının yeni taslağı ezmesini engeller.
+- Editör karakter sayaçları, kaydedilmemiş değişiklik uyarısı, düz metin TR/EN son kullanıcı önizlemesi, yayın farkı ve etki özeti ile geçmiş kanıt görünümünü içerir.
+- Doğrulama: masaüstü ve 320×720 mobil görsel inceleme, sıfır yatay taşma, temiz tarayıcı konsolu, `121/121` tam test ve `69/69` kritik test. Deploy sonrası public Web/Android eşitliği manuel kapanışta doğrulanacaktır.
+
 ## Paket sınırları
 
 - Her paket kendi otomatik testini ve masaüstü/mobil görsel QA'ini tamamlamadan sonraki pakete geçmez.
@@ -454,8 +464,8 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Otomatik doğrulama
 
-- [x] `npm test` tam geçer. (`115/115`)
-- [x] `npm run quality:all` geçer. (kritik paket `63/63`; yüksek/kritik güvenlik kaydı yok)
+- [x] `npm test` tam geçer. (`121/121`)
+- [x] `npm run quality:all` geçer. (kritik paket `69/69`; yüksek/kritik güvenlik kaydı yok)
 - [x] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini ve moderasyon onay akışını korur.
 - [x] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.
 - [ ] Riskli işlemler gerekçe + açık hedef + audit sonucu olmadan çalışmaz.

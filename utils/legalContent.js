@@ -254,9 +254,10 @@ const validateLegalContentPayload = (value) => {
 };
 
 const fetchLegalSettings = async (pool, { lock = false } = {}) => {
+    const lockClause = lock === 'update' ? ' FOR UPDATE' : lock ? ' FOR SHARE' : '';
     try {
         const result = await pool.query(
-            `SELECT value, updated_at FROM app_settings WHERE key = $1 LIMIT 1${lock ? ' FOR SHARE' : ''}`,
+            `SELECT value, updated_at FROM app_settings WHERE key = $1 LIMIT 1${lockClause}`,
             [LEGAL_SETTINGS_KEY]
         );
         if (!result.rows.length) {
