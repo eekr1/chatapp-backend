@@ -1,5 +1,7 @@
 # TalkX Backend Yönetim Paneli Görsel İnceleme ve Revizyon Planı
 
+> **Güncel çalışma belgesi:** Canlı `93e8899` turundan sonra kalan bütün ekranlar yeniden incelendi. Uygulama sırası ve V2 referansları için [Tam Ekran İncelemesi ve Yeniden Tasarım Planı V2](../2026-09-29-full-panel-redesign/ADMIN_PANEL_REDESIGN_V2.md) kullanılmalıdır. Bu dosya ilk inceleme ve ADM-01/ADM-02 uygulama tarihçesi olarak korunur.
+
 Bu dosya, TalkX backend yönetim panelinin görsel ve bilgi mimarisi incelemesini tek yerde toplar. Amaç bu turda kod değiştirmek değil; ekranların mevcut durumunu, onaylanmış yönü, yapılacak işleri ve kapanış ölçütlerini netleştirmektir.
 
 ## İnceleme durumu
