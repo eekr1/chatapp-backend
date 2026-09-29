@@ -89,12 +89,12 @@ Bildirimler ve Yasal Metinler aynı besteci kabuğunu kullanacak: içerik, kapsa
 | ADM2-04 | Kullanıcı Raporları | Ham enumlar ve doğrudan üç yaptırım butonu | Vaka kuyruğu + güvenli yaptırım akışı — uygulandı ve doğrulandı | P0 |
 | ADM2-05 | Uygulama Raporları | Liste daha iyi ama detay ham grid ve uzun modal | Vaka özeti + kanıt + geçmiş drawer'ı — uygulandı ve doğrulandı | P0 |
 | ADM2-06 | Yasaklar ve Gölge | Boş sayfa durumu ve geçmiş/aktif ayrımı yok | Yaptırım merkezi — uygulandı ve doğrulandı | P1 |
-| ADM2-07 | Silme Talepleri | İngilizce durum, `0.0s`, zayıf SLA ve empty state | SLA kuyruğu + güvenli karar drawer'ı | P1 |
+| ADM2-07 | Silme Talepleri | İngilizce durum, `0.0s`, zayıf SLA ve empty state | SLA kuyruğu + güvenli karar drawer'ı — uygulandı ve doğrulandı | P1 |
 | ADM2-08 | Bildirimler | Etiketsiz tek satır formlar, hedef/önizleme/etki yok | Bildirim bestecisi | P1 |
-| ADM2-09 | Anlık Online | Cihaz ID'si ana tabloda, stale/auto-refresh bağlamı yok | Canlı operasyon özeti | P1 |
+| ADM2-09 | Anlık Online | Cihaz ID'si ana tabloda, stale/auto-refresh bağlamı yok | Canlı operasyon özeti — uygulandı ve doğrulandı | P1 |
 | ADM2-10 | Performans | Ham durum satırı ve dakika dakika tablo | Sağlık özeti + grafik + route kanıtı | P1 |
 | ADM2-11 | Davranış Analitiği | KPI/funnel tekrar ediyor, dev sıfır tabloları ve raw JSON | Yolculuk/funnel + sapma + kanıt | P1 |
-| ADM2-12 | Audit Log | Ham action/entity/payload ve UUID duvarı | İnsan dili aktivite akışı + açılır kanıt | P0 |
+| ADM2-12 | Audit Log | Ham action/entity/payload ve UUID duvarı | İnsan dili aktivite akışı + açılır kanıt — uygulandı ve doğrulandı | P0 |
 | ADM2-13 | Yasal Metinler | Tek dev canlı form, taslak/yayın/diff yok | Belge yayın merkezi | P1 + backend |
 
 ---
@@ -249,7 +249,7 @@ Kayıt yokken yalnız `Kayıt bulunamadı` metni ve büyük boş alan görünür
 
 ## ADM2-07 — Silme Talepleri
 
-- **Durum:** Revizyon bekliyor
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P1
 
 ### Canlı bulgu
@@ -286,7 +286,7 @@ TR/EN varyantı, hedef segmenti ve kesin alıcı sayımı mevcut sözleşmede yo
 
 ## ADM2-09 — Anlık Online
 
-- **Durum:** Revizyon bekliyor
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P1
 
 ### Canlı bulgu
@@ -337,7 +337,7 @@ Sekiz KPI kartı ve altı funnel kartı aynı sayıları tekrar ediyor. Trend, e
 
 ## ADM2-12 — Audit Log
 
-- **Durum:** Acil revizyon
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P0
 
 ### Canlı bulgu
@@ -382,7 +382,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 1. [x] **Paket A — ADM2-00 ortak içerik sistemi:** section, durum, tablo/list, drawer, kanıt ve danger-zone temeli.
 2. [x] **Paket B — ADM2-02/03 Profiller:** liste + profil detay drawer'ı; etiket/değer ve hassas veri sorunu kapatıldı.
 3. [x] **Paket C — ADM2-04/05/06 Moderasyon:** kullanıcı raporu, uygulama raporu ve yaptırım merkezi.
-4. [ ] **Paket D — ADM2-07/09/12 Operasyon kanıtı:** silme talepleri, online ve audit.
+4. [x] **Paket D — ADM2-07/09/12 Operasyon kanıtı:** silme talepleri, online ve audit.
 5. [ ] **Paket E — ADM2-10/11 Sistem içgörüsü:** performans ve davranış analitiği.
 6. [ ] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
 7. [ ] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
@@ -407,6 +407,16 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 - Kullanıcı raporları ve yaptırımlar için gerçek sunucu araması eklendi; liste ekranlarından doğrudan yaptırım uygulanması kaldırıldı.
 - Doğrulama: masaüstü görsel inceleme, 390×844 ve 320×720 responsive kontrolleri, sıfır yatay sayfa/drawer taşması, temiz uygulama konsolu ve `109/109` backend testi.
 
+### Uygulama kaydı — Paket D
+
+- Silme Talepleri, İngilizce durum ve ham kimlik tablosundan çıkarılıp bekleyen/reddedilen/tamamlanan kuyruklarına; talep yaşı, 72 saat SLA ve son işlem kanıtına taşındı.
+- Çözüm süresi için örnek yokken sahte `0.0 saat` kaldırıldı; sonuç sayısına bağlı dürüst `Veri yok` gösterimi eklendi.
+- Kalıcı silme, ret ve yeniden etkinleştirme yalnız sekmeli drawer içinden çalışır; görünür gerekçe, etki onayı ve kalıcı silmede tam `DELETE ACCOUNT` doğrulaması zorunludur. Backend de gerekçesiz isteği reddeder.
+- Anlık Online, canlı/stale snapshot, son yenileme, platform dağılımı ve ortalama bağlı kalma özeti kazandı. Tam cihaz/istemci kimliği ana tablodan kaldırılıp maskeli teknik kanıta taşındı.
+- Beş saniyelik online yenileme sayfa scroll konumunu korur; açık drawer ve odağı bozmaz.
+- Audit Log ham action/entity/UUID/JSON tablosundan insan dili aktivite akışına dönüştürüldü. Aktör, eylem ailesi, hedef türü ve tarih filtreleri eklendi; payload yalnız sanitize edilmiş, maskeli teknik kanıtta gösterilir.
+- Doğrulama: üç ekranın masaüstü görsel incelemesi, 320×720 responsive drawer kontrolü, sıfır yatay sayfa/drawer taşması, ana yüzeyde tam UUID bulunmaması, temiz uygulama konsolu ve `110/110` backend testi.
+
 ## Paket sınırları
 
 - Her paket kendi otomatik testini ve masaüstü/mobil görsel QA'ini tamamlamadan sonraki pakete geçmez.
@@ -416,7 +426,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Otomatik doğrulama
 
-- [x] `npm test` tam geçer. (`109/109`)
+- [x] `npm test` tam geçer. (`110/110`)
 - [x] `npm run quality:all` geçer. (kritik paket `60/60`; yüksek/kritik güvenlik kaydı yok)
 - [x] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini ve moderasyon onay akışını korur.
 - [ ] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.

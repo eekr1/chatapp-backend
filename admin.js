@@ -58,7 +58,7 @@ router.use((req, res, next) => {
 });
 router.use('/assets', express.static(path.join(__dirname, 'public', 'admin')));
 
-const ALLOWED_DELETION_REQUEST_STATUS = new Set(['requested', 'reviewing', 'approved', 'processing', 'failed_retryable', 'completed', 'rejected']);
+const ALLOWED_DELETION_REQUEST_STATUS = new Set(['pending', 'requested', 'reviewing', 'approved', 'processing', 'failed_retryable', 'completed', 'rejected']);
 const normalizeDeletionStatus = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     if (!normalized) return 'requested';
@@ -596,6 +596,7 @@ const fetchOnlineUsersPayload = async () => {
     return {
         onlineUsers: userIds.length,
         onlineConnections,
+        generatedAt: new Date().toISOString(),
         items
     };
 };
@@ -2834,6 +2835,9 @@ router.get('/deletion-requests', async (req, res) => {
     }
 
     try {
+        const statuses = status === 'pending'
+            ? ['requested', 'reviewing', 'approved', 'processing', 'failed_retryable']
+            : [status];
         const result = await pool.query(
             `SELECT
                 r.id,
@@ -2858,10 +2862,10 @@ router.get('/deletion-requests', async (req, res) => {
              FROM account_deletion_requests r
              LEFT JOIN users u ON u.id = r.user_id
              LEFT JOIN profiles p ON p.user_id = r.user_id
-             WHERE r.status = $1
+             WHERE r.status = ANY($1::text[])
              ORDER BY r.requested_at DESC
              LIMIT 250`,
-            [status]
+            [statuses]
         );
         return res.json({ items: result.rows });
     } catch (e) {
@@ -2882,6 +2886,7 @@ router.get('/deletion-requests/metrics', async (req, res) => {
         );
         const resolutionRes = await pool.query(
             `SELECT
+                COUNT(*)::int AS resolution_count_30d,
                 COALESCE(
                     ROUND(
                         AVG(EXTRACT(EPOCH FROM (reviewed_at - requested_at)) / 3600.0)::numeric,
@@ -2906,6 +2911,7 @@ router.get('/deletion-requests/metrics', async (req, res) => {
         return res.json({
             pending_count: Number(pending.pending_count) || 0,
             overdue_count: Number(pending.overdue_count) || 0,
+            resolution_count_30d: Number(resolution.resolution_count_30d) || 0,
             avg_resolution_hours_30d: Number(resolution.avg_resolution_hours_30d) || 0,
             median_resolution_hours_30d: Number(resolution.median_resolution_hours_30d) || 0
         });
@@ -2917,6 +2923,8 @@ router.get('/deletion-requests/metrics', async (req, res) => {
 router.get('/audit-logs', async (req, res) => {
     const actor = String(req.query.actor || '').trim();
     const action = String(req.query.action || '').trim();
+    const family = String(req.query.family || '').trim().toLowerCase();
+    const entity = String(req.query.entity || '').trim();
     const from = String(req.query.from || '').trim();
     const to = String(req.query.to || '').trim();
     const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 120));
@@ -2930,6 +2938,24 @@ router.get('/audit-logs', async (req, res) => {
     if (action) {
         params.push(action.toUpperCase());
         where.push(`action_type = $${params.length}`);
+    }
+    const familyPrefixes = {
+        moderation: ['BAN', 'UNBAN', 'BULK_BAN', 'BULK_UNBAN', 'UNBLOCK'],
+        account: ['DELETION_%', 'FRIEND_%'],
+        notification: ['NOTIFY_%'],
+        legal: ['LEGAL_%']
+    };
+    if (family && familyPrefixes[family]) {
+        const clauses = [];
+        for (const pattern of familyPrefixes[family]) {
+            params.push(pattern);
+            clauses.push(pattern.includes('%') ? `action_type LIKE $${params.length}` : `action_type = $${params.length}`);
+        }
+        where.push(`(${clauses.join(' OR ')})`);
+    }
+    if (entity) {
+        params.push(`%${entity}%`);
+        where.push(`entity_type ILIKE $${params.length}`);
     }
     if (from) {
         params.push(from);
@@ -2963,6 +2989,7 @@ router.post('/deletion-requests/:id/approve-delete', async (req, res) => {
     const adminUser = String(req.adminUser || 'admin').slice(0, 120);
     const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
     if (!requestId) return res.status(400).json({ error: 'Talep kimligi gerekli.' });
+    if (!note || note.length < 3) return res.status(400).json({ error: 'En az 3 karakter operasyon gerekcesi gerekli.' });
 
     if (String(req.body?.confirm_text || '') !== 'DELETE ACCOUNT' || req.body?.policy_version !== DATA_POLICY_VERSION) {
         return res.status(400).json({ error: 'Silme onayi ve guncel policy version gerekli.' });
@@ -2989,6 +3016,7 @@ router.post('/deletion-requests/:id/reject', async (req, res) => {
     const adminUser = String(req.adminUser || 'admin').slice(0, 120);
     const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
     if (!requestId) return res.status(400).json({ error: 'Talep kimligi gerekli.' });
+    if (!note || note.length < 3) return res.status(400).json({ error: 'En az 3 karakter ret gerekcesi gerekli.' });
 
     const db = await pool.connect();
     try {
@@ -3051,6 +3079,7 @@ router.post('/deletion-requests/:id/reactivate', async (req, res) => {
     const adminUser = String(req.adminUser || 'admin').slice(0, 120);
     const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
     if (!requestId) return res.status(400).json({ error: 'Talep kimligi gerekli.' });
+    if (!note || note.length < 3) return res.status(400).json({ error: 'En az 3 karakter etkinlestirme gerekcesi gerekli.' });
 
     const db = await pool.connect();
     try {

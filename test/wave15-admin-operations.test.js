@@ -113,3 +113,24 @@ test('moderation workspaces require evidence review and visible reasons before a
     assert.match(api, /reason\.length < 3/);
     assert.match(api, /payload: \{ reason, removedCount: result\.rowCount \}/);
 });
+
+test('operation evidence workspaces hide raw identifiers and require reasoned deletion actions', () => {
+    const api = fs.readFileSync(path.join(__dirname, '..', 'admin.js'), 'utf8');
+    const ui = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+    assert.match(ui, /function openDeletionDetails\(id\)/);
+    assert.match(ui, /function confirmApproveDeletionFromDrawer\(id\)/);
+    assert.match(ui, /Kesin onay alanına DELETE ACCOUNT yazın/);
+    assert.doesNotMatch(ui, /function actionApproveDeletion\(/);
+    assert.match(ui, /function openOnlineDetails\(key\)/);
+    assert.match(ui, /cihaz kimliği yalnız maskeli teknik detayda/i);
+    assert.match(ui, /function openAuditDetails\(id\)/);
+    assert.match(ui, /Sanitize payload alanlarını göster/);
+    assert.doesNotMatch(ui, /<th>Payload<\/th>/);
+    assert.match(api, /generatedAt: new Date\(\)\.toISOString\(\)/);
+    assert.match(api, /status === 'pending'/);
+    assert.match(api, /resolution_count_30d/);
+    assert.match(api, /familyPrefixes/);
+    assert.match(api, /En az 3 karakter operasyon gerekcesi gerekli/);
+    assert.match(api, /En az 3 karakter ret gerekcesi gerekli/);
+    assert.match(api, /En az 3 karakter etkinlestirme gerekcesi gerekli/);
+});

@@ -122,6 +122,8 @@
     .bulk-counter { display:inline-flex; align-items:center; border:1px solid var(--border); background:rgba(255,255,255,0.06); color:var(--text); border-radius:999px; padding:4px 8px; font-weight:700; }
     .table-scroll { overflow:auto; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.015); }
     .table-scroll--data table { min-width:680px; }
+    .table-scroll--wide table { min-width:920px; }
+    .table-scroll--wide th:first-child { width:40%; }
     .table-scroll--data th { white-space:nowrap; word-break:normal; }
     .table-scroll--trend { max-height:320px; }
     .table-scroll table { margin:0; }
@@ -163,6 +165,14 @@
     .action-review p { margin:0 0 10px; color:#f5d9a8; font-size:12px; line-height:1.5; }
     .evidence-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:999px; padding:4px 8px; color:var(--muted); background:rgba(255,255,255,.025); font-size:11px; font-weight:700; }
     .evidence-chip.is-ready { color:#a8f1d2; border-color:rgba(69,216,155,.32); background:rgba(69,216,155,.07); }
+    .snapshot-strip { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; border:1px solid var(--border); border-radius:13px; padding:11px 13px; background:rgba(255,255,255,.018); }
+    .snapshot-strip p { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+    .activity-line { display:flex; flex-direction:column; gap:4px; min-width:240px; }
+    .activity-line strong { font-size:13px; line-height:1.45; }
+    .activity-line small { color:var(--muted); font-size:11px; line-height:1.45; }
+    .filter-grid { display:grid; grid-template-columns:repeat(5,minmax(130px,1fr)); gap:9px; }
+    .filter-grid .workflow-field { justify-content:flex-end; }
+    .filter-grid .filter-action { align-self:end; min-height:39px; }
     .admin-state { display:flex; align-items:flex-start; gap:12px; min-height:170px; padding:32px; border:1px dashed var(--border-strong); border-radius:14px; background:rgba(255,255,255,.012); }
     .admin-state-icon { display:flex; align-items:center; justify-content:center; width:42px; height:42px; flex:0 0 42px; border-radius:13px; color:#b7adff; background:var(--accent-soft); font-size:20px; }
     .admin-state h3 { margin:1px 0 6px; font-size:16px; }
@@ -337,6 +347,7 @@
       .push-summary { grid-template-columns:1fr; }
       .dashboard-section-head { align-items:flex-start; flex-direction:column; }
       .admin-summary-grid, .detail-hero, .detail-kv-grid, .workflow-form { grid-template-columns:1fr; }
+      .filter-grid { grid-template-columns:1fr; }
       .workflow-field.is-wide { grid-column:auto; }
       .admin-state { min-height:140px; padding:22px 18px; }
       .detail-drawer { inset:0; width:100%; border-radius:0; border-left:0; border-right:0; }
@@ -457,7 +468,7 @@
 
   <script>
     let currentTab='dashboard';
-    let currentDeletionStatus='requested';
+    let currentDeletionStatus='pending';
     let currentPerformanceHours=24;
     let currentAnalyticsHours=24;
     let currentAnalyticsGranularity='hour';
@@ -486,6 +497,9 @@
     let adminNavReturnFocus=null;
     let detailDrawerReturnFocus=null;
     let moderationRows=new Map();
+    let deletionRows=new Map();
+    let onlineRows=new Map();
+    let auditRows=new Map();
     const SUBJECT_LABELS={connection:'Bağlantı',message:'Mesaj',photo:'Fotoğraf',other:'Diğer'};
     const BREVO_LABELS={sent:'Gönderildi',failed:'Başarısız',pending:'Bekliyor',unknown:'Bilinmiyor'};
     const WORKFLOW_LABELS={new:'Yeni',investigating:'İnceleniyor',resolved:'Çözüldü',duplicate:'Tekrar kayıt',insufficient_info:'Bilgi yetersiz',archived:'Arşivlendi'};
@@ -494,6 +508,9 @@
     const MODERATION_STATUS_LABELS={received:'İnceleme bekliyor',investigating:'İnceleniyor',resolved:'Sonuçlandı',dismissed:'İşlem gerektirmedi'};
     const EVIDENCE_LABELS={metadata_only:'Yalnız metadata',available:'Kanıt mevcut',unavailable:'Kanıt yok',expired:'Kanıt süresi doldu'};
     const BAN_TYPE_LABELS={temp:'Süreli yasak',perm:'Kalıcı yasak',shadow:'Gölge yasak'};
+    const DELETION_STATUS_LABELS={requested:'Bekliyor',reviewing:'İnceleniyor',approved:'Onaylandı',processing:'Siliniyor',failed_retryable:'Yeniden denenecek',completed:'Tamamlandı',rejected:'Reddedildi'};
+    const AUDIT_ACTION_LABELS={BAN:'yasak uyguladı',UNBAN:'yasağı kaldırdı',BULK_BAN:'toplu yasak uyguladı',BULK_UNBAN:'toplu yasağı kaldırdı',UNBLOCK:'engeli kaldırdı',FRIEND_ADD:'arkadaşlık ekledi',FRIEND_REMOVE:'arkadaşlığı kaldırdı',DELETION_REJECT:'silme talebini reddetti',DELETION_REACTIVATE:'hesabı yeniden etkinleştirdi',DELETION_APPROVE:'silme talebini onayladı',LEGAL_UPDATE:'yasal içeriği güncelledi',NOTIFY_SCHEDULE_CREATE:'bildirim planı oluşturdu',NOTIFY_SCHEDULE_UPDATE:'bildirim planını güncelledi',NOTIFY_SCHEDULE_TOGGLE:'bildirim planı durumunu değiştirdi',NOTIFY_SCHEDULE_RUN_NOW:'bildirim planını çalıştırdı',NOTIFY_SCHEDULE_DELETE:'bildirim planını sildi'};
+    const AUDIT_ENTITY_LABELS={user:'profil',account_deletion_request:'silme talebi',notification_schedule:'bildirim planı',legal_content:'yasal içerik',friendship:'arkadaşlık',block:'engel'};
     const LOCATION_STATE_LABELS={resolved:'Dogrulandi',unresolved:'Cozulemedi',pending:'Bekliyor',stale:'Bayat',provider_error:'Saglayici hatasi',not_available:'Veri yok'};
     const TAB_LABELS={
       dashboard:'Genel Bakış',
@@ -1513,76 +1530,51 @@
       }
     }
 
+    function deletionStatusTone(status){
+      const key=String(status||'').toLowerCase();
+      if(key==='completed') return 'is-ok';
+      if(['processing','failed_retryable'].includes(key)) return 'is-danger';
+      if(['requested','reviewing','approved'].includes(key)) return 'is-warn';
+      return '';
+    }
+    function deletionSlaText(value){
+      const stamp=new Date(value).getTime();
+      if(!Number.isFinite(stamp)) return {label:'SLA bilinmiyor',tone:''};
+      const remainingMinutes=Math.ceil(((stamp+(72*60*60*1000))-Date.now())/60000);
+      if(remainingMinutes<=0) return {label:`${Math.max(1,Math.ceil(Math.abs(remainingMinutes)/60))} saat aşıldı`,tone:'is-danger'};
+      if(remainingMinutes<24*60) return {label:`${Math.ceil(remainingMinutes/60)} saat kaldı`,tone:'is-warn'};
+      return {label:`${Math.ceil(remainingMinutes/(24*60))} gün kaldı`,tone:'is-ok'};
+    }
+    function resolutionMetric(value,count){
+      if(!Number(count||0)) return 'Veri yok';
+      const hours=Number(value);
+      if(!Number.isFinite(hours)) return 'Veri yok';
+      if(hours<1) return `${Math.round(hours*60)} dk`;
+      return `${hours.toFixed(hours<10?1:0)} saat`;
+    }
     function renderDeletionRequests(items,metrics){
       const c=document.getElementById('content');
       const status=currentDeletionStatus;
       const m=metrics||{};
-      let html=`
-        <div class="row">
-          <label for="deletion-status-filter"><strong>Durum</strong></label>
-          <select id="deletion-status-filter" onchange="changeDeletionStatus(this.value)">
-            <option value="requested" ${status==='requested'?'selected':''}>requested</option>
-            <option value="rejected" ${status==='rejected'?'selected':''}>rejected</option>
-            <option value="completed" ${status==='completed'?'selected':''}>completed</option>
-          </select>
-          <button class="btn btn-refresh" onclick="loadDeletionRequests()">Yenile</button>
+      const list=Array.isArray(items)?items:[];
+      deletionRows=new Map(list.map((item)=>[String(item.id),item]));
+      let html=`<div class="admin-page">
+        <div class="admin-summary-grid">
+          <article class="admin-summary-card"><div class="label">Bekleyen talep</div><div class="value">${Number(m.pending_count||0)}</div><div class="meta">İşlem sırasındaki tüm durumlar</div></article>
+          <article class="admin-summary-card"><div class="label">SLA aşımı</div><div class="value">${Number(m.overdue_count||0)}</div><div class="meta">72 saati geçen talepler</div></article>
+          <article class="admin-summary-card"><div class="label">Ortalama çözüm</div><div class="value">${esc(resolutionMetric(m.avg_resolution_hours_30d,m.resolution_count_30d))}</div><div class="meta">Son 30 gün</div></article>
+          <article class="admin-summary-card"><div class="label">Medyan çözüm</div><div class="value">${esc(resolutionMetric(m.median_resolution_hours_30d,m.resolution_count_30d))}</div><div class="meta">Son 30 gün · ${Number(m.resolution_count_30d||0)} sonuç</div></article>
         </div>
-        <div class="metrics">
-          <div class="metric"><div class="k">Bekleyen Talep</div><div class="n">${Number(m.pending_count||0)}</div></div>
-          <div class="metric"><div class="k">SLA Asimi (72s)</div><div class="n">${Number(m.overdue_count||0)}</div></div>
-          <div class="metric"><div class="k">Ortalama Cozum (30g)</div><div class="n">${Number(m.avg_resolution_hours_30d||0).toFixed(1)}s</div></div>
-          <div class="metric"><div class="k">Medyan Cozum (30g)</div><div class="n">${Number(m.median_resolution_hours_30d||0).toFixed(1)}s</div></div>
-        </div>
-      `;
-
-      if(!items.length){
-        html+=`<p class="deletion-row-note">Bu filtrede talep bulunamadi.</p>`;
-        c.innerHTML=html;
-        return;
-      }
-
-      html+=`
-        <table>
-          <thead>
-            <tr>
-              <th>Talep</th>
-              <th>Kullanici</th>
-              <th>Durum</th>
-              <th>Istenen</th>
-              <th>Inceleyen</th>
-              <th>Not</th>
-              <th>Islem</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
-      items.forEach((it)=>{
-        const canApprove=status==='requested';
-        const canReject=status==='requested';
-        const canReactivate=status==='rejected';
-        html+=`
-          <tr>
-            <td>${esc(it.id||'-')}</td>
-            <td>
-              <strong>${esc(it.current_username||it.username_snapshot||'-')}</strong><br/>
-              <small>${esc(it.display_name||'-')}</small>
-            </td>
-            <td>${esc(it.status||'-')}</td>
-            <td>${d(it.requested_at)}</td>
-            <td>${esc(it.reviewed_by||'-')}<br/><small>${d(it.reviewed_at)}</small></td>
-            <td>${esc(it.note||'-')}</td>
-            <td>
-              ${canApprove?`<button class="btn btn-delete" onclick="actionApproveDeletion('${esc(it.id)}')">Kalici Sil</button>`:''}
-              ${canReject?`<button class="btn btn-unban" onclick="actionRejectDeletion('${esc(it.id)}')">Reddet</button>`:''}
-              ${canReactivate?`<button class="btn btn-refresh" onclick="actionReactivateDeletion('${esc(it.id)}')">Aktif Et</button>`:''}
-            </td>
-          </tr>
-        `;
+        <section class="admin-section">
+          <div class="admin-section-head"><div><h2>Silme talebi kuyruğu</h2><p>Talep yaşı, SLA ve son işlem kanıtını inceleyin; kalıcı işlem yalnız detay ekranından yapılır.</p></div><div class="case-actions"><select id="deletion-status-filter" aria-label="Silme talebi durumu" onchange="changeDeletionStatus(this.value)"><option value="pending" ${status==='pending'?'selected':''}>Bekliyor</option><option value="rejected" ${status==='rejected'?'selected':''}>Reddedildi</option><option value="completed" ${status==='completed'?'selected':''}>Tamamlandı</option></select><button class="btn btn-refresh" onclick="loadDeletionRequests()">Yenile</button></div></div>`;
+      if(!list.length) return void(c.innerHTML=`${html}${moderationEmpty(status==='pending'?'Bekleyen talep yok':'Bu durumda talep yok',status==='pending'?'Silme kuyruğu şu anda temiz. Yeni talepler geldiğinde SLA bilgisiyle burada görünür.':'Seçilen durumda henüz kayıt bulunmuyor.')}</section></div>`);
+      html+=`<div class="admin-section-body"><div class="table-scroll table-scroll--data"><table><thead><tr><th>Profil</th><th>Durum</th><th>Talep yaşı</th><th>SLA</th><th>Son işlem</th><th>İncele</th></tr></thead><tbody>`;
+      list.forEach((it)=>{
+        const sla=deletionSlaText(it.requested_at);
+        const statusKey=String(it.status||'requested').toLowerCase();
+        html+=`<tr><td><div class="case-title"><strong>${esc(it.current_username||it.username_snapshot||'Bilinmeyen profil')}</strong><small>${esc(it.display_name||'Görünen isim yok')}</small></div></td><td><span class="status-pill ${deletionStatusTone(statusKey)}">${esc(DELETION_STATUS_LABELS[statusKey]||'Durum bilinmiyor')}</span></td><td><div class="cell-stack"><span>${esc(relativeAge(it.requested_at))}</span><small>${d(it.requested_at)}</small></div></td><td><span class="status-pill ${sla.tone}">${esc(sla.label)}</span></td><td><div class="cell-stack"><span>${esc(it.reviewed_by||'Henüz işlem yok')}</span><small>${it.reviewed_at?d(it.reviewed_at):esc(it.last_step?.step_key||'Kanıt bekleniyor')}</small></div></td><td><button class="btn btn-details" onclick="openDeletionDetails('${esc(it.id)}')">Talebi incele</button></td></tr>`;
       });
-
-      html+='</tbody></table>';
-      c.innerHTML=html;
+      c.innerHTML=`${html}</tbody></table></div></div></section></div>`;
     }
 
     function changeDeletionStatus(value){
@@ -1608,69 +1600,66 @@
       }
     }
 
+    function auditActionLabel(value){ return AUDIT_ACTION_LABELS[String(value||'').toUpperCase()]||'yönetim işlemi yaptı'; }
+    function auditEntityLabel(value){ return AUDIT_ENTITY_LABELS[String(value||'').toLowerCase()]||String(value||'kayıt').replaceAll('_',' '); }
+    function auditFamily(value){
+      const key=String(value||'').toUpperCase();
+      if(key.startsWith('DELETION_')||key.startsWith('FRIEND_')) return 'Hesap işlemi';
+      if(['BAN','UNBAN','BULK_BAN','BULK_UNBAN','UNBLOCK'].includes(key)) return 'Moderasyon';
+      if(key.startsWith('NOTIFY_')) return 'Bildirim';
+      if(key.startsWith('LEGAL_')) return 'Yasal içerik';
+      return 'Diğer';
+    }
+    function auditTone(value){
+      const key=String(value||'').toUpperCase();
+      if(key.includes('UNBAN')||key.includes('REACTIVATE')||key.includes('ADD')) return 'is-ok';
+      if(key.includes('DELETE')||key.includes('BAN')||key.includes('REJECT')) return 'is-danger';
+      return '';
+    }
+    function auditPayloadSummary(payload){
+      const data=payload&&typeof payload==='object'?payload:{};
+      const parts=[];
+      if(data.reason) parts.push(`Gerekçe: ${String(data.reason).slice(0,110)}`);
+      if(data.note) parts.push(`Not: ${String(data.note).slice(0,110)}`);
+      if(data.removedCount!==undefined) parts.push(`${Number(data.removedCount)||0} kayıt etkilendi`);
+      if(data.durationHours!==undefined) parts.push(`${Number(data.durationHours)||0} saat`);
+      return parts.join(' · ')||'İşlem ayrıntısı teknik kanıtta';
+    }
     function renderAuditLogs(items){
       const c=document.getElementById('content');
+      const list=Array.isArray(items)?items:[];
+      auditRows=new Map(list.map((item)=>[String(item.id),item]));
       const actor=val('audit-actor');
-      const action=val('audit-action');
+      const family=val('audit-family');
+      const entity=val('audit-entity');
       const from=val('audit-from');
       const to=val('audit-to');
-
-      let html=`
-        <div class="row">
-          <input id="audit-actor" type="text" placeholder="Admin kullanici" value="${esc(actor)}" style="min-width:160px" />
-          <input id="audit-action" type="text" placeholder="Aksiyon (BAN, LEGAL_UPDATE...)" value="${esc(action)}" style="min-width:220px" />
-          <input id="audit-from" type="datetime-local" value="${esc(from)}" />
-          <input id="audit-to" type="datetime-local" value="${esc(to)}" />
-          <button class="btn btn-refresh" onclick="loadAuditLogs()">Filtrele</button>
-        </div>
-      `;
-
-      if(!items.length){
-        html+='<p class="deletion-row-note">Audit kaydi bulunamadi.</p>';
-        c.innerHTML=html;
-        return;
-      }
-
-      html+=`
-        <table>
-          <thead>
-            <tr>
-              <th>Tarih</th>
-              <th>Admin</th>
-              <th>Aksiyon</th>
-              <th>Varlik</th>
-              <th>Payload</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-      items.forEach((it)=>{
-        const payloadText=typeof it.payload==='string'?it.payload:JSON.stringify(it.payload||{});
-        html+=`
-          <tr>
-            <td>${d(it.created_at)}</td>
-            <td>${esc(it.actor_admin||'-')}</td>
-            <td>${esc(it.action_type||'-')}</td>
-            <td>${esc(it.entity_type||'-')}<br/><small>${esc(it.entity_id||'-')}</small></td>
-            <td><code style="font-size:11px">${esc(payloadText||'{}')}</code></td>
-          </tr>
-        `;
+      const admins=new Set(list.map((it)=>it.actor_admin).filter(Boolean)).size;
+      const destructive=list.filter((it)=>auditTone(it.action_type)==='is-danger').length;
+      let html=`<div class="admin-page"><div class="admin-summary-grid"><article class="admin-summary-card"><div class="label">Görünen hareket</div><div class="value">${list.length}</div><div class="meta">En güncel kayıtlar</div></article><article class="admin-summary-card"><div class="label">Yönetici</div><div class="value">${admins}</div><div class="meta">Bu sonuçtaki aktörler</div></article><article class="admin-summary-card"><div class="label">Riskli işlem</div><div class="value">${destructive}</div><div class="meta">Yasak, silme veya ret</div></article><article class="admin-summary-card"><div class="label">Son hareket</div><div class="value">${list[0]?esc(relativeAge(list[0].created_at)):'Veri yok'}</div><div class="meta">Değişmez audit kaydı</div></article></div>
+      <section class="admin-section"><div class="admin-section-head"><div><h2>Yönetim hareketleri</h2><p>İnsan diliyle işlem özeti; tanımlayıcı ve payload yalnız detay kanıtında.</p></div><span class="evidence-chip is-ready">Değişmez kayıt</span></div><div class="admin-section-body"><div class="filter-grid"><div class="workflow-field"><label for="audit-actor">Yönetici</label><input id="audit-actor" value="${esc(actor)}" placeholder="Kullanıcı adı"></div><div class="workflow-field"><label for="audit-family">Eylem ailesi</label><select id="audit-family"><option value="">Tümü</option><option value="moderation" ${family==='moderation'?'selected':''}>Moderasyon</option><option value="account" ${family==='account'?'selected':''}>Hesap işlemleri</option><option value="notification" ${family==='notification'?'selected':''}>Bildirim</option><option value="legal" ${family==='legal'?'selected':''}>Yasal içerik</option></select></div><div class="workflow-field"><label for="audit-entity">Hedef türü</label><input id="audit-entity" value="${esc(entity)}" placeholder="Örn. user"></div><div class="workflow-field"><label for="audit-from">Başlangıç</label><input id="audit-from" type="datetime-local" value="${esc(from)}"></div><div class="workflow-field"><label for="audit-to">Bitiş</label><input id="audit-to" type="datetime-local" value="${esc(to)}"></div></div><button class="btn btn-refresh" style="margin-top:10px" onclick="loadAuditLogs()">Filtreleri uygula</button></div>`;
+      if(!list.length) return void(c.innerHTML=`${html}${moderationEmpty('Audit kaydı bulunamadı','Seçilen filtrelerde kayıt yok. Tarih veya eylem ailesini genişletip yeniden deneyin.')}</section></div>`);
+      html+=`<div class="admin-section-body" style="padding-top:0"><div class="table-scroll table-scroll--data table-scroll--wide"><table><thead><tr><th>Hareket</th><th>Aile</th><th>Sonuç</th><th>Zaman</th><th>İncele</th></tr></thead><tbody>`;
+      list.forEach((it)=>{
+        const target=auditEntityLabel(it.entity_type);
+        html+=`<tr><td><div class="activity-line"><strong>${esc(it.actor_admin||'Yönetici')} ${esc(auditActionLabel(it.action_type))}</strong><small>${esc(target)} · ${esc(auditPayloadSummary(it.payload))}</small></div></td><td>${esc(auditFamily(it.action_type))}</td><td><span class="status-pill ${auditTone(it.action_type)}">Kaydedildi</span></td><td><div class="cell-stack"><span>${esc(relativeAge(it.created_at))}</span><small>${d(it.created_at)}</small></div></td><td><button class="btn btn-details" onclick="openAuditDetails('${esc(it.id)}')">Kanıtı incele</button></td></tr>`;
       });
-      html+='</tbody></table>';
-      c.innerHTML=html;
+      c.innerHTML=`${html}</tbody></table></div></div></section></div>`;
     }
 
     async function loadAuditLogs(){
       const c=document.getElementById('content');
       const actor=val('audit-actor').trim();
-      const action=val('audit-action').trim();
+      const family=val('audit-family').trim();
+      const entity=val('audit-entity').trim();
       const from=val('audit-from').trim();
       const to=val('audit-to').trim();
       c.innerHTML='<p style="padding:16px;color:#9aa8c0">Audit loglar yukleniyor...</p>';
       try{
         const qs=new URLSearchParams();
         if(actor) qs.set('actor',actor);
-        if(action) qs.set('action',action);
+        if(family) qs.set('family',family);
+        if(entity) qs.set('entity',entity);
         if(from) qs.set('from',new Date(from).toISOString());
         if(to) qs.set('to',new Date(to).toISOString());
         qs.set('limit','200');
@@ -1680,7 +1669,8 @@
         renderAuditLogs(Array.isArray(x.items)?x.items:[]);
         const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v||'';};
         set('audit-actor',actor);
-        set('audit-action',action);
+        set('audit-family',family);
+        set('audit-entity',entity);
         set('audit-from',from);
         set('audit-to',to);
       }catch(e){
@@ -2304,64 +2294,37 @@
 
     async function loadOnlineUsersTab(){
       const c=document.getElementById('content');
-      c.innerHTML='<p style="padding:16px;color:#9aa8c0">Online profiller yukleniyor...</p>';
+      const previousScrollY=window.scrollY;
+      if(!c.querySelector('.admin-page')) c.innerHTML='<p style="padding:16px;color:#9aa8c0">Online profiller yükleniyor...</p>';
       try{
         const r=await fetch('/admin/online-users');
         const x=await r.json();
-        if(!r.ok) throw new Error(x.error||'Online liste okunamadi.');
+        if(!r.ok) throw new Error(x.error||'Online liste okunamadı.');
         const items=Array.isArray(x.items)?x.items:[];
+        onlineRows=new Map(items.map((item,index)=>[String(item.client_id||index).replace(/[^a-zA-Z0-9_-]/g,''),item]));
         const onlineUsers=Number(x.onlineUsers||0);
         const onlineConnections=Number(x.onlineConnections||0);
+        const snapshotAt=x.generatedAt||new Date().toISOString();
+        const snapshotAgeSeconds=Math.max(0,Math.floor((Date.now()-new Date(snapshotAt).getTime())/1000));
+        const snapshotLive=Number.isFinite(snapshotAgeSeconds)&&snapshotAgeSeconds<=15;
+        const averageSeconds=items.length?Math.round(items.reduce((sum,item)=>sum+(Number(item.connected_seconds)||0),0)/items.length):0;
+        const platforms=items.reduce((acc,item)=>{const key=String(item.platform||'Bilinmiyor');acc[key]=(acc[key]||0)+1;return acc;},{});
+        const platformSummary=Object.entries(platforms).sort((a,b)=>b[1]-a[1]).map(([name,count])=>`${name}: ${count}`).join(' · ')||'Bağlantı yok';
         const dashboardOnline=document.getElementById('s_online');
         if(dashboardOnline) dashboardOnline.innerText=onlineUsers;
         const onlineMeta=document.getElementById('s_online_meta');
-        if(onlineMeta) onlineMeta.innerText=`Runtime online snapshot | Anlik | ${onlineConnections} baglanti`;
-
-        let html=`
-          <div class="metrics">
-            <div class="metric"><div class="k">Anlik Online Profil</div><div class="n">${onlineUsers}</div></div>
-            <div class="metric"><div class="k">Aktif Baglanti</div><div class="n">${onlineConnections}</div></div>
-          </div>
-        `;
-
-        if(!items.length){
-          html+='<p style="padding:8px 0;color:#9aa8c0">Su anda online profil yok.</p>';
-          c.innerHTML=html;
-          return;
-        }
-
-        html+=`
-          <table>
-            <thead>
-              <tr>
-                <th>Kullanici</th>
-                <th>Gorunen Isim</th>
-                <th>Durum</th>
-                <th>Platform</th>
-                <th>Dil</th>
-                <th>Cihaz</th>
-                <th>Baglanti Baslangici</th>
-                <th>Bagli Kalma</th>
-              </tr>
-            </thead>
-            <tbody>
-        `;
+        if(onlineMeta) onlineMeta.innerText=`Canlı runtime görünümü · ${onlineConnections} bağlantı`;
+        let html=`<div class="admin-page"><div class="snapshot-strip"><div><span class="status-pill ${snapshotLive?'is-ok':'is-warn'}">${snapshotLive?'Canlı snapshot':'Snapshot gecikmiş'}</span><p style="margin-top:6px">Son yenileme ${d(snapshotAt)} · Her 5 saniyede otomatik yenilenir.</p></div><button class="btn btn-refresh" onclick="loadOnlineUsersTab()">Şimdi yenile</button></div><div class="admin-summary-grid"><article class="admin-summary-card"><div class="label">Online profil</div><div class="value">${onlineUsers}</div><div class="meta">Benzersiz hesap</div></article><article class="admin-summary-card"><div class="label">Aktif bağlantı</div><div class="value">${onlineConnections}</div><div class="meta">Açık istemci bağlantısı</div></article><article class="admin-summary-card"><div class="label">Ortalama bağlı kalma</div><div class="value">${esc(secText(averageSeconds))}</div><div class="meta">Mevcut bağlantılar</div></article><article class="admin-summary-card"><div class="label">Platform dağılımı</div><div class="value">${Object.keys(platforms).length}</div><div class="meta">${esc(platformSummary)}</div></article></div><section class="admin-section"><div class="admin-section-head"><div><h2>Canlı bağlantılar</h2><p>Profil, platform ve bağlantı yaşı; cihaz kimliği yalnız maskeli teknik detayda.</p></div><span class="evidence-chip ${snapshotLive?'is-ready':''}">${items.length} bağlantı kaydı</span></div>`;
+        if(!items.length) return void(c.innerHTML=`${html}${moderationEmpty('Şu anda online profil yok','Canlı snapshot sağlıklı; yeni bağlantılar otomatik yenilemeyle burada görünecek.')}</section></div>`);
+        html+=`<div class="admin-section-body"><div class="table-scroll table-scroll--data"><table><thead><tr><th>Profil</th><th>Platform ve dil</th><th>Bağlantı başlangıcı</th><th>Bağlı kalma</th><th>İncele</th></tr></thead><tbody>`;
         items.forEach((it)=>{
-          html+=`<tr>
-            <td><strong>${esc(it.username||'-')}</strong></td>
-            <td>${esc(it.display_name||'-')}</td>
-            <td>${esc(it.status||'-')}</td>
-            <td>${esc(it.platform||'-')}</td>
-            <td>${esc(it.lang||'-')}</td>
-            <td><code>${esc(it.device_id||'-')}</code></td>
-            <td>${d(it.connected_at)}</td>
-            <td>${secText(it.connected_seconds)}</td>
-          </tr>`;
+          const key=String(it.client_id||'').replace(/[^a-zA-Z0-9_-]/g,'');
+          html+=`<tr><td><div class="case-title"><strong>${esc(it.username||'Bilinmeyen profil')}</strong><small>${esc(it.display_name||'Görünen isim yok')} · ${esc(it.status||'Durum bilinmiyor')}</small></div></td><td><div class="cell-stack"><span>${esc(it.platform||'Bilinmiyor')}</span><small>${esc(String(it.lang||'Dil bilinmiyor').toUpperCase())}</small></div></td><td><div class="cell-stack"><span>${esc(relativeAge(it.connected_at))}</span><small>${d(it.connected_at)}</small></div></td><td>${esc(secText(it.connected_seconds))}</td><td><button class="btn btn-details" onclick="openOnlineDetails('${esc(key)}')">Bağlantıyı incele</button></td></tr>`;
         });
-        html+='</tbody></table>';
-        c.innerHTML=html;
+        c.innerHTML=`${html}</tbody></table></div></div></section></div>`;
+        requestAnimationFrame(()=>window.scrollTo({top:previousScrollY,left:0,behavior:'auto'}));
       }catch(e){
-        c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Online profil listesi yuklenemedi: ${esc(e.message||e)}</p>`;
+        c.innerHTML=`<div class="admin-state"><div class="admin-state-icon">!</div><div><h3>Online görünüm okunamadı</h3><p>${esc(e.message||e)}</p></div></div>`;
       }
     }
 
@@ -2848,6 +2811,73 @@
       catch(error){ alert(`Yaptırım kaldırılamadı: ${error.message||error}`); }
     }
 
+    function openDeletionDetails(id){
+      const item=deletionRows.get(String(id));
+      if(!item) return;
+      const safeId=String(item.id||'request').replace(/[^a-zA-Z0-9_-]/g,'');
+      const statusKey=String(item.status||'requested').toLowerCase();
+      const sla=deletionSlaText(item.requested_at);
+      const canDecide=['requested','reviewing','approved','failed_retryable'].includes(statusKey);
+      const canReactivate=statusKey==='rejected';
+      const overviewHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">Talep durumu</span><span class="status-pill ${deletionStatusTone(statusKey)}">${esc(DELETION_STATUS_LABELS[statusKey]||'Durum bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Talep yaşı</span><span class="value">${esc(relativeAge(item.requested_at))}</span></div><div class="detail-kv"><span class="label">72 saat SLA</span><span class="status-pill ${sla.tone}">${esc(sla.label)}</span></div></div><section class="detail-card"><h3>Talep özeti</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Profil</span><span class="value">${esc(item.current_username||item.username_snapshot||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Görünen isim</span><span class="value">${esc(item.display_name||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Talep zamanı</span><span class="value">${d(item.requested_at)}</span></div><div class="detail-kv"><span class="label">İnceleyen</span><span class="value">${esc(item.reviewed_by||'Atanmamış')}</span></div></div>${item.note?`<div class="case-subject" style="margin-top:10px">${esc(item.note)}</div>`:''}</section>`;
+      const processHtml=`<section class="detail-card"><h3>İşlem ve kanıt durumu</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Son adım</span><span class="value">${esc(item.last_step?.step_key||'Henüz başlamadı')}</span></div><div class="detail-kv"><span class="label">Adım durumu</span><span class="value">${esc(item.last_step?.status||'Veri yok')}</span></div><div class="detail-kv"><span class="label">İşlem başlangıcı</span><span class="value">${d(item.processing_started_at)}</span></div><div class="detail-kv"><span class="label">Tamamlanma</span><span class="value">${d(item.completed_at)}</span></div><div class="detail-kv"><span class="label">Runtime onayı</span><span class="value">${item.runtime_ack?'Alındı':'Henüz yok'}</span></div><div class="detail-kv"><span class="label">Hata durumu</span><span class="value">${esc(item.failure_code||'Yok')}</span></div></div></section><details class="technical-evidence"><summary>Maskeli teknik kanıtı göster</summary><div class="detail-kv-grid" style="margin-top:10px"><div class="detail-kv"><span class="label">Talep referansı</span><span class="value">${esc(maskAdminIdentifier(item.id))}</span></div><div class="detail-kv"><span class="label">Profil referansı</span><span class="value">${esc(maskAdminIdentifier(item.user_id))}</span></div><div class="detail-kv"><span class="label">Politika sürümü</span><span class="value">${esc(item.policy_version||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Makbuz</span><span class="value">${esc(item.receipt?'Kayıtlı':'Henüz yok')}</span></div></div></details>`;
+      let actionHtml='<section class="detail-card"><h3>İşlem durumu</h3><p class="state-note">Bu talep için uygulanabilir yeni bir işlem bulunmuyor.</p></section>';
+      if(canDecide) actionHtml=`<section class="detail-card"><h3>Talebi reddet</h3><p class="state-note">Profil etkin kalır; gerekçe audit kaydında korunur.</p><div class="workflow-field"><label for="deletion-reject-note-${safeId}">Ret gerekçesi</label><textarea id="deletion-reject-note-${safeId}" placeholder="Kararın gerekçesini yazın"></textarea></div><button class="btn btn-unban" style="margin-top:10px" onclick="confirmRejectDeletionFromDrawer('${esc(item.id)}')">Gerekçeyle reddet</button></section><section class="danger-zone"><h3>Kalıcı silmeyi başlat</h3><p class="state-note">Bu işlem hesap verilerini politika kapsamına göre kalıcı biçimde siler. Geri alınamaz.</p><div class="workflow-field"><label for="deletion-approve-note-${safeId}">Operasyon gerekçesi</label><textarea id="deletion-approve-note-${safeId}" placeholder="İnceleme ve karar gerekçesini yazın"></textarea></div><div class="workflow-field" style="margin-top:10px"><label for="deletion-confirm-text-${safeId}">Kesin onay metni</label><input id="deletion-confirm-text-${safeId}" autocomplete="off" placeholder="DELETE ACCOUNT"></div><label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12px"><input id="deletion-confirm-check-${safeId}" type="checkbox"> <span><strong>${esc(item.current_username||item.username_snapshot||'bu profil')}</strong> hesabının kalıcı olarak silineceğini anlıyorum.</span></label><button class="btn btn-delete" style="margin-top:10px" onclick="confirmApproveDeletionFromDrawer('${esc(item.id)}')">Kontrollerle kalıcı sil</button></section>`;
+      if(canReactivate) actionHtml=`<section class="detail-card"><h3>Hesabı yeniden etkinleştir</h3><p class="state-note">Reddedilmiş silme talebi korunur; profil tekrar aktif duruma alınır.</p><div class="workflow-field"><label for="deletion-reactivate-note-${safeId}">Etkinleştirme gerekçesi</label><textarea id="deletion-reactivate-note-${safeId}" placeholder="Neden yeniden etkinleştirildiğini yazın"></textarea></div><label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12px"><input id="deletion-reactivate-check-${safeId}" type="checkbox"> <span>Profilin yeniden aktif olacağını onaylıyorum.</span></label><button class="btn btn-refresh" style="margin-top:10px" onclick="confirmReactivateDeletionFromDrawer('${esc(item.id)}')">Gerekçeyle etkinleştir</button></section>`;
+      openDetailDrawer({title:item.current_username||item.username_snapshot||'Silme talebi',subtitle:`${DELETION_STATUS_LABELS[statusKey]||'Durum bilinmiyor'} · ${relativeAge(item.requested_at)}`,avatar:'⌫',tabs:[{id:'overview',label:'Talep',html:overviewHtml},{id:'process',label:'Kanıt & süreç',html:processHtml},{id:'action',label:'Karar',html:actionHtml}]});
+    }
+    async function confirmApproveDeletionFromDrawer(id){
+      const item=deletionRows.get(String(id)); if(!item) return;
+      const safeId=String(item.id||'request').replace(/[^a-zA-Z0-9_-]/g,'');
+      const note=(document.getElementById(`deletion-approve-note-${safeId}`)?.value||'').trim();
+      const confirmText=(document.getElementById(`deletion-confirm-text-${safeId}`)?.value||'').trim();
+      const confirmed=!!document.getElementById(`deletion-confirm-check-${safeId}`)?.checked;
+      if(note.length<3){alert('En az 3 karakterlik operasyon gerekçesi gerekli.');return;}
+      if(confirmText!=='DELETE ACCOUNT'){alert('Kesin onay alanına DELETE ACCOUNT yazın.');return;}
+      if(!confirmed){alert('Kalıcı silme etkisini onaylayın.');return;}
+      try{await apiPost(`/admin/deletion-requests/${id}/approve-delete`,{confirm_text:confirmText,policy_version:'talkx-data-policy-v1',note});closeDetailDrawer();}
+      catch(error){alert(`Kalıcı silme başlatılamadı: ${error.message||error}`);}
+    }
+    async function confirmRejectDeletionFromDrawer(id){
+      const item=deletionRows.get(String(id)); if(!item) return;
+      const safeId=String(item.id||'request').replace(/[^a-zA-Z0-9_-]/g,'');
+      const note=(document.getElementById(`deletion-reject-note-${safeId}`)?.value||'').trim();
+      if(note.length<3){alert('En az 3 karakterlik ret gerekçesi gerekli.');return;}
+      try{await apiPost(`/admin/deletion-requests/${id}/reject`,{note});closeDetailDrawer();}
+      catch(error){alert(`Talep reddedilemedi: ${error.message||error}`);}
+    }
+    async function confirmReactivateDeletionFromDrawer(id){
+      const item=deletionRows.get(String(id)); if(!item) return;
+      const safeId=String(item.id||'request').replace(/[^a-zA-Z0-9_-]/g,'');
+      const note=(document.getElementById(`deletion-reactivate-note-${safeId}`)?.value||'').trim();
+      const confirmed=!!document.getElementById(`deletion-reactivate-check-${safeId}`)?.checked;
+      if(note.length<3){alert('En az 3 karakterlik etkinleştirme gerekçesi gerekli.');return;}
+      if(!confirmed){alert('Yeniden etkinleştirme etkisini onaylayın.');return;}
+      try{await apiPost(`/admin/deletion-requests/${id}/reactivate`,{note});closeDetailDrawer();}
+      catch(error){alert(`Hesap etkinleştirilemedi: ${error.message||error}`);}
+    }
+
+    function openOnlineDetails(key){
+      const item=onlineRows.get(String(key)); if(!item) return;
+      const overviewHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">Profil</span><span class="value">${esc(item.username||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Platform</span><span class="value">${esc(item.platform||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Bağlı kalma</span><span class="value">${esc(secText(item.connected_seconds))}</span></div></div><section class="detail-card"><h3>Bağlantı özeti</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Görünen isim</span><span class="value">${esc(item.display_name||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Hesap durumu</span><span class="value">${esc(item.status||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Dil</span><span class="value">${esc(String(item.lang||'Bilinmiyor').toUpperCase())}</span></div><div class="detail-kv"><span class="label">Başlangıç</span><span class="value">${d(item.connected_at)}</span></div></div></section>`;
+      const technicalHtml=`<section class="detail-card"><h3>Maskeli bağlantı kanıtı</h3><p class="state-note">Tanımlayıcılar yalnız bağlantı teşhisi içindir ve varsayılan listede gösterilmez.</p><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Cihaz</span><span class="value">${esc(maskAdminIdentifier(item.device_id))}</span></div><div class="detail-kv"><span class="label">İstemci</span><span class="value">${esc(maskAdminIdentifier(item.client_id))}</span></div><div class="detail-kv"><span class="label">Profil referansı</span><span class="value">${esc(maskAdminIdentifier(item.user_id))}</span></div><div class="detail-kv"><span class="label">Son görülme</span><span class="value">${d(item.last_seen_at)}</span></div></div></section>`;
+      openDetailDrawer({title:item.username||'Canlı bağlantı',subtitle:`${item.platform||'Platform bilinmiyor'} · ${secText(item.connected_seconds)}`,avatar:detailInitials(item.username),tabs:[{id:'overview',label:'Bağlantı',html:overviewHtml},{id:'technical',label:'Teknik kanıt',html:technicalHtml}]});
+    }
+
+    function auditTechnicalRows(payload){
+      const data=payload&&typeof payload==='object'?payload:{};
+      const entries=Object.entries(data);
+      if(!entries.length) return '<p class="state-note">Ek payload kaydedilmemiş.</p>';
+      return `<div class="detail-kv-grid">${entries.slice(0,20).map(([key,value])=>{const raw=value&&typeof value==='object'?'Yapısal veri':String(value??'');const safe=/(id|token|ip|email|device|user)/i.test(key)?maskAdminIdentifier(raw):raw.slice(0,240);return `<div class="detail-kv"><span class="label">${esc(key.replaceAll('_',' '))}</span><span class="value">${esc(safe||'Boş')}</span></div>`;}).join('')}</div>`;
+    }
+    function openAuditDetails(id){
+      const item=auditRows.get(String(id)); if(!item) return;
+      const target=auditEntityLabel(item.entity_type);
+      const overviewHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">Yönetici</span><span class="value">${esc(item.actor_admin||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Eylem ailesi</span><span class="value">${esc(auditFamily(item.action_type))}</span></div><div class="detail-kv"><span class="label">Sonuç</span><span class="status-pill ${auditTone(item.action_type)}">Kaydedildi</span></div></div><section class="detail-card"><h3>Hareket özeti</h3><p class="case-subject" style="max-width:none"><strong>${esc(item.actor_admin||'Yönetici')}</strong> ${esc(auditActionLabel(item.action_type))}. Hedef: ${esc(target)}.</p><div class="detail-kv-grid" style="margin-top:10px"><div class="detail-kv"><span class="label">Zaman</span><span class="value">${d(item.created_at)}</span></div><div class="detail-kv"><span class="label">Güvenli özet</span><span class="value">${esc(auditPayloadSummary(item.payload))}</span></div></div></section>`;
+      const technicalHtml=`<section class="detail-card"><h3>Maskeli teknik kanıt</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Eylem kodu</span><span class="value">${esc(item.action_type||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Hedef türü</span><span class="value">${esc(item.entity_type||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Hedef referansı</span><span class="value">${esc(maskAdminIdentifier(item.entity_id))}</span></div><div class="detail-kv"><span class="label">Audit referansı</span><span class="value">${esc(maskAdminIdentifier(item.id))}</span></div></div></section><details class="technical-evidence"><summary>Sanitize payload alanlarını göster</summary><div style="margin-top:10px">${auditTechnicalRows(item.payload)}</div></details>`;
+      openDetailDrawer({title:'Audit kanıtı',subtitle:`${auditFamily(item.action_type)} · ${relativeAge(item.created_at)}`,avatar:'✓',tabs:[{id:'overview',label:'Hareket',html:overviewHtml},{id:'technical',label:'Teknik kanıt',html:technicalHtml}]});
+    }
+
     async function openSupportDetails(id){
       openDetailDrawer({title:'Uygulama raporu',subtitle:'Vaka bilgileri yükleniyor',avatar:'!',tabs:[],loading:true});
       try{
@@ -2989,16 +3019,13 @@
       await openProfileDetails(userId,username||'-');
     }
     async function actionRemoveFriend(userId,friendId){ const reason=(prompt('Arkadaşlığı kaldırma gerekçesi:')||'').trim();if(reason.length<3)return;if(!confirm('Bu arkadaşlık kaldırılsın mı?')) return; await apiPost('/admin/remove-friend',{userId,friendId,reason}); closeDetailDrawer(); }
-    async function actionApproveDeletion(requestId){ if(!confirm('Bu hesabi kalici olarak silmek istiyor musunuz?')) return; const confirmation=prompt('Onaylamak icin DELETE ACCOUNT yazin:'); if(confirmation!=='DELETE ACCOUNT') return; await apiPost(`/admin/deletion-requests/${requestId}/approve-delete`,{confirm_text:confirmation,policy_version:'talkx-data-policy-v1'}); }
-    async function actionRejectDeletion(requestId){ if(!confirm('Silme talebini reddetmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reject`,{}); }
-    async function actionReactivateDeletion(requestId){ if(!confirm('Bu kullaniciyi yeniden aktif etmek istiyor musunuz?')) return; await apiPost(`/admin/deletion-requests/${requestId}/reactivate`,{}); }
-
     document.addEventListener('keydown',handleAdminKeydown);
     window.addEventListener('popstate',()=>switchTab(tabFromHash(),null,false));
     currentTab=tabFromHash();
     setActiveNav(currentTab);
     applySearchUI();
     applyTabChrome();
+    if(currentTab==='online_users') startOnlineUsersAutoRefresh();
     loadContent();
   </script>
 </body>
