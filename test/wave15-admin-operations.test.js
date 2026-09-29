@@ -134,3 +134,18 @@ test('operation evidence workspaces hide raw identifiers and require reasoned de
     assert.match(api, /En az 3 karakter ret gerekcesi gerekli/);
     assert.match(api, /En az 3 karakter etkinlestirme gerekcesi gerekli/);
 });
+
+test('system insight workspaces keep raw evidence behind masked drawers', () => {
+    const api = fs.readFileSync(path.join(__dirname, '..', 'admin.js'), 'utf8');
+    const ui = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+    assert.match(ui, /function renderSignalChart\(series,specs/);
+    assert.match(ui, /Dikkat gerektirenler/);
+    assert.match(ui, /function openPerformanceEvidence\(\)/);
+    assert.match(ui, /Ana kullanıcı yolculuğu/);
+    assert.match(ui, /function openAnalyticsEventDetails\(key\)/);
+    assert.match(ui, /Sanitize metadata alanlarını göster/);
+    assert.doesNotMatch(ui, /En Yavas Istekler \(ham olay\)/);
+    assert.doesNotMatch(ui, /JSON\.stringify\(row\.metadata\|\|\{\}\)/);
+    assert.match(api, /previous_steps: previousSteps/);
+    assert.match(api, /const previousWindow =/);
+});

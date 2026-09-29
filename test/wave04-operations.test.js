@@ -176,6 +176,6 @@ test('health and operation surfaces do not expose raw database configuration', a
 test('admin performance UI renders no-data and route impact explicitly', async () => {
     const source = await readFile(path.resolve(__dirname, '../admin.html'), 'utf8');
     assert.match(source, /x\.p95_ms==null\?'Veri yok'/);
-    assert.match(source, /Route Etki Sirasi/);
-    assert.match(source, /Release Health ayrı metriklerdir/);
+    assert.match(source, /Route etki sırası/);
+    assert.match(source, /Dikkat gerektirenler/);
 });

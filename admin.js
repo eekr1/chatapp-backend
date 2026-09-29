@@ -2557,33 +2557,46 @@ router.get('/analytics/funnel', async (req, res) => {
         to: window.to,
         platform
     });
-    try {
-        const result = await pool.query(
-            `
-            SELECT
-                COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'user_connected' AND be.user_id IS NOT NULL)::bigint AS arrivals_users,
-                COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'match_search_attempt' AND be.user_id IS NOT NULL)::bigint AS attempted_users,
-                COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'match_offer_received' AND be.user_id IS NOT NULL)::bigint AS offered_users,
-                COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name IN ('match_decision_accept', 'match_auto_accept') AND be.user_id IS NOT NULL)::bigint AS accepted_users,
-                COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'chat_started' AND be.user_id IS NOT NULL)::bigint AS chatted_users,
-                COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'chat_ended' AND be.user_id IS NOT NULL)::bigint AS ended_users
-            FROM behavior_events be
-            WHERE ${whereSql}
-            `,
-            params
-        );
-
-        const row = result.rows[0] || {};
-        const arrivalsUsers = Number(row.arrivals_users) || 0;
+    const windowMs = Math.max(1, window.to.getTime() - window.from.getTime());
+    const previousWindow = {
+        from: new Date(window.from.getTime() - windowMs),
+        to: new Date(window.from.getTime())
+    };
+    const previousFilter = buildAnalyticsWhere({
+        from: previousWindow.from,
+        to: previousWindow.to,
+        platform
+    });
+    const funnelSql = (filterSql) => `
+        SELECT
+            COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'user_connected' AND be.user_id IS NOT NULL)::bigint AS arrivals_users,
+            COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'match_search_attempt' AND be.user_id IS NOT NULL)::bigint AS attempted_users,
+            COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'match_offer_received' AND be.user_id IS NOT NULL)::bigint AS offered_users,
+            COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name IN ('match_decision_accept', 'match_auto_accept') AND be.user_id IS NOT NULL)::bigint AS accepted_users,
+            COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'chat_started' AND be.user_id IS NOT NULL)::bigint AS chatted_users,
+            COUNT(DISTINCT be.user_id) FILTER (WHERE be.event_name = 'chat_ended' AND be.user_id IS NOT NULL)::bigint AS ended_users
+        FROM behavior_events be
+        WHERE ${filterSql}
+    `;
+    const toSteps = (row) => {
+        const arrivalsUsers = Number(row?.arrivals_users) || 0;
         const pct = (part, whole) => (whole > 0 ? Math.round((part * 10000) / whole) / 100 : 0);
-        const steps = [
-            { key: 'arrivals', label: 'Gelen Kullanici', users: arrivalsUsers, pct_from_arrivals: 100 },
-            { key: 'attempted', label: 'Match Deneyen', users: Number(row.attempted_users) || 0, pct_from_arrivals: pct(Number(row.attempted_users) || 0, arrivalsUsers) },
-            { key: 'offered', label: 'Match Bulan', users: Number(row.offered_users) || 0, pct_from_arrivals: pct(Number(row.offered_users) || 0, arrivalsUsers) },
-            { key: 'accepted', label: 'Kabul Eden', users: Number(row.accepted_users) || 0, pct_from_arrivals: pct(Number(row.accepted_users) || 0, arrivalsUsers) },
-            { key: 'chatted', label: 'Sohbete Giren', users: Number(row.chatted_users) || 0, pct_from_arrivals: pct(Number(row.chatted_users) || 0, arrivalsUsers) },
-            { key: 'ended', label: 'Sohbeti Sonlanan', users: Number(row.ended_users) || 0, pct_from_arrivals: pct(Number(row.ended_users) || 0, arrivalsUsers) }
+        return [
+            { key: 'arrivals', label: 'Gelen Kullanıcı', users: arrivalsUsers, pct_from_arrivals: 100 },
+            { key: 'attempted', label: 'Arama Başlatan', users: Number(row?.attempted_users) || 0, pct_from_arrivals: pct(Number(row?.attempted_users) || 0, arrivalsUsers) },
+            { key: 'offered', label: 'Eşleşme Bulan', users: Number(row?.offered_users) || 0, pct_from_arrivals: pct(Number(row?.offered_users) || 0, arrivalsUsers) },
+            { key: 'accepted', label: 'Kabul Eden', users: Number(row?.accepted_users) || 0, pct_from_arrivals: pct(Number(row?.accepted_users) || 0, arrivalsUsers) },
+            { key: 'chatted', label: 'Sohbete Giren', users: Number(row?.chatted_users) || 0, pct_from_arrivals: pct(Number(row?.chatted_users) || 0, arrivalsUsers) },
+            { key: 'ended', label: 'Sohbeti Sonlanan', users: Number(row?.ended_users) || 0, pct_from_arrivals: pct(Number(row?.ended_users) || 0, arrivalsUsers) }
         ];
+    };
+    try {
+        const [result, previousResult] = await Promise.all([
+            pool.query(funnelSql(whereSql), params),
+            pool.query(funnelSql(previousFilter.whereSql), previousFilter.params)
+        ]);
+        const steps = toSteps(result.rows[0] || {});
+        const previousSteps = toSteps(previousResult.rows[0] || {});
 
         return res.json({
             window: {
@@ -2593,7 +2606,8 @@ router.get('/analytics/funnel', async (req, res) => {
                 rangeLabel: window.rangeLabel,
                 platform
             },
-            steps
+            steps,
+            previous_steps: previousSteps
         });
     } catch (e) {
         return res.status(500).json({ error: e.message });

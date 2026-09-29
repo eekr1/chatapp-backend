@@ -173,6 +173,27 @@
     .filter-grid { display:grid; grid-template-columns:repeat(5,minmax(130px,1fr)); gap:9px; }
     .filter-grid .workflow-field { justify-content:flex-end; }
     .filter-grid .filter-action { align-self:end; min-height:39px; }
+    .insight-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .insight-card { border:1px solid var(--border); border-radius:13px; padding:13px; background:rgba(255,255,255,.014); }
+    .insight-card.is-warn { border-color:rgba(255,196,109,.34); background:rgba(255,196,109,.055); }
+    .insight-card.is-danger { border-color:rgba(255,102,126,.36); background:rgba(255,102,126,.055); }
+    .insight-card h3 { margin:0 0 6px; font-size:14px; }
+    .insight-card p { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+    .insight-card .next { display:block; margin-top:8px; color:var(--text); font-weight:700; }
+    .signal-chart { border:1px solid var(--border); border-radius:13px; padding:12px; background:linear-gradient(180deg,rgba(82,103,220,.075),rgba(255,255,255,.01)); overflow:hidden; }
+    .signal-chart svg { display:block; width:100%; height:230px; }
+    .signal-chart .chart-axis { display:flex; justify-content:space-between; gap:10px; margin-top:6px; color:var(--muted-2); font-size:10px; }
+    .signal-chart .chart-legend { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px; color:var(--muted); font-size:11px; }
+    .signal-chart .chart-legend span::before { content:""; display:inline-block; width:8px; height:8px; margin-right:5px; border-radius:50%; background:var(--legend-color,#8b7cff); }
+    .journey-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+    .journey-step { position:relative; min-width:0; border:1px solid var(--border); border-radius:13px; padding:13px; background:rgba(255,255,255,.018); }
+    .journey-step:not(:last-child)::after { content:"›"; position:absolute; right:-9px; top:50%; z-index:2; transform:translateY(-50%); color:#9387f5; font-size:20px; }
+    .journey-step .step-label { color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .journey-step .step-value { margin-top:8px; font-size:25px; font-weight:760; }
+    .journey-step .step-rate { margin-top:4px; color:var(--muted); font-size:11px; }
+    .delta { display:inline-flex; margin-top:7px; border-radius:999px; padding:3px 7px; color:var(--muted); background:rgba(255,255,255,.04); font-size:10px; font-weight:700; }
+    .delta.is-up { color:#a8f1d2; background:rgba(69,216,155,.08); }
+    .delta.is-down { color:#ffb4c0; background:rgba(255,102,126,.08); }
     .admin-state { display:flex; align-items:flex-start; gap:12px; min-height:170px; padding:32px; border:1px dashed var(--border-strong); border-radius:14px; background:rgba(255,255,255,.012); }
     .admin-state-icon { display:flex; align-items:center; justify-content:center; width:42px; height:42px; flex:0 0 42px; border-radius:13px; color:#b7adff; background:var(--accent-soft); font-size:20px; }
     .admin-state h3 { margin:1px 0 6px; font-size:16px; }
@@ -346,7 +367,8 @@
       .overview-grid, .health-grid, .dashboard-detail-grid, .activity-pair { grid-template-columns:1fr; }
       .push-summary { grid-template-columns:1fr; }
       .dashboard-section-head { align-items:flex-start; flex-direction:column; }
-      .admin-summary-grid, .detail-hero, .detail-kv-grid, .workflow-form { grid-template-columns:1fr; }
+      .admin-summary-grid, .detail-hero, .detail-kv-grid, .workflow-form, .insight-grid, .journey-grid { grid-template-columns:1fr; }
+      .journey-step:not(:last-child)::after { display:none; }
       .filter-grid { grid-template-columns:1fr; }
       .workflow-field.is-wide { grid-column:auto; }
       .admin-state { min-height:140px; padding:22px 18px; }
@@ -500,6 +522,8 @@
     let deletionRows=new Map();
     let onlineRows=new Map();
     let auditRows=new Map();
+    let performanceEvidence=[];
+    let analyticsEventRows=new Map();
     const SUBJECT_LABELS={connection:'Bağlantı',message:'Mesaj',photo:'Fotoğraf',other:'Diğer'};
     const BREVO_LABELS={sent:'Gönderildi',failed:'Başarısız',pending:'Bekliyor',unknown:'Bilinmiyor'};
     const WORKFLOW_LABELS={new:'Yeni',investigating:'İnceleniyor',resolved:'Çözüldü',duplicate:'Tekrar kayıt',insufficient_info:'Bilgi yetersiz',archived:'Arşivlendi'};
@@ -542,22 +566,26 @@
     };
     const ANALYTICS_EVENT_LABELS={
       arrival:'Uygulamaya giris yapti',
-      user_connected:'Uygulamaya baglandi',
-      user_disconnected:'Uygulamadan ayrildi',
+      user_connected:'Uygulamaya bağlandı',
+      user_disconnected:'Uygulamadan ayrıldı',
       session_started:'Oturum baslatti',
       session_ended:'Oturumu sonlandirdi',
       match_attempt:'Eslesme aradi',
+      match_search_attempt:'Eşleşme araması başlattı',
       match_search_started:'Eslesme aramasini baslatti',
       match_search_queued:'Eslesme aramasi kuyruga alindi',
       match_search_cancelled:'Eslesme aramasini iptal etti',
       match_search_canceled:'Eslesme aramasini iptal etti',
       match_offered:'Eslesme bulundu',
+      match_offer_received:'Eşleşme buldu',
       match_offer_shown:'Eslesme teklifi gosterildi',
       match_accept:'Eslesmeyi kabul etti',
+      match_decision_accept:'Eşleşmeyi kabul etti',
       match_reject:'Eslesmeyi reddetti',
+      match_decision_reject:'Eşleşmeyi reddetti',
       match_auto_accept:'Eslesme otomatik kabul edildi',
-      chat_started:'Sohbet basladi',
-      chat_ended:'Sohbet sonlandi',
+      chat_started:'Sohbet başladı',
+      chat_ended:'Sohbet sonlandı',
       message_sent:'Mesaj gonderdi',
       report_submitted:'Rapor gonderdi',
       profile_updated:'Profilini guncelledi',
@@ -1085,7 +1113,8 @@
         if(typeof v==='object') return;
         const raw=String(v).trim();
         if(!raw) return;
-        const text=raw.length>36?`${raw.slice(0,33)}...`:raw;
+        const protectedValue=/(^|_)(id|token|ip|email|device|user)($|_)/i.test(k)?maskAdminIdentifier(raw):raw;
+        const text=protectedValue.length>36?`${protectedValue.slice(0,33)}...`:protectedValue;
         parts.push(`${analyticsMetaLabel(k)}: ${text}`);
       });
       return parts.length?parts.join(' | '):'Detay yok';
@@ -1093,6 +1122,8 @@
     function analyticsPlatformLabel(v){
       const p=String(v||'').trim().toLowerCase();
       if(!p) return '-';
+      if(p==='all') return 'Tümü';
+      if(p==='unknown') return 'Bilinmiyor';
       if(p==='android') return 'Android';
       if(p==='ios') return 'iOS';
       if(p==='web'||p==='browser'||p==='desktop') return 'Web';
@@ -1869,115 +1900,72 @@
 
     const formatPerfMs=(value)=>value==null?'Veri yok':`${Number(value).toFixed(1)} ms`;
     const formatPerfRate=(value)=>value==null?'Veri yok':`${Number(value).toFixed(2)}%`;
+    function percentageDelta(current,previous){
+      const now=Number(current); const before=Number(previous);
+      if(!Number.isFinite(now)||!Number.isFinite(before)||before===0) return null;
+      return ((now-before)/before)*100;
+    }
+    function deltaBadge(current,previous,inverse=false){
+      const delta=percentageDelta(current,previous);
+      if(delta===null) return '<span class="delta">Karşılaştırma yok</span>';
+      const good=inverse?delta<=0:delta>=0;
+      const cls=Math.abs(delta)<0.05?'':good?'is-up':'is-down';
+      const sign=delta>0?'+':'';
+      return `<span class="delta ${cls}">${sign}${delta.toFixed(1)}% önceki dönem</span>`;
+    }
+    function trimZeroSeries(series,keys){
+      const list=Array.isArray(series)?series:[];
+      const active=(row)=>keys.some((key)=>Number(row?.[key]||0)!==0);
+      let start=list.findIndex(active);
+      if(start<0) return [];
+      let end=list.length-1;
+      while(end>start&&!active(list[end])) end--;
+      return list.slice(start,end+1);
+    }
+    function renderSignalChart(series,specs,{thresholds=[]}={}){
+      const list=Array.isArray(series)?series:[];
+      const width=800,height=220,padX=30,padY=20;
+      const values=list.flatMap((row)=>specs.map((spec)=>Number(row?.[spec.key])).filter(Number.isFinite));
+      const thresholdValues=thresholds.map((item)=>Number(item.value)).filter(Number.isFinite);
+      const max=Math.max(1,...values,...thresholdValues);
+      if(!list.length||!values.length) return '<div class="admin-state"><div class="admin-state-icon">∿</div><div><h3>Trend üretmek için veri yok</h3><p>Seçilen zaman aralığında anlamlı ölçüm bulunmadı.</p></div></div>';
+      const x=(index)=>padX+((width-(padX*2))*(list.length===1?0:index/(list.length-1)));
+      const y=(value)=>height-padY-((Math.max(0,Number(value)||0)/max)*(height-(padY*2)));
+      const lines=specs.map((spec)=>{const points=list.map((row,index)=>`${x(index).toFixed(1)},${y(row?.[spec.key]).toFixed(1)}`).join(' ');return `<polyline fill="none" stroke="${spec.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${points}"/>`;}).join('');
+      const thresholdLines=thresholds.map((item)=>`<g><line x1="${padX}" y1="${y(item.value)}" x2="${width-padX}" y2="${y(item.value)}" stroke="${item.color}" stroke-width="1" stroke-dasharray="7 6"/><text x="${width-padX-4}" y="${Math.max(12,y(item.value)-5)}" text-anchor="end" fill="${item.color}" font-size="10">${esc(item.label)}</text></g>`).join('');
+      const first=list[0]?.bucket?d(list[0].bucket):'Başlangıç'; const last=list.at(-1)?.bucket?d(list.at(-1).bucket):'Bitiş';
+      return `<div class="signal-chart"><div class="chart-legend">${specs.map((spec)=>`<span style="--legend-color:${spec.color}">${esc(spec.label)}</span>`).join('')}</div><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${esc(specs.map((spec)=>spec.label).join(' ve '))} trend grafiği"><line x1="${padX}" y1="${height-padY}" x2="${width-padX}" y2="${height-padY}" stroke="rgba(255,255,255,.12)"/>${thresholdLines}${lines}</svg><div class="chart-axis"><span>${first}</span><span>Tepe ${max.toFixed(max<10?1:0)}</span><span>${last}</span></div></div>`;
+    }
     function renderPerformanceView(overview,timeseries,slowItems){
       const c=document.getElementById('content');
       const hours=Number(overview?.hours||currentPerformanceHours||24);
-      const topSlow=Array.isArray(overview?.top_slow_routes)?overview.top_slow_routes:[];
-      const topErr=Array.isArray(overview?.top_error_routes)?overview.top_error_routes:[];
       const routeImpact=Array.isArray(overview?.route_impact)?overview.route_impact:[];
-      const series=Array.isArray(timeseries)?timeseries:[];
-      const slow=Array.isArray(slowItems)?slowItems:[];
+      const series=trimZeroSeries(timeseries,['req_count','error_count','p95_ms']);
+      const slow=Array.isArray(slowItems)?slowItems:[]; performanceEvidence=slow;
+      const previous=overview?.previous_period||{};
+      const evaluation=String(overview?.evaluation||'unknown').toLowerCase();
+      const confidence=String(overview?.confidence||'unknown').toLowerCase();
+      const evaluationLabels={healthy:'Sağlıklı',warning:'Dikkat',critical:'Kritik',insufficient_data:'Veri yetersiz',unknown:'Durum bilinmiyor'};
+      const confidenceLabels={high:'Yüksek güven',medium:'Orta güven',low:'Düşük güven',unknown:'Güven bilinmiyor'};
+      const stateTone=evaluation==='healthy'?'is-ok':evaluation==='critical'?'is-danger':'is-warn';
       const hoursOptions=[1,3,6,12,24,48,72,168];
       const optionsHtml=hoursOptions
         .map((h)=>`<option value="${h}" ${h===hours?'selected':''}>${h} saat</option>`)
         .join('');
-
-      let html=`
-        <div class="row">
-          <label for="perf-hours"><strong>Pencere</strong></label>
-          <select id="perf-hours">${optionsHtml}</select>
-          <button class="btn btn-refresh" onclick="changePerformanceHours()">Yenile</button>
-        </div>
-        <div class="deletion-row-note" role="status">
-          Durum: <strong>${esc(overview?.evaluation||'unknown')}</strong> ·
-          Veri: ${esc(overview?.data_state||'unknown')} ·
-          Güven: ${esc(overview?.confidence||'unknown')} ·
-          Örnek: ${Number(overview?.sample_count||0)} ·
-          Son güncelleme: ${overview?.last_updated_at?d(overview.last_updated_at):'Veri yok'}
-        </div>
-        <div class="metrics">
-          <div class="metric"><div class="k">Toplam Istek</div><div class="n">${Number(overview?.total_requests||0)}</div></div>
-          <div class="metric"><div class="k">Hata Orani</div><div class="n">${formatPerfRate(overview?.error_rate)}</div></div>
-          <div class="metric"><div class="k">P50/P95/P99</div><div class="n" style="font-size:16px">${formatPerfMs(overview?.p50_ms)} / ${formatPerfMs(overview?.p95_ms)} / ${formatPerfMs(overview?.p99_ms)}</div></div>
-          <div class="metric"><div class="k">Yavas Istek</div><div class="n">${Number(overview?.slow_requests||0)}</div></div>
-        </div>
-        <p class="deletion-row-note">Esikler: P95 uyarı ${Number(overview?.thresholds?.p95_warning_ms||0)} ms, kritik ${Number(overview?.thresholds?.p95_critical_ms||0)} ms; minimum percentile örneği ${Number(overview?.thresholds?.minimum_percentile_samples||0)}. Kapsam: backend API; client ve Release Health ayrı metriklerdir.</p>
-        <p class="deletion-row-note">Onceki ${hours} saat: ${Number(overview?.previous_period?.total_requests||0)} istek, ${formatPerfRate(overview?.previous_period?.error_rate)} hata.</p>
-      `;
-
-      html+='<h3>Trend (dakikalik)</h3>';
-      if(!series.length){
-        html+='<p class="deletion-row-note">Trend verisi yok.</p>';
-      }else{
-        html+=`
-          <table>
-            <thead><tr><th>Dakika</th><th>Istek</th><th>Hata</th><th>P95 (ms)</th></tr></thead>
-            <tbody>
-        `;
-        series.slice(-180).forEach((row)=>{
-          html+=`<tr><td>${d(row.bucket)}</td><td>${Number(row.req_count||0)}</td><td>${Number(row.error_count||0)}</td><td>${row.p95_ms==null?'Veri yok':Number(row.p95_ms).toFixed(1)}</td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      html+='<h3>Route Etki Sirasi</h3>';
-      if(!routeImpact.length){
-        html+='<p class="deletion-row-note">Etki sirasi icin veri yok.</p>';
-      }else{
-        html+='<table><thead><tr><th>Route</th><th>Istek</th><th>Hata</th><th>P95/Ort</th><th>Etki</th></tr></thead><tbody>';
-        routeImpact.forEach((row)=>{
-          const latency=row.p95_ms==null?row.avg_ms:row.p95_ms;
-          html+=`<tr><td><code>${esc(row.key||'-')}</code></td><td>${Number(row.req_count||0)}</td><td>${Number(row.error_count||0)}</td><td>${formatPerfMs(latency)}</td><td>${Number(row.impact_score||0)}</td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      html+='<h3>En Yavas Route (orneklem)</h3>';
-      if(!topSlow.length){
-        html+='<p class="deletion-row-note">Yavas route verisi yok.</p>';
-      }else{
-        html+=`
-          <table>
-            <thead><tr><th>Route</th><th>Ornek</th><th>Ort (ms)</th><th>P95 (ms)</th><th>Max (ms)</th></tr></thead>
-            <tbody>
-        `;
-        topSlow.forEach((row)=>{
-          html+=`<tr><td><code>${esc(row.method||'GET')} ${esc(row.route||'-')}</code></td><td>${Number(row.sample_count||0)}</td><td>${Number(row.avg_ms||0).toFixed(1)}</td><td>${Number(row.p95_ms||0).toFixed(1)}</td><td>${Number(row.max_ms||0)}</td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      html+='<h3>Hata Ureten Route</h3>';
-      if(!topErr.length){
-        html+='<p class="deletion-row-note">Hata route verisi yok.</p>';
-      }else{
-        html+=`
-          <table>
-            <thead><tr><th>Route</th><th>Istek</th><th>Hata</th><th>Hata Orani</th></tr></thead>
-            <tbody>
-        `;
-        topErr.forEach((row)=>{
-          html+=`<tr><td><code>${esc(row.method||'GET')} ${esc(row.route||'-')}</code></td><td>${Number(row.req_count||0)}</td><td>${Number(row.error_count||0)}</td><td>${Number(row.error_rate||0).toFixed(2)}%</td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      html+='<h3>En Yavas Istekler (ham olay)</h3>';
-      if(!slow.length){
-        html+='<p class="deletion-row-note">Yavas istek listesi bos.</p>';
-      }else{
-        html+=`
-          <table>
-            <thead><tr><th>Tarih</th><th>Route</th><th>Status</th><th>Sure (ms)</th><th>Boyut</th><th>Sebep</th></tr></thead>
-            <tbody>
-        `;
-        slow.forEach((row)=>{
-          html+=`<tr><td>${d(row.created_at)}</td><td><code>${esc(row.method||'GET')} ${esc(row.route||'-')}</code></td><td>${Number(row.status||0)}</td><td>${Number(row.duration_ms||0)}</td><td>${row.response_size_bytes!=null?Number(row.response_size_bytes):'-'}</td><td>${esc(row.sample_reason||'-')}</td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      c.innerHTML=html;
+      const attention=[];
+      if(Number(overview?.sample_count||0)<Number(overview?.thresholds?.minimum_percentile_samples||0)) attention.push({tone:'is-warn',title:'Yüzdelik güveni düşük',text:`${Number(overview?.sample_count||0)} örnek var; güvenilir P95 için en az ${Number(overview?.thresholds?.minimum_percentile_samples||0)} gerekli.`,next:'Pencereyi genişletin veya trafik geldikten sonra yeniden kontrol edin.'});
+      if(evaluation==='warning'||evaluation==='critical') attention.push({tone:evaluation==='critical'?'is-danger':'is-warn',title:'API eşiği aşıldı',text:`P95 ${formatPerfMs(overview?.p95_ms)}, hata oranı ${formatPerfRate(overview?.error_rate)}.`,next:'En yüksek etkili route ile son yavaş istek kanıtını birlikte inceleyin.'});
+      if(routeImpact[0]) attention.push({tone:Number(routeImpact[0].error_count||0)>0?'is-danger':'is-warn',title:'En yüksek route etkisi',text:`${routeImpact[0].key||'Bilinmeyen route'} · etki puanı ${Number(routeImpact[0].impact_score||0)}.`,next:'İstek hacmi, hata ve gecikmeyi route kanıtında doğrulayın.'});
+      if(!attention.length) attention.push({tone:'',title:'Dikkat gerektiren sinyal yok',text:'Seçilen pencerede uyarı veya kritik eşik aşımı görülmedi.',next:'Normal izlemeye devam edin.'});
+      const chart=renderSignalChart(series.slice(-180),[{key:'p95_ms',label:'P95 gecikme (ms)',color:'#8b7cff'}],{thresholds:[{value:Number(overview?.thresholds?.p95_warning_ms||0),label:'Uyarı',color:'#ffc46d'},{value:Number(overview?.thresholds?.p95_critical_ms||0),label:'Kritik',color:'#ff667e'}].filter((item)=>item.value>0)});
+      let html=`<div class="admin-page"><div class="snapshot-strip"><div><span class="status-pill ${stateTone}">${esc(evaluationLabels[evaluation]||evaluationLabels.unknown)}</span><p style="margin-top:6px">${esc(confidenceLabels[confidence]||confidenceLabels.unknown)} · ${Number(overview?.sample_count||0)} örnek · Son güncelleme ${overview?.last_updated_at?d(overview.last_updated_at):'veri yok'}</p></div><div class="case-actions"><select id="perf-hours" aria-label="Performans zaman penceresi">${optionsHtml}</select><button class="btn btn-refresh" onclick="changePerformanceHours()">Yenile</button></div></div>
+      <div class="admin-summary-grid"><article class="admin-summary-card"><div class="label">Trafik</div><div class="value">${Number(overview?.total_requests||0)}</div><div class="meta">${hours} saat · ${deltaBadge(overview?.total_requests,previous.total_requests)}</div></article><article class="admin-summary-card"><div class="label">Hata oranı</div><div class="value">${formatPerfRate(overview?.error_rate)}</div><div class="meta">${deltaBadge(overview?.error_rate,previous.error_rate,true)}</div></article><article class="admin-summary-card"><div class="label">P95 gecikme</div><div class="value">${formatPerfMs(overview?.p95_ms)}</div><div class="meta">P50 ${formatPerfMs(overview?.p50_ms)} · P99 ${formatPerfMs(overview?.p99_ms)}</div></article><article class="admin-summary-card"><div class="label">Yavaş istek</div><div class="value">${Number(overview?.slow_requests||0)}</div><div class="meta">Ham kanıt varsayılan görünümde kapalı</div></article></div>
+      <section class="admin-section"><div class="admin-section-head"><div><h2>Gecikme trendi</h2><p>Dakikalık P95 ve politika eşikleri; boş baş/son aralıklar kırpılır.</p></div><span class="evidence-chip">${hours} saat</span></div><div class="admin-section-body">${chart}</div></section>
+      <section class="admin-section"><div class="admin-section-head"><div><h2>Dikkat gerektirenler</h2><p>Ne oldu, olası etkisi ve önerilen sonraki kontrol.</p></div></div><div class="admin-section-body"><div class="insight-grid">${attention.map((item)=>`<article class="insight-card ${item.tone}"><h3>${esc(item.title)}</h3><p>${esc(item.text)}<span class="next">Sonraki kontrol: ${esc(item.next)}</span></p></article>`).join('')}</div></div></section>
+      <section class="admin-section"><div class="admin-section-head"><div><h2>Route etki sırası</h2><p>Hacim, hata ve gecikmenin birleşik operasyon etkisi.</p></div>${slow.length?'<button class="btn btn-details" onclick="openPerformanceEvidence()">Ham kanıtı incele</button>':''}</div>`;
+      if(!routeImpact.length) html+=moderationEmpty('Route etkisi için veri yok','Seçilen zaman aralığında sıralanabilecek route sinyali bulunmadı.');
+      else{html+='<div class="admin-section-body"><div class="table-scroll table-scroll--data"><table><thead><tr><th>Route</th><th>İstek</th><th>Hata</th><th>P95 / ortalama</th><th>Etki</th></tr></thead><tbody>';routeImpact.slice(0,10).forEach((row)=>{const latency=row.p95_ms==null?row.avg_ms:row.p95_ms;html+=`<tr><td><div class="case-title"><strong>${esc(row.key||'Bilinmeyen route')}</strong><small>Backend API</small></div></td><td>${Number(row.req_count||0)}</td><td>${Number(row.error_count||0)}</td><td>${formatPerfMs(latency)}</td><td><span class="status-pill ${Number(row.error_count||0)>0?'is-danger':'is-warn'}">${Number(row.impact_score||0)}</span></td></tr>`;});html+='</tbody></table></div></div>';}
+      c.innerHTML=`${html}</section></div>`;
     }
 
     function changePerformanceHours(){
@@ -2075,183 +2063,45 @@
       const m=overview?.metrics||{};
       const breakdown=Array.isArray(overview?.event_breakdown)?overview.event_breakdown:[];
       const platforms=Array.isArray(overview?.platform_breakdown)?overview.platform_breakdown:[];
-      const steps=Array.isArray(funnel?.steps)?funnel.steps:[];
-      const series=Array.isArray(timeseries?.series)?timeseries.series:[];
+      const steps=(Array.isArray(funnel?.steps)?funnel.steps:[]).slice(0,5);
+      const previousSteps=(Array.isArray(funnel?.previous_steps)?funnel.previous_steps:[]).slice(0,5);
+      const series=trimZeroSeries(timeseries?.series,['unique_arrivals','match_attempts','offers','chats_started']);
       const topUsers=Array.isArray(users?.items)?users.items:[];
       const recentItems=Array.isArray(recent?.items)?recent.items:[];
+      analyticsEventRows=new Map(recentItems.map((item,index)=>[String(item.id||index).replace(/[^a-zA-Z0-9_-]/g,''),item]));
       const fromInput=currentAnalyticsFrom||toLocalDateTimeInput(windowInfo?.from||'');
       const toInput=currentAnalyticsTo||toLocalDateTimeInput(windowInfo?.to||'');
-
       const hoursOptions=[6,12,24,48,72,168,336,720,1440,2160];
       const hoursHtml=hoursOptions.map((h)=>`<option value="${h}" ${Number(currentAnalyticsHours||24)===h?'selected':''}>${h} saat</option>`).join('');
-
-      let html=`
-        <div class="analytics-toolbar">
-          <div class="f">
-            <label>Pencere</label>
-            <select id="analytics-hours">${hoursHtml}</select>
-          </div>
-          <div class="f">
-            <label>Kirilim</label>
-            <select id="analytics-granularity">
-              <option value="hour" ${currentAnalyticsGranularity==='hour'?'selected':''}>Saatlik</option>
-              <option value="day" ${currentAnalyticsGranularity==='day'?'selected':''}>Gunluk</option>
-            </select>
-          </div>
-          <div class="f">
-            <label>Platform</label>
-            <select id="analytics-platform">
-              <option value="all" ${currentAnalyticsPlatform==='all'?'selected':''}>Tumu</option>
-              <option value="android" ${currentAnalyticsPlatform==='android'?'selected':''}>Android</option>
-              <option value="web" ${currentAnalyticsPlatform==='web'?'selected':''}>Web</option>
-              <option value="ios" ${currentAnalyticsPlatform==='ios'?'selected':''}>iOS</option>
-              <option value="unknown" ${currentAnalyticsPlatform==='unknown'?'selected':''}>Unknown</option>
-            </select>
-          </div>
-          <div class="f">
-            <label>Baslangic</label>
-            <input id="analytics-from" type="datetime-local" value="${esc(fromInput)}" />
-          </div>
-          <div class="f">
-            <label>Bitis</label>
-            <input id="analytics-to" type="datetime-local" value="${esc(toInput)}" />
-          </div>
-          <div class="f">
-            <label>Kullanici Ara</label>
-            <input id="analytics-q" type="text" placeholder="username veya gorunen isim" value="${esc(currentAnalyticsQuery||'')}" style="min-width:220px" onkeyup="if(event&&event.key==='Enter'){reloadAnalyticsTab()}" />
-          </div>
-          <div class="f">
-            <button class="btn btn-refresh" onclick="reloadAnalyticsTab()">Yenile</button>
-          </div>
-        </div>
-        <div class="deletion-row-note">Aralik: ${esc(windowInfo?.from||'-')} - ${esc(windowInfo?.to||'-')} | Platform: ${esc(windowInfo?.platform||currentAnalyticsPlatform||'all')}</div>
-        <div class="metrics">
-          <div class="metric"><div class="k">Tekil Gelen</div><div class="n">${Number(m.unique_arrivals||0)}</div></div>
-          <div class="metric"><div class="k">Match Denemesi</div><div class="n">${Number(m.match_attempts||0)}</div></div>
-          <div class="metric"><div class="k">Match Bulunan</div><div class="n">${Number(m.offers||0)}</div></div>
-          <div class="metric"><div class="k">Sohbet Baslangici</div><div class="n">${Number(m.chats_started||0)}</div></div>
-          <div class="metric"><div class="k">Kabul Orani</div><div class="n">${Number(m.accept_rate_pct||0).toFixed(2)}%</div></div>
-          <div class="metric"><div class="k">Red Orani</div><div class="n">${Number(m.reject_rate_pct||0).toFixed(2)}%</div></div>
-          <div class="metric"><div class="k">Oto Kabul Orani</div><div class="n">${Number(m.auto_accept_rate_pct||0).toFixed(2)}%</div></div>
-          <div class="metric"><div class="k">Match->Sohbet Donusum</div><div class="n">${Number(m.chat_conversion_pct||0).toFixed(2)}%</div></div>
-        </div>
-      `;
-
-      html+='<h3>Funnel</h3>';
-      if(!steps.length){
-        html+='<p class="deletion-row-note">Funnel verisi bulunamadi.</p>';
-      }else{
-        html+='<div class="funnel-grid">';
-        steps.forEach((step)=>{
-          html+=`<div class="funnel-step"><div class="s">${esc(step.label||step.key||'-')}</div><div class="v">${Number(step.users||0)}</div><div class="r">${Number(step.pct_from_arrivals||0).toFixed(2)}%</div></div>`;
-        });
-        html+='</div>';
+      const confidence=Number(m.total_events||0)>=100?'Yüksek güven':Number(m.total_events||0)>=20?'Orta güven':'Düşük güven';
+      const confidenceTone=Number(m.total_events||0)>=100?'is-ok':'is-warn';
+      const previousByKey=new Map(previousSteps.map((step)=>[step.key,step]));
+      const transitions=[];
+      for(let index=1;index<steps.length;index++){
+        const before=Number(steps[index-1]?.users||0); const after=Number(steps[index]?.users||0);
+        transitions.push({from:steps[index-1]?.label,to:steps[index]?.label,rate:before>0?(after/before)*100:0,loss:Math.max(0,before-after)});
       }
-
-      html+='<h3>Trend</h3>';
-      if(!series.length){
-        html+='<p class="deletion-row-note">Trend verisi bulunamadi.</p>';
-      }else{
-        html+=`
-          <div class="table-scroll table-scroll--trend">
-            <table>
-              <thead>
-                <tr>
-                  <th>Zaman</th>
-                  <th>Tekil Gelen</th>
-                  <th>Match Deneme</th>
-                  <th>Match Bulma</th>
-                  <th>Kabul</th>
-                  <th>Red</th>
-                  <th>Oto Kabul</th>
-                  <th>Sohbet Baslangic</th>
-                </tr>
-              </thead>
-              <tbody>
-        `;
-        series.forEach((row)=>{
-          const accepted=Number(row.accepts||0)+Number(row.auto_accepts||0);
-          html+=`<tr><td>${d(row.bucket)}</td><td>${Number(row.unique_arrivals||0)}</td><td>${Number(row.match_attempts||0)}</td><td>${Number(row.offers||0)}</td><td>${accepted}</td><td>${Number(row.rejects||0)}</td><td>${Number(row.auto_accepts||0)}</td><td>${Number(row.chats_started||0)}</td></tr>`;
-        });
-        html+='</tbody></table></div>';
-      }
-
-      html+='<h3>Event Dagilimi</h3>';
-      if(!breakdown.length){
-        html+='<p class="deletion-row-note">Event dagilimi yok.</p>';
-      }else{
-        html+=`
-          <table>
-            <thead><tr><th>Event</th><th>Toplam</th><th>Tekil Kullanici</th></tr></thead>
-            <tbody>
-        `;
-        breakdown.forEach((row)=>{
-          html+=`<tr><td><code>${esc(row.event_name||'-')}</code></td><td>${Number(row.event_count||0)}</td><td>${Number(row.unique_users||0)}</td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      html+='<h3>Platform Dagilimi</h3>';
-      if(!platforms.length){
-        html+='<p class="deletion-row-note">Platform dagilimi yok.</p>';
-      }else{
-        html+=`
-          <table>
-            <thead><tr><th>Platform</th><th>Event</th><th>Tekil Kullanici</th></tr></thead>
-            <tbody>
-        `;
-        platforms.forEach((row)=>{
-          html+=`<tr><td>${esc(row.platform||'-')}</td><td>${Number(row.event_count||0)}</td><td>${Number(row.unique_users||0)}</td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      html+='<h3>Kullanici Bazli Davranis</h3>';
-      if(!topUsers.length){
-        html+='<p class="deletion-row-note">Kullanici davranis verisi yok.</p>';
-      }else{
-        html+=`
-          <table>
-            <thead>
-              <tr>
-                <th>Kullanici</th>
-                ${renderAnalyticsSortHeader('Toplam Event','total_events')}
-                ${renderAnalyticsSortHeader('Match Deneme','match_attempts')}
-                ${renderAnalyticsSortHeader('Match Bulma','offers')}
-                ${renderAnalyticsSortHeader('Kabul','accepts')}
-                ${renderAnalyticsSortHeader('Red','rejects')}
-                ${renderAnalyticsSortHeader('Oto Kabul','auto_accepts')}
-                ${renderAnalyticsSortHeader('Sohbet','chats_started')}
-                ${renderAnalyticsSortHeader('Son Event','last_event_at')}
-              </tr>
-            </thead>
-            <tbody>
-        `;
-        topUsers.forEach((row)=>{
-          const name=row.display_name?`${row.username||'-'} (${row.display_name})`:(row.username||'-');
-          html+=`<tr><td>${esc(name)}</td><td>${Number(row.total_events||0)}</td><td>${Number(row.match_attempts||0)}</td><td>${Number(row.offers||0)}</td><td>${Number(row.accepts||0)}</td><td>${Number(row.rejects||0)}</td><td>${Number(row.auto_accepts||0)}</td><td>${Number(row.chats_started||0)}</td><td>${d(row.last_event_at)}</td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      html+='<h3>Son Olay Akisi</h3>';
-      if(!recentItems.length){
-        html+='<p class="deletion-row-note">Son olay kaydi yok.</p>';
-      }else{
-        html+=`
-          <table>
-            <thead><tr><th>Tarih</th><th>Event</th><th>Kullanici</th><th>Platform</th><th>Detay</th></tr></thead>
-            <tbody>
-        `;
-        recentItems.forEach((row)=>{
-          const name=row.display_name?`${row.username||'-'} (${row.display_name})`:(row.username||'-');
-          const metaText=typeof row.metadata==='string'?row.metadata:JSON.stringify(row.metadata||{});
-          html+=`<tr><td>${d(row.created_at)}</td><td><code>${esc(row.event_name||'-')}</code></td><td>${esc(name)}</td><td>${esc(row.platform||'-')}</td><td><code style="font-size:11px">${esc(metaText||'{}')}</code></td></tr>`;
-        });
-        html+='</tbody></table>';
-      }
-
-      c.innerHTML=html;
+      const weakest=transitions.sort((a,b)=>a.rate-b.rate)[0];
+      const insights=[];
+      if(weakest) insights.push({tone:weakest.rate<40?'is-danger':'is-warn',title:'En büyük yolculuk kaybı',text:`${weakest.from} → ${weakest.to}: %${weakest.rate.toFixed(1)} geçiş, ${weakest.loss} kullanıcı kaybı.`,next:'Bu adımın son olaylarını ve platform dağılımını karşılaştırın.'});
+      if(Number(m.total_events||0)<20) insights.push({tone:'is-warn',title:'Düşük örneklem',text:`Seçilen aralıkta yalnız ${Number(m.total_events||0)} olay var; oranlar karar için yeterince kararlı olmayabilir.`,next:'Zaman penceresini genişletin.'});
+      if(!insights.length) insights.push({tone:'',title:'Belirgin sapma yok',text:'Yolculuk adımlarında kritik bir kayıp sinyali görülmedi.',next:'Platform ve trend dağılımını rutin olarak izleyin.'});
+      const chart=renderSignalChart(series,[{key:'unique_arrivals',label:'Gelen',color:'#34d6e9'},{key:'match_attempts',label:'Arama',color:'#8b7cff'},{key:'chats_started',label:'Sohbet',color:'#45d89b'}]);
+      let html=`<div class="admin-page"><section class="admin-section"><div class="admin-section-head"><div><h2>Analiz kapsamı</h2><p>${d(windowInfo?.from)} – ${d(windowInfo?.to)} · ${esc(analyticsPlatformLabel(windowInfo?.platform||currentAnalyticsPlatform||'all'))}</p></div><span class="status-pill ${confidenceTone}">${confidence}</span></div><div class="admin-section-body"><div class="filter-grid"><div class="workflow-field"><label for="analytics-hours">Pencere</label><select id="analytics-hours">${hoursHtml}</select></div><div class="workflow-field"><label for="analytics-granularity">Kırılım</label><select id="analytics-granularity"><option value="hour" ${currentAnalyticsGranularity==='hour'?'selected':''}>Saatlik</option><option value="day" ${currentAnalyticsGranularity==='day'?'selected':''}>Günlük</option></select></div><div class="workflow-field"><label for="analytics-platform">Platform</label><select id="analytics-platform"><option value="all" ${currentAnalyticsPlatform==='all'?'selected':''}>Tümü</option><option value="android" ${currentAnalyticsPlatform==='android'?'selected':''}>Android</option><option value="web" ${currentAnalyticsPlatform==='web'?'selected':''}>Web</option><option value="ios" ${currentAnalyticsPlatform==='ios'?'selected':''}>iOS</option><option value="unknown" ${currentAnalyticsPlatform==='unknown'?'selected':''}>Bilinmiyor</option></select></div><div class="workflow-field"><label for="analytics-from">Başlangıç</label><input id="analytics-from" type="datetime-local" value="${esc(fromInput)}"></div><div class="workflow-field"><label for="analytics-to">Bitiş</label><input id="analytics-to" type="datetime-local" value="${esc(toInput)}"></div><div class="workflow-field"><label for="analytics-q">Kullanıcı ara</label><input id="analytics-q" value="${esc(currentAnalyticsQuery||'')}" placeholder="Kullanıcı veya görünen isim" onkeyup="if(event&&event.key==='Enter'){reloadAnalyticsTab()}"></div></div><button class="btn btn-refresh" style="margin-top:10px" onclick="reloadAnalyticsTab()">Filtreleri uygula</button></div></section>
+      <div class="admin-summary-grid"><article class="admin-summary-card"><div class="label">Tekil gelen</div><div class="value">${Number(m.unique_arrivals||0)}</div><div class="meta">${Number(m.total_events||0)} toplam olay</div></article><article class="admin-summary-card"><div class="label">Arama denemesi</div><div class="value">${Number(m.match_attempts||0)}</div><div class="meta">${Number(m.offer_rate_pct||0).toFixed(1)}% eşleşme bulma</div></article><article class="admin-summary-card"><div class="label">Kabul oranı</div><div class="value">${Number(m.accept_rate_pct||0).toFixed(1)}%</div><div class="meta">Red ${Number(m.reject_rate_pct||0).toFixed(1)}%</div></article><article class="admin-summary-card"><div class="label">Sohbet dönüşümü</div><div class="value">${Number(m.chat_conversion_pct||0).toFixed(1)}%</div><div class="meta">${Number(m.chats_started||0)} sohbet başlangıcı</div></article></div>
+      <section class="admin-section"><div class="admin-section-head"><div><h2>Ana kullanıcı yolculuğu</h2><p>Gelen → Arama → Eşleşme → Kabul → Sohbet; önceki eşit dönemle gerçek karşılaştırma.</p></div></div><div class="admin-section-body">`;
+      if(!steps.length||!Number(steps[0]?.users||0)) html+='<div class="admin-state"><div class="admin-state-icon">○</div><div><h3>Yolculuk için yeterli veri yok</h3><p>Seçilen zaman ve platformda kullanıcı adımı oluşmadı. Sıfırlar karar sinyali olarak yorumlanmıyor.</p></div></div>';
+      else html+=`<div class="journey-grid">${steps.map((step,index)=>{const before=index>0?Number(steps[index-1]?.users||0):Number(step.users||0);const stepRate=index===0?100:(before>0?(Number(step.users||0)/before)*100:0);const previous=previousByKey.get(step.key);return `<article class="journey-step"><div class="step-label">${esc(step.label||step.key)}</div><div class="step-value">${Number(step.users||0)}</div><div class="step-rate">${index===0?'Başlangıç':`Önceki adımdan %${stepRate.toFixed(1)}`}</div>${deltaBadge(step.users,previous?.users)}</article>`;}).join('')}</div>`;
+      html+=`</div></section><section class="admin-section"><div class="admin-section-head"><div><h2>Yolculuk trendi</h2><p>Sıfır dolu baş ve son aralıklar kırpıldı; gerçek sinyal aralığı gösteriliyor.</p></div><span class="evidence-chip">${esc(currentAnalyticsGranularity==='day'?'Günlük':'Saatlik')}</span></div><div class="admin-section-body">${chart}</div></section>
+      <section class="admin-section"><div class="admin-section-head"><div><h2>Sapmalar ve kayıp noktaları</h2><p>Oranların ne anlattığı ve önerilen sonraki kontrol.</p></div></div><div class="admin-section-body"><div class="insight-grid">${insights.map((item)=>`<article class="insight-card ${item.tone}"><h3>${esc(item.title)}</h3><p>${esc(item.text)}<span class="next">Sonraki kontrol: ${esc(item.next)}</span></p></article>`).join('')}</div></div></section>
+      <div class="insight-grid"><section class="admin-section"><div class="admin-section-head"><div><h2>Olay dağılımı</h2><p>Teknik event kodları yerine ürün dili.</p></div></div><div class="admin-section-body">${breakdown.length?`<ul class="detail-list">${breakdown.slice(0,6).map((row)=>`<li><strong>${esc(analyticsEventLabel(row.event_name))}</strong><br>${Number(row.event_count||0)} olay · ${Number(row.unique_users||0)} tekil kullanıcı</li>`).join('')}</ul>`:'<p class="state-note">Olay dağılımı için veri yok.</p>'}</div></section><section class="admin-section"><div class="admin-section-head"><div><h2>Platform dağılımı</h2><p>Olay hacmi ve tekil kullanıcı kapsamı.</p></div></div><div class="admin-section-body">${platforms.length?`<ul class="detail-list">${platforms.map((row)=>`<li><strong>${esc(analyticsPlatformLabel(row.platform))}</strong><br>${Number(row.event_count||0)} olay · ${Number(row.unique_users||0)} tekil kullanıcı</li>`).join('')}</ul>`:'<p class="state-note">Platform dağılımı için veri yok.</p>'}</div></section></div>
+      <section class="admin-section"><div class="admin-section-head"><div><h2>Kullanıcı davranış kanıtı</h2><p>Yalnız yetkili admin görünümü; teknik kimlikler ana tabloda gösterilmez.</p></div></div>`;
+      if(!topUsers.length) html+=moderationEmpty('Kullanıcı davranış verisi yok','Seçilen filtrelerde kullanıcıya bağlanabilen olay bulunamadı.');
+      else{html+='<div class="admin-section-body"><div class="table-scroll table-scroll--data"><table><thead><tr><th>Kullanıcı</th><th>Arama</th><th>Eşleşme</th><th>Sohbet</th><th>Son hareket</th></tr></thead><tbody>';topUsers.slice(0,12).forEach((row)=>{html+=`<tr><td><div class="case-title"><strong>${esc(row.username||'Bilinmeyen kullanıcı')}</strong><small>${esc(row.display_name||'Görünen isim yok')}</small></div></td><td>${Number(row.match_attempts||0)}</td><td>${Number(row.offers||0)}</td><td>${Number(row.chats_started||0)}</td><td>${d(row.last_event_at)}</td></tr>`;});html+='</tbody></table></div></div>';}
+      html+='</section><section class="admin-section"><div class="admin-section-head"><div><h2>Son ürün olayları</h2><p>İnsan dili özeti; metadata ve tanımlayıcılar yalnız maskeli detay drawer\'ında.</p></div></div>';
+      if(!recentItems.length) html+=moderationEmpty('Son olay kaydı yok','Seçilen zaman aralığında görüntülenecek ürün olayı bulunmadı.');
+      else{html+='<div class="admin-section-body"><div class="table-scroll table-scroll--data"><table><thead><tr><th>Olay</th><th>Kullanıcı</th><th>Platform</th><th>Zaman</th><th>İncele</th></tr></thead><tbody>';recentItems.slice(0,30).forEach((row,index)=>{const key=String(row.id||index).replace(/[^a-zA-Z0-9_-]/g,'');html+=`<tr><td><strong>${esc(analyticsEventLabel(row.event_name))}</strong></td><td>${esc(row.username||row.display_name||'Anonim')}</td><td>${esc(analyticsPlatformLabel(row.platform))}</td><td><div class="cell-stack"><span>${esc(relativeAge(row.created_at))}</span><small>${d(row.created_at)}</small></div></td><td><button class="btn btn-details" onclick="openAnalyticsEventDetails('${esc(key)}')">Kanıtı incele</button></td></tr>`;});html+='</tbody></table></div></div>';}
+      c.innerHTML=`${html}</section></div>`;
     }
     function reloadAnalyticsTab(){
       readAnalyticsFiltersFromUI();
@@ -2876,6 +2726,23 @@
       const overviewHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">Yönetici</span><span class="value">${esc(item.actor_admin||'Bilinmiyor')}</span></div><div class="detail-kv"><span class="label">Eylem ailesi</span><span class="value">${esc(auditFamily(item.action_type))}</span></div><div class="detail-kv"><span class="label">Sonuç</span><span class="status-pill ${auditTone(item.action_type)}">Kaydedildi</span></div></div><section class="detail-card"><h3>Hareket özeti</h3><p class="case-subject" style="max-width:none"><strong>${esc(item.actor_admin||'Yönetici')}</strong> ${esc(auditActionLabel(item.action_type))}. Hedef: ${esc(target)}.</p><div class="detail-kv-grid" style="margin-top:10px"><div class="detail-kv"><span class="label">Zaman</span><span class="value">${d(item.created_at)}</span></div><div class="detail-kv"><span class="label">Güvenli özet</span><span class="value">${esc(auditPayloadSummary(item.payload))}</span></div></div></section>`;
       const technicalHtml=`<section class="detail-card"><h3>Maskeli teknik kanıt</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Eylem kodu</span><span class="value">${esc(item.action_type||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Hedef türü</span><span class="value">${esc(item.entity_type||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Hedef referansı</span><span class="value">${esc(maskAdminIdentifier(item.entity_id))}</span></div><div class="detail-kv"><span class="label">Audit referansı</span><span class="value">${esc(maskAdminIdentifier(item.id))}</span></div></div></section><details class="technical-evidence"><summary>Sanitize payload alanlarını göster</summary><div style="margin-top:10px">${auditTechnicalRows(item.payload)}</div></details>`;
       openDetailDrawer({title:'Audit kanıtı',subtitle:`${auditFamily(item.action_type)} · ${relativeAge(item.created_at)}`,avatar:'✓',tabs:[{id:'overview',label:'Hareket',html:overviewHtml},{id:'technical',label:'Teknik kanıt',html:technicalHtml}]});
+    }
+
+    function openPerformanceEvidence(){
+      const items=Array.isArray(performanceEvidence)?performanceEvidence:[];
+      const summaryHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">Kanıt sayısı</span><span class="value">${items.length}</span></div><div class="detail-kv"><span class="label">En yüksek gecikme</span><span class="value">${items.length?formatPerfMs(Math.max(...items.map((item)=>Number(item.duration_ms)||0))):'Veri yok'}</span></div><div class="detail-kv"><span class="label">Hatalı yanıt</span><span class="value">${items.filter((item)=>Number(item.status||0)>=400).length}</span></div></div><section class="detail-card"><h3>Yavaş istek özeti</h3><p class="state-note">Bu kayıtlar yalnız performans teşhisi içindir. İstek referansları maskeli gösterilir.</p>${items.length?`<ul class="detail-list">${items.slice(0,20).map((item)=>`<li><strong>${esc(String(item.method||'GET').toUpperCase())} ${esc(item.route||'Bilinmeyen route')}</strong><br>${formatPerfMs(item.duration_ms)} · HTTP ${Number(item.status||0)||'-'} · ${d(item.created_at)}</li>`).join('')}</ul>`:'<div class="admin-state"><div class="admin-state-icon">○</div><div><h3>Yavaş istek kanıtı yok</h3><p>Seçilen pencerede eşik üstü istek kaydı bulunmadı.</p></div></div>'}</section>`;
+      const technicalHtml=`<section class="detail-card"><h3>Maskeli teknik kapsam</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Gösterilen kayıt</span><span class="value">${Math.min(items.length,20)} / ${items.length}</span></div><div class="detail-kv"><span class="label">Örnekleme</span><span class="value">Yalnız eşik üstü istekler</span></div></div></section>${items.length?`<section class="detail-card"><h3>İstek referansları</h3><ul class="detail-list">${items.slice(0,20).map((item)=>`<li><strong>${esc(item.route||'Bilinmeyen route')}</strong><br>Referans: ${esc(maskAdminIdentifier(item.request_id))}<br>Yanıt boyutu: ${Number(item.response_size_bytes||0)} bayt · Örnek nedeni: ${esc(item.sample_reason||'Yavaş istek')}</li>`).join('')}</ul></section>`:''}`;
+      openDetailDrawer({title:'Performans kanıtı',subtitle:`${items.length} yavaş istek · tanımlayıcılar maskeli`,avatar:'∿',tabs:[{id:'slow',label:'Yavaş istekler',html:summaryHtml},{id:'technical',label:'Teknik kapsam',html:technicalHtml}]});
+    }
+
+    function openAnalyticsEventDetails(key){
+      const item=analyticsEventRows.get(String(key));
+      if(!item) return;
+      const eventLabel=analyticsEventLabel(item.event_name);
+      const username=item.username||item.display_name||'Anonim';
+      const overviewHtml=`<div class="detail-hero"><div class="detail-kv"><span class="label">Ürün olayı</span><span class="value">${esc(eventLabel)}</span></div><div class="detail-kv"><span class="label">Kullanıcı</span><span class="value">${esc(username)}</span></div><div class="detail-kv"><span class="label">Platform</span><span class="value">${esc(analyticsPlatformLabel(item.platform))}</span></div></div><section class="detail-card"><h3>Olay özeti</h3><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Zaman</span><span class="value">${d(item.created_at)}</span></div><div class="detail-kv"><span class="label">Güvenli özet</span><span class="value">${esc(analyticsMetaSummary(item.metadata))}</span></div></div></section>`;
+      const technicalHtml=`<section class="detail-card"><h3>Maskeli teknik kanıt</h3><p class="state-note">Tanımlayıcılar yalnız olay ilişkilendirmesi içindir ve maskeli gösterilir.</p><div class="detail-kv-grid"><div class="detail-kv"><span class="label">Olay kodu</span><span class="value">${esc(item.event_name||'Veri yok')}</span></div><div class="detail-kv"><span class="label">Olay referansı</span><span class="value">${esc(maskAdminIdentifier(item.id))}</span></div><div class="detail-kv"><span class="label">Profil referansı</span><span class="value">${esc(maskAdminIdentifier(item.user_id))}</span></div><div class="detail-kv"><span class="label">İstemci</span><span class="value">${esc(maskAdminIdentifier(item.client_id))}</span></div><div class="detail-kv"><span class="label">Cihaz</span><span class="value">${esc(maskAdminIdentifier(item.device_id))}</span></div><div class="detail-kv"><span class="label">Eşleşme</span><span class="value">${esc(maskAdminIdentifier(item.match_id||item.conversation_id))}</span></div></div></section><details class="technical-evidence"><summary>Sanitize metadata alanlarını göster</summary><div style="margin-top:10px">${auditTechnicalRows(item.metadata)}</div></details>`;
+      openDetailDrawer({title:eventLabel,subtitle:`${username} · ${relativeAge(item.created_at)}`,avatar:'↗',tabs:[{id:'event',label:'Olay',html:overviewHtml},{id:'technical',label:'Teknik kanıt',html:technicalHtml}]});
     }
 
     async function openSupportDetails(id){

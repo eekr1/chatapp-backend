@@ -92,8 +92,8 @@ Bildirimler ve Yasal Metinler aynı besteci kabuğunu kullanacak: içerik, kapsa
 | ADM2-07 | Silme Talepleri | İngilizce durum, `0.0s`, zayıf SLA ve empty state | SLA kuyruğu + güvenli karar drawer'ı — uygulandı ve doğrulandı | P1 |
 | ADM2-08 | Bildirimler | Etiketsiz tek satır formlar, hedef/önizleme/etki yok | Bildirim bestecisi | P1 |
 | ADM2-09 | Anlık Online | Cihaz ID'si ana tabloda, stale/auto-refresh bağlamı yok | Canlı operasyon özeti — uygulandı ve doğrulandı | P1 |
-| ADM2-10 | Performans | Ham durum satırı ve dakika dakika tablo | Sağlık özeti + grafik + route kanıtı | P1 |
-| ADM2-11 | Davranış Analitiği | KPI/funnel tekrar ediyor, dev sıfır tabloları ve raw JSON | Yolculuk/funnel + sapma + kanıt | P1 |
+| ADM2-10 | Performans | Ham durum satırı ve dakika dakika tablo | Sağlık özeti + grafik + route kanıtı — uygulandı ve doğrulandı | P1 |
+| ADM2-11 | Davranış Analitiği | KPI/funnel tekrar ediyor, dev sıfır tabloları ve raw JSON | Yolculuk/funnel + sapma + kanıt — uygulandı ve doğrulandı | P1 |
 | ADM2-12 | Audit Log | Ham action/entity/payload ve UUID duvarı | İnsan dili aktivite akışı + açılır kanıt — uygulandı ve doğrulandı | P0 |
 | ADM2-13 | Yasal Metinler | Tek dev canlı form, taslak/yayın/diff yok | Belge yayın merkezi | P1 + backend |
 
@@ -302,7 +302,7 @@ TR/EN varyantı, hedef segmenti ve kesin alıcı sayımı mevcut sözleşmede yo
 
 ## ADM2-10 — Performans
 
-- **Durum:** Revizyon bekliyor
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P1
 
 ### Canlı bulgu
@@ -319,7 +319,7 @@ TR/EN varyantı, hedef segmenti ve kesin alıcı sayımı mevcut sözleşmede yo
 
 ## ADM2-11 — Davranış Analitiği
 
-- **Durum:** Revizyon bekliyor
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P1
 
 ### Canlı bulgu
@@ -383,7 +383,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 2. [x] **Paket B — ADM2-02/03 Profiller:** liste + profil detay drawer'ı; etiket/değer ve hassas veri sorunu kapatıldı.
 3. [x] **Paket C — ADM2-04/05/06 Moderasyon:** kullanıcı raporu, uygulama raporu ve yaptırım merkezi.
 4. [x] **Paket D — ADM2-07/09/12 Operasyon kanıtı:** silme talepleri, online ve audit.
-5. [ ] **Paket E — ADM2-10/11 Sistem içgörüsü:** performans ve davranış analitiği.
+5. [x] **Paket E — ADM2-10/11 Sistem içgörüsü:** performans ve davranış analitiği.
 6. [ ] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
 7. [ ] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
 8. [ ] **Paket H — ADM2-01 Genel Bakış cilası ve tam regresyon:** teknik kaynak dili, no-data ve son görsel bütünlük.
@@ -417,6 +417,15 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 - Audit Log ham action/entity/UUID/JSON tablosundan insan dili aktivite akışına dönüştürüldü. Aktör, eylem ailesi, hedef türü ve tarih filtreleri eklendi; payload yalnız sanitize edilmiş, maskeli teknik kanıtta gösterilir.
 - Doğrulama: üç ekranın masaüstü görsel incelemesi, 320×720 responsive drawer kontrolü, sıfır yatay sayfa/drawer taşması, ana yüzeyde tam UUID bulunmaması, temiz uygulama konsolu ve `110/110` backend testi.
 
+### Uygulama kaydı — Paket E
+
+- Performans ekranı ham durum satırı ve dakika tablosundan çıkarılıp trafik, hata, P95 ve örnek güveni özetine; eşik çizgili gecikme grafiğine ve açıklamalı uyarı kartlarına taşındı.
+- Route etkisi hacim, hata ve gecikmeyi birleştiren karar listesine dönüştürüldü. Yavaş istek referansları ana yüzeyden kaldırıldı; yalnız maskeli teknik kanıt drawer'ında gösteriliyor.
+- Davranış Analitiği, tekrar eden KPI/funnel blokları yerine Gelen → Arama → Eşleşme → Kabul → Sohbet yolculuğuna dönüştürüldü. Her adım gerçek önceki eşit dönemle karşılaştırılıyor.
+- Trendde sıfır dolu baş ve son aralıklar kırpıldı; en büyük dönüşüm kaybı insan dilinde açıklanıp sonraki kontrol önerisiyle birlikte gösteriliyor.
+- Teknik event kodları ve metadata ana tablodan çıkarıldı. Son olay detayı ayrı drawer'da, hassas tanımlayıcılar maskeli; kullanıcı listesi tam kimlik göstermeden yetkili admin kanıtı olarak korunuyor.
+- Doğrulama: iki ekranın masaüstü ve drawer görsel incelemesi, sıfır yatay sayfa/drawer taşması, teknik tanımlayıcı maskesi, temiz uygulama konsolu ve `111/111` backend testi.
+
 ## Paket sınırları
 
 - Her paket kendi otomatik testini ve masaüstü/mobil görsel QA'ini tamamlamadan sonraki pakete geçmez.
@@ -426,10 +435,10 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Otomatik doğrulama
 
-- [x] `npm test` tam geçer. (`110/110`)
+- [x] `npm test` tam geçer. (`111/111`)
 - [x] `npm run quality:all` geçer. (kritik paket `60/60`; yüksek/kritik güvenlik kaydı yok)
 - [x] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini ve moderasyon onay akışını korur.
-- [ ] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.
+- [x] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.
 - [ ] Riskli işlemler gerekçe + açık hedef + audit sonucu olmadan çalışmaz.
 
 ## Hızlı manuel kapanış checklist'i
