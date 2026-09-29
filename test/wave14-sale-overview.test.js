@@ -90,6 +90,9 @@ test('admin shell uses one responsive icon navigation and one dashboard hierarch
     assert.match(source, /function handleAdminKeydown\(event\)/);
     assert.match(source, /event\.key!=='Tab'/);
     assert.match(source, /window\.addEventListener\('popstate'/);
+    assert.match(source, /\.table-scroll--data table \{ min-width:680px; \}/);
+    assert.match(source, /\.table-scroll--data th \{ white-space:nowrap; word-break:normal; \}/);
+    assert.match(source, /<div class="table-scroll table-scroll--data"><table>/);
     assert.doesNotMatch(source, /<span class="nav-icon">/);
     assert.doesNotMatch(source, /id="dashboard-cards"|id="dashboard-diag"|sidebar-refresh/);
     assert.equal((source.match(/onclick="refreshAll\(\)"/g) || []).length, 1);
