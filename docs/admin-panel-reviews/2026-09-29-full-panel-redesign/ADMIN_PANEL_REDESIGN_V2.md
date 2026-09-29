@@ -9,7 +9,7 @@ Bu dosya, TalkX yönetim panelinin güncel canlı sürümünü ekran ekran incel
 - **İncelenen deploy commit'i:** `93e8899`
 - **Canlı yüzey:** TalkX Render yönetim paneli
 - **Kapsam:** 12 navigasyon ekranı, profil detayı, uygulama raporu detayı, masaüstü yoğun veri görünümü ve dar ekran davranışı
-- **Durum:** İnceleme tamamlandı; V2 yönü ve uygulama sırası hazır, kodlama başlamadı
+- **Durum:** Uygulama başladı; Paket A ve Paket B kodlandı, görsel ve otomatik kontrollerden geçti
 - **Önceki temel:** `../2026-09-28-full-panel-review/ADMIN_PANEL_VISUAL_REVIEW.md`
 - **Ortak sözleşme:** `../2026-09-28-full-panel-review/ADMIN_UI_FOUNDATION.md`
 
@@ -101,7 +101,7 @@ Bildirimler ve Yasal Metinler aynı besteci kabuğunu kullanacak: içerik, kapsa
 
 ## ADM2-00 — Ortak içerik sistemi
 
-- **Durum:** Bekliyor
+- **Durum:** Ortak temel uygulandı; kalan ekranlar paket sırasıyla bu sisteme taşınacak
 - **Öncelik:** P0
 - **Kapsam:** Bütün ekranlar
 
@@ -142,7 +142,7 @@ Ana hiyerarşi doğru ve panelin hedef kalitesini gösteriyor. Buna rağmen kart
 
 ## ADM2-02 — Profiller listesi
 
-- **Durum:** Revizyon bekliyor
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P0
 
 ### Canlı bulgu
@@ -170,7 +170,7 @@ Ana hiyerarşi doğru ve panelin hedef kalitesini gösteriyor. Buna rağmen kart
 
 ## ADM2-03 — Profil Detayı
 
-- **Durum:** Acil revizyon
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P0
 
 ### Canlı bulgu
@@ -379,14 +379,23 @@ Taslak/yayın/snapshot/rollback ve eşzamanlı düzenleme koruması veri modeli 
 
 Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşır:
 
-1. [ ] **Paket A — ADM2-00 ortak içerik sistemi:** section, durum, filtre, tablo/list, drawer, kanıt ve danger-zone temeli.
-2. [ ] **Paket B — ADM2-02/03 Profiller:** liste + profil detay drawer'ı; etiket/değer ve hassas veri sorununu kapat.
+1. [x] **Paket A — ADM2-00 ortak içerik sistemi:** section, durum, tablo/list, drawer, kanıt ve danger-zone temeli.
+2. [x] **Paket B — ADM2-02/03 Profiller:** liste + profil detay drawer'ı; etiket/değer ve hassas veri sorunu kapatıldı.
 3. [ ] **Paket C — ADM2-04/05/06 Moderasyon:** kullanıcı raporu, uygulama raporu ve yaptırım merkezi.
 4. [ ] **Paket D — ADM2-07/09/12 Operasyon kanıtı:** silme talepleri, online ve audit.
 5. [ ] **Paket E — ADM2-10/11 Sistem içgörüsü:** performans ve davranış analitiği.
 6. [ ] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
 7. [ ] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
 8. [ ] **Paket H — ADM2-01 Genel Bakış cilası ve tam regresyon:** teknik kaynak dili, no-data ve son görsel bütünlük.
+
+### Uygulama kaydı — Paket A + Paket B
+
+- Ortak section, özet kartı, durum/empty state, status pill, iki satırlı etiket-değer, drawer ve danger-zone görsel sistemi eklendi.
+- Profiller görünümü karar odaklı özet, kompakt platform etiketi, Türkçe hesap durumu, güvenli konum özeti ve açıklayıcı sonuç/pagination diliyle yenilendi.
+- Profil detayı uzun modalden çıkarılıp altı sekmeli sağ drawer'a; mobilde tam ekran sheet'e taşındı.
+- Oturum/push/konum/yasal/ilişki/moderasyon/teknik bilgiler ayrıldı; cihaz ve kayıt tanımlayıcıları varsayılan görünümde maskelendi.
+- Mevcut profil endpoint'i alan bazlı sunucu filtresi sağlamadığı için sahte yalnız-sayfa filtresi eklenmedi; arama, sıralama ve sayfalama gerçek toplam üzerinden çalışmaya devam ediyor.
+- Doğrulama: masaüstü ve 390×844 responsive kontrolü, sıfır yatay sayfa/drawer taşması, drawer odak dönüşü ve Escape kapanışı, altı sekmenin tamamı, temiz tarayıcı konsolu, `108/108` backend testi ve kalite kapısı.
 
 ## Paket sınırları
 
@@ -397,8 +406,8 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Otomatik doğrulama
 
-- [ ] `npm test` tam geçer.
-- [ ] `npm run quality:all` geçer.
+- [x] `npm test` tam geçer. (`108/108`)
+- [x] `npm run quality:all` geçer. (kritik paket `60/60`; yüksek/kritik güvenlik kaydı yok)
 - [ ] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini korur.
 - [ ] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.
 - [ ] Riskli işlemler gerekçe + açık hedef + audit sonucu olmadan çalışmaz.

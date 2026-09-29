@@ -74,14 +74,18 @@ test('profile and report routes remove default sensitive data and disable hard d
     assert.match(source, /Cache-Control', 'private, no-store'/);
 });
 
-test('profile detail relations use relation dates and independent section UI', () => {
+test('profile detail uses a privacy-safe independent drawer UI', () => {
     const api = fs.readFileSync(path.join(__dirname, '..', 'admin.js'), 'utf8');
     const ui = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
     assert.match(api, /f\.created_at AS relationship_created_at/);
     assert.match(api, /blockedByUser: outgoing\.rows, blockingUser: incoming\.rows/);
     assert.match(ui, /Promise\.allSettled/);
-    assert.match(ui, /Sona erme \/ son kullanma tarihi/);
-    assert.match(ui, /Session aktivitesi authoritative revocation\/last-use verisi olmadigi icin bilinmiyor/);
+    assert.match(ui, /id="detail-drawer"/);
+    assert.match(ui, /function switchDetailTab\(tabId\)/);
+    assert.match(ui, /Kesin son kullanım bilgisi bulunmadığında aktiflik tahmini yapılmaz/);
+    assert.match(ui, /maskAdminIdentifier\(s\.device_id\)/);
+    assert.match(ui, /Yasal & Konum/);
+    assert.match(ui, /Teknik/);
     assert.doesNotMatch(ui, /registration_ip/);
     assert.match(ui, /id="bulk-toolbar" style="display:\$\{bulkSelectedUserIds\.size\?'flex':'none'\}"/);
 });
