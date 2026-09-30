@@ -2427,9 +2427,11 @@ router.get('/push/health', async (req, res) => {
 
         const row = agg.rows[0] || {};
         const totalOut = (Number(row.sent_count) || 0) + (Number(row.failure_count) || 0);
-        const successRate = totalOut > 0 ? Math.round(((Number(row.sent_count) || 0) / totalOut) * 1000) / 10 : 0;
+        const successRate = totalOut > 0 ? Math.round(((Number(row.sent_count) || 0) / totalOut) * 1000) / 10 : null;
         res.json({
+            generatedAt: new Date().toISOString(),
             minutes,
+            state: totalOut > 0 ? 'value' : 'no_data',
             totalEvents: Number(row.total_events) || 0,
             tokenCount: Number(row.token_count) || 0,
             sentCount: Number(row.sent_count) || 0,
@@ -2519,6 +2521,7 @@ router.get('/push/diagnostics', async (req, res) => {
         const freshness = freshnessRes.rows[0] || {};
 
         res.json({
+            generatedAt: new Date().toISOString(),
             hours,
             firebase: {
                 enabled: !!firebase.enabled,

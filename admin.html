@@ -377,9 +377,12 @@
     .dashboard-kpi.is-no-data .v, .dashboard-kpi.is-unavailable .v { color:var(--muted); font-size:15px; }
     .dashboard-status { border:1px solid var(--border); border-radius:10px; padding:9px 10px; color:var(--muted); font-size:12px; }
     .dashboard-status.is-partial { border-color:rgba(235,138,63,.6); color:#ffc48e; }
+    .dashboard-status.is-ok { border-color:rgba(69,216,155,.42); color:var(--success); background:rgba(69,216,155,.05); }
+    .dashboard-status.is-critical { border-color:rgba(255,102,126,.55); color:#ff9cac; background:rgba(255,102,126,.06); }
     .dashboard-section-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
     .dashboard-section-head p { margin:4px 0 0; color:var(--muted); font-size:12px; }
     .dashboard-section-tag { border:1px solid var(--border); border-radius:999px; padding:5px 9px; color:var(--muted); font-size:11px; white-space:nowrap; }
+    .dashboard-section-tags { display:flex; justify-content:flex-end; gap:6px; flex-wrap:wrap; }
     .overview-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
     .overview-card { min-width:0; border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.022); padding:14px; }
     .overview-card-top { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.045em; }
@@ -388,7 +391,7 @@
     .overview-card-value { margin-top:14px; font-size:30px; font-weight:760; line-height:1; letter-spacing:-.03em; }
     .overview-card-value.is-muted { color:var(--muted); font-size:17px; }
     .overview-card-meta { margin-top:8px; color:var(--muted-2); font-size:10px; line-height:1.35; }
-    .health-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    .health-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
     .health-card { border:1px solid var(--border); border-radius:14px; padding:14px; background:rgba(255,255,255,.018); }
     .health-title { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; font-weight:700; }
     .health-status { display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:10px; font-weight:650; white-space:nowrap; }
@@ -405,6 +408,7 @@
     .push-summary strong { display:block; margin-top:6px; font-size:19px; }
     .dashboard-technical { margin-top:12px; border-top:1px solid var(--border); padding-top:10px; color:var(--muted); font-size:11px; }
     .dashboard-technical summary { cursor:pointer; color:#b9b0ff; font-weight:650; }
+    .dashboard-technical summary:focus-visible { outline:2px solid var(--cyan); outline-offset:4px; border-radius:4px; }
     .dashboard-technical-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 12px; margin-top:9px; }
     .dashboard-technical-grid div { overflow-wrap:anywhere; }
     .activity-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
@@ -544,7 +548,7 @@
             <input id="search-input" type="text" onkeyup="handleSearchKeyup(event)" placeholder="Ara..." />
             <button class="btn btn-refresh" onclick="triggerSearch()">Ara</button>
           </div>
-          <button class="btn topbar-refresh" onclick="refreshAll()"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg> Yenile</button>
+          <button id="topbar-refresh" class="btn topbar-refresh" onclick="refreshAll()" aria-live="polite"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg> <span id="topbar-refresh-label">Yenile</span></button>
         </div>
       </header>
 
@@ -769,7 +773,23 @@
       return '';
     };
 
-    function refreshAll(){loadContent();}
+    async function refreshAll(){
+      const button=document.getElementById('topbar-refresh');
+      const label=document.getElementById('topbar-refresh-label');
+      if(button?.disabled) return;
+      if(button) button.disabled=true;
+      if(label) label.innerText='Yenileniyor...';
+      try{
+        const refreshState=await loadContent();
+        if(refreshState==='error') throw new Error('Yenileme tamamlanamadı');
+        if(label) label.innerText=refreshState==='partial'?'Kısmi veri':'Güncellendi';
+      }catch(e){
+        if(label) label.innerText='Tekrar dene';
+      }finally{
+        if(button) button.disabled=false;
+        setTimeout(()=>{ if(label&&['Güncellendi','Kısmi veri'].includes(label.innerText)) label.innerText='Yenile'; },1200);
+      }
+    }
     function triggerSearch(){ if(currentTab==='profiles') profilePage=1; if(currentTab==='app_reports') appReportPage=1; loadContent(); }
     function handleSearchKeyup(event){ if(event?.key==='Enter') triggerSearch(); }
     function profileSortIcon(sortKey){ if(profileSortBy!==sortKey) return '↕'; return profileSortDir==='asc'?'↑':'↓'; }
@@ -1045,12 +1065,13 @@
     function saleMetricValue(metric){
       if(metric?.state==='value') return String(metric.value);
       if(metric?.state==='no_data') return 'Veri yetersiz';
-      return 'Kullanilamiyor';
+      return 'Kullanılamıyor';
     }
     function saleMetricMeta(metric){
-      const source=metric?.source||'Kaynak bilinmiyor';
-      const windowLabel=metric?.window?.label||'Pencere bilinmiyor';
-      return `${source} | ${windowLabel}`;
+      const windowLabel=metric?.window?.label||'Zaman aralığı bilinmiyor';
+      if(metric?.state==='no_data') return `${windowLabel} · Eski kayıtlarda güvenilir kimlik yok`;
+      if(metric?.state==='unavailable') return `${windowLabel} · Kaynak şu anda okunamıyor`;
+      return windowLabel;
     }
     function setSaleMetric(valueId,metaId,metric){
       const valueEl=document.getElementById(valueId);
@@ -1089,8 +1110,9 @@
       if(!rateEl||!totalEl) return;
       try{
         const r=await fetch('/admin/push/health?minutes=60');const x=await r.json();if(!r.ok) throw new Error(x.error||'hata');
-        rateEl.innerText=`${Number(x.successRate||0).toFixed(1)}%`;
-        totalEl.innerText=`${x.sentCount||0} gonderim / ${x.failureCount||0} hata (gecersiz: ${x.invalidTokenCount||0})`;
+        const attempts=Number(x.sentCount||0)+Number(x.failureCount||0);
+        rateEl.innerText=attempts?`%${Number(x.successRate).toFixed(1)}`:'Gönderim yok';
+        totalEl.innerText=attempts?`${x.sentCount||0} gönderim / ${x.failureCount||0} hata (geçersiz: ${x.invalidTokenCount||0})`:'Son 60 dakikada teslimat denemesi oluşmadı';
       }catch(e){rateEl.innerText='-%';totalEl.innerText='Push sagligi okunamadi';}
     }
 
@@ -2331,6 +2353,27 @@
         <div class="health-meta">${esc(meta)}</div>
       </article>`;
     }
+    function dashboardPerformanceSignal(performance,resultStatus,kind){
+      if(resultStatus!=='fulfilled') return {value:'Kullanılamıyor',meta:'Performans servisi yanıt vermedi',state:'unknown'};
+      const dataState=String(performance?.data_state||'unknown');
+      const confidence=String(performance?.confidence||'unknown');
+      const total=Number(performance?.total_requests||0);
+      if(dataState==='no_data'||total===0) return {value:'İstek yok',meta:'Son 60 dakikada API isteği kaydedilmedi',state:'unknown'};
+      if(dataState==='partial') return {value:'Kısmi veri',meta:`${total} istek · bazı ölçüm kaynakları eksik`,state:'warn'};
+      if(kind==='p95'&&confidence!=='sufficient') return {value:'Düşük örneklem',meta:`${Number(performance?.sample_count||0)} örnek · en az ${Number(performance?.thresholds?.minimum_percentile_samples||0)} gerekli`,state:dataState==='stale'?'warn':'unknown'};
+      const value=kind==='p95'?Number(performance?.p95_ms):Number(performance?.error_rate);
+      if(!Number.isFinite(value)) return {value:'Hesaplanamadı',meta:`${total} istek · güvenilir ölçüm yok`,state:'unknown'};
+      const warning=Number(kind==='p95'?performance?.thresholds?.p95_warning_ms:performance?.thresholds?.error_warning_rate);
+      const critical=Number(kind==='p95'?performance?.thresholds?.p95_critical_ms:performance?.thresholds?.error_critical_rate);
+      const state=dataState==='stale'?'warn':value>=critical?'bad':value>=warning?'warn':'ok';
+      return {value:kind==='p95'?`${value.toFixed(1)} ms`:`%${value.toFixed(2)}`,meta:dataState==='stale'?`${total} istek · veri güncel değil`:`${total} istek · son 60 dakika`,state};
+    }
+    function dashboardOverallHealth(states,partial){
+      if(states.includes('bad')) return {state:'bad',label:'Kritik servis sorunu var',className:'is-critical'};
+      if(partial||states.includes('warn')) return {state:'warn',label:partial?'Bazı kaynaklar okunamadı; sağlam veriler gösteriliyor':'Dikkat isteyen servis göstergesi var',className:'is-partial'};
+      if(states.includes('unknown')) return {state:'unknown',label:'Bazı göstergeler için değerlendirme verisi yok',className:''};
+      return {state:'ok',label:'İzlenen servisler normal aralıkta',className:'is-ok'};
+    }
 
     async function loadDashboardTab(){
       const c=document.getElementById('content');
@@ -2343,7 +2386,7 @@
       ]);
       if(overviewResult.status!=='fulfilled'){
         c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Genel bakış yüklenemedi: ${esc(overviewResult.reason?.message||overviewResult.reason||'Bilinmeyen hata')}</p>`;
-        return;
+        return 'error';
       }
 
       const overview=overviewResult.value;
@@ -2359,24 +2402,26 @@
       const logs=pushDiagnostics.logs||{};
       const errorRows=Array.isArray(logs.errorSummary)?logs.errorSummary:[];
       const topErrors=errorRows.length?errorRows.slice(0,3).map((row)=>`${row.code}: ${row.count}`).join(', '):'Yok';
-      const dashboardPartial=overview.status!=='complete'||[pushHealthResult,pushDiagnosticsResult,performanceResult].some((result)=>result.status!=='fulfilled');
-      const p95Value=performanceResult.status==='fulfilled'?(performance.p95_ms==null?'Veri yok':`${Number(performance.p95_ms).toFixed(1)} ms`):'Kullanılamıyor';
-      const errorValue=performanceResult.status==='fulfilled'?(performance.error_rate==null?'Veri yok':`${Number(performance.error_rate).toFixed(2)}% hata`):'Performans kaynağı okunamadı';
+      const overviewHasUnavailable=Object.values(metrics).some((metric)=>metric?.state==='unavailable');
+      const dashboardPartial=overviewHasUnavailable||[pushHealthResult,pushDiagnosticsResult,performanceResult].some((result)=>result.status!=='fulfilled');
+      const p95Signal=dashboardPerformanceSignal(performance,performanceResult.status,'p95');
+      const errorSignal=dashboardPerformanceSignal(performance,performanceResult.status,'error');
       const performanceThresholdText=performanceResult.status==='fulfilled'
         ?`API eşikleri: P95 uyarı ${Number(performance.thresholds?.p95_warning_ms||0)} ms / kritik ${Number(performance.thresholds?.p95_critical_ms||0)} ms; hata uyarı %${Number(performance.thresholds?.error_warning_rate||0)} / kritik %${Number(performance.thresholds?.error_critical_rate||0)}.`
         :'API eşikleri okunamadı.';
-      const pushRate=pushHealthResult.status==='fulfilled'?`${Number(pushHealth.successRate||0).toFixed(1)}%`:'Kullanılamıyor';
       const pushAttemptCount=Number(pushHealth.sentCount||0)+Number(pushHealth.failureCount||0);
       const pushState=pushHealthResult.status!=='fulfilled'||pushAttemptCount===0?'unknown':Number(pushHealth.failureCount||0)>0?'warn':'ok';
+      const pushRate=pushHealthResult.status!=='fulfilled'?'Kullanılamıyor':pushAttemptCount===0?'Gönderim yok':`%${Number(pushHealth.successRate).toFixed(1)}`;
+      const pushMeta=pushHealthResult.status!=='fulfilled'?'Push sağlık servisi yanıt vermedi':pushAttemptCount===0?'Son 60 dakikada teslimat denemesi oluşmadı':`${Number(pushHealth.sentCount||0)} başarılı · ${Number(pushHealth.failureCount||0)} başarısız`;
       const firebaseState=pushDiagnosticsResult.status!=='fulfilled'?'unknown':firebase.enabled?'ok':'bad';
-      const performanceState=performanceResult.status!=='fulfilled'?'unknown':performance.evaluation==='critical'?'bad':performance.evaluation==='warning'?'warn':performance.evaluation==='healthy'?'ok':'unknown';
+      const overallHealth=dashboardOverallHealth([p95Signal.state,errorSignal.state,pushState,firebaseState],dashboardPartial);
 
       c.innerHTML=`
         <div class="dashboard-surface" id="dashboard-overview">
           <section class="dashboard-panel">
             <div class="dashboard-section-head">
               <div><h3>Genel Bakış</h3><p>Kullanıcı, sohbet ve moderasyon hareketlerinin kısa özeti.</p></div>
-              <span class="dashboard-section-tag">Son hesaplama: ${esc(d(overview.generatedAt))}</span>
+              <div class="dashboard-section-tags"><span class="dashboard-section-tag">Güncellendi ${esc(d(overview.generatedAt))}</span></div>
             </div>
             <div class="dashboard-status${dashboardPartial?' is-partial':''}">${dashboardPartial?'Bazı kaynaklara ulaşılamadı; erişilebilen veriler bağımsız olarak gösteriliyor.':'Tüm özet kaynakları güncel ve okunabilir durumda.'}</div>
             <div class="overview-grid" style="margin-top:12px">
@@ -2390,21 +2435,23 @@
           <section class="dashboard-panel">
             <div class="dashboard-section-head">
               <div><h3>Sistem Sağlığı</h3><p>En kritik servis göstergeleri tek bakışta.</p></div>
-              <span class="dashboard-section-tag">Son 60 dakika</span>
+              <div class="dashboard-section-tags"><span class="dashboard-section-tag">Pencere · 60 dakika</span><span class="dashboard-section-tag">Güncellendi ${esc(d(overview.generatedAt))}</span></div>
             </div>
+            <div class="dashboard-status ${overallHealth.className}"><span class="status-dot ${healthDotClass(overallHealth.state)}" aria-hidden="true" style="display:inline-block;margin-right:8px"></span>${esc(overallHealth.label)}</div>
             <div class="health-grid">
-              ${healthCard('API P95',p95Value,`${Number(performance.total_requests||0)} istek · ${errorValue}`,performanceState)}
-              ${healthCard('Push Teslimatı',pushRate,`${Number(pushHealth.sentCount||0)} gönderim · ${Number(pushHealth.failureCount||0)} hata`,pushState)}
-              ${healthCard('Firebase',pushDiagnosticsResult.status==='fulfilled'?(firebase.enabled?'Aktif':'Kapalı'):'Kullanılamıyor',`Proje: ${firebase.projectId||'-'} · Aktif cihaz: ${Number(devices.activeCount||0)}`,firebaseState)}
+              ${healthCard('API P95',p95Signal.value,p95Signal.meta,p95Signal.state)}
+              ${healthCard('API Hata Oranı',errorSignal.value,errorSignal.meta,errorSignal.state)}
+              ${healthCard('Push Teslimatı',pushRate,pushMeta,pushState)}
+              ${healthCard('Firebase',pushDiagnosticsResult.status==='fulfilled'?(firebase.enabled?'Aktif':'Kapalı'):'Kullanılamıyor',pushDiagnosticsResult.status==='fulfilled'?`${Number(devices.activeCount||0)} aktif cihaz · Son teşhis ${d(pushDiagnostics.generatedAt||overview.generatedAt)}`:'Teşhis servisi yanıt vermedi',firebaseState)}
             </div>
-            <div class="dashboard-technical">http_request_metrics_minute | Son 60 dakika · push_delivery_logs | Son 60 dakika<br>${esc(performanceThresholdText)}</div>
+            <details class="dashboard-technical"><summary>Sağlık eşikleri ve teknik kaynaklar</summary><div class="dashboard-technical-grid"><div>${esc(performanceThresholdText)}</div><div><strong>API kaynağı:</strong> http_request_metrics_minute</div><div><strong>Push kaynağı:</strong> push_delivery_logs</div><div><strong>Veri tazeliği:</strong> ${esc(performance?.data_state||'bilinmiyor')}</div></div></details>
           </section>
 
           <div class="dashboard-detail-grid">
             <section class="dashboard-panel">
               <div class="dashboard-section-head">
                 <div><h3>Push Teslimatı</h3><p>Gönderim başarısı, cihaz sağlığı ve hata özeti.</p></div>
-                <span class="dashboard-section-tag">24 saat</span>
+                <div class="dashboard-section-tags"><span class="dashboard-section-tag">Pencere · 24 saat</span><span class="dashboard-section-tag">Güncellendi ${esc(d(pushDiagnostics.generatedAt||overview.generatedAt))}</span></div>
               </div>
               <div class="push-summary">
                 <div><span>Gönderilen</span><strong>${Number(logs.sentCount||0)}</strong></div>
@@ -2427,22 +2474,23 @@
             <section class="dashboard-panel">
               <div class="dashboard-section-head">
                 <div><h3>Kullanıcı Aktivitesi</h3><p>Gerçek kimlikli arama ve eşleşme sonuçları.</p></div>
-                <span class="dashboard-section-tag">Son 24 saat</span>
+                <div class="dashboard-section-tags"><span class="dashboard-section-tag">Pencere · 24 saat</span><span class="dashboard-section-tag">Güncellendi ${esc(d(overview.generatedAt))}</span></div>
               </div>
               <div class="activity-pair">
                 <article class="health-card"><div class="health-title">Aramalar</div><div class="activity-value">${esc(saleMetricValue(searches24h))}</div><div class="health-meta">${esc(saleMetricMeta(searches24h))}</div></article>
                 <article class="health-card"><div class="health-title">Eşleşmeler</div><div class="activity-value">${esc(saleMetricValue(matches24h))}</div><div class="health-meta">${esc(saleMetricMeta(matches24h))}</div></article>
               </div>
-              <div class="dashboard-technical">Gerçek sıfır 0 olarak gösterilir. Kimliksiz eski kayıtlar “Veri yetersiz”, kaynak hataları “Kullanılamıyor” durumundadır.</div>
+              <details class="dashboard-technical"><summary>Veri yorumlama ve teknik kaynaklar</summary><div class="dashboard-technical-grid"><div>Gerçek sıfır 0 olarak gösterilir. Kimliksiz eski kayıtlar “Veri yetersiz” durumundadır.</div><div><strong>Arama kaynağı:</strong> ${esc(searches24h.source||'-')}</div><div><strong>Eşleşme kaynağı:</strong> ${esc(matches24h.source||'-')}</div></div></details>
             </section>
           </div>
         </div>`;
+      return dashboardPartial?'partial':'success';
     }
 
     async function loadContent(){
       const c=document.getElementById('content'); c.innerHTML='<p style="padding:16px;color:#9aa8c0">Veri getiriliyor...</p>';
       try{
-        if(currentTab==='dashboard'){ await loadDashboardTab(); return; }
+        if(currentTab==='dashboard') return await loadDashboardTab();
         if(currentTab==='online_users'){ await loadOnlineUsersTab(); return; }
         if(currentTab==='legal'){ await loadLegalEditor(); return; }
         if(currentTab==='deletion_requests'){ await loadDeletionRequests(); return; }
@@ -2539,7 +2587,7 @@
         if(currentTab==='app_reports') h+=renderAppReportPagination(items.length);
         c.innerHTML=h;
         if(allowBulk) requestAnimationFrame(updateBulkSelectionUI);
-      }catch(e){ c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Veri yuklenemedi: ${esc(e.message||e)}</p>`; }
+      }catch(e){ c.innerHTML=`<p style="padding:16px;color:#ff6b7a">Veri yuklenemedi: ${esc(e.message||e)}</p>`; return 'error'; }
     }
 
     function openModal(title,body){document.getElementById('m_title').innerText=title;document.getElementById('m_body').innerHTML=body;document.getElementById('modal').style.display='flex';}

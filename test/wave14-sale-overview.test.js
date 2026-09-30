@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const {
     METRIC_STATES,
     buildSaleOverview,
@@ -73,8 +74,45 @@ test('dashboard consumes the minimal overview without default raw event or hourl
     assert.doesNotMatch(dashboard, /analytics\/timeseries|analytics\/recent|table-scroll/);
     assert.match(source, /metric\?\.state==='value'/);
     assert.match(source, /metric\?\.state==='no_data'/);
-    assert.match(source, /push_delivery_logs \| Son 60 dakika/);
-    assert.match(source, /http_request_metrics_minute \| Son 60 dakika/);
+    assert.match(dashboard, /Gönderim yok/);
+    assert.match(source, /Düşük örneklem/);
+    assert.match(dashboard, /Sağlık eşikleri ve teknik kaynaklar/);
+    assert.match(dashboard, /<details class="dashboard-technical">/);
+    assert.match(source, /refreshState==='partial'\?'Kısmi veri':'Güncellendi'/);
+    assert.match(dashboard, /return dashboardPartial\?'partial':'success'/);
+    const metricMetaStart = source.indexOf('function saleMetricMeta(metric)');
+    const metricMetaEnd = source.indexOf('function setSaleMetric', metricMetaStart);
+    assert.doesNotMatch(source.slice(metricMetaStart, metricMetaEnd), /metric\?\.source/);
+});
+
+test('dashboard health presentation distinguishes no data, low confidence, stale and critical states', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+    const start = source.indexOf('function dashboardPerformanceSignal');
+    const end = source.indexOf('async function loadDashboardTab()', start);
+    const context = {};
+    vm.createContext(context);
+    vm.runInContext(`${source.slice(start, end)};this.dashboardPerformanceSignal=dashboardPerformanceSignal;this.dashboardOverallHealth=dashboardOverallHealth;`, context);
+    const noData = context.dashboardPerformanceSignal({ data_state: 'no_data', total_requests: 0 }, 'fulfilled', 'p95');
+    assert.equal(noData.value, 'İstek yok');
+    assert.equal(noData.state, 'unknown');
+    const low = context.dashboardPerformanceSignal({ data_state: 'fresh', total_requests: 4, confidence: 'low', sample_count: 4, thresholds: { minimum_percentile_samples: 20 } }, 'fulfilled', 'p95');
+    assert.equal(low.value, 'Düşük örneklem');
+    assert.equal(low.state, 'unknown');
+    const stale = context.dashboardPerformanceSignal({ data_state: 'stale', total_requests: 40, confidence: 'sufficient', error_rate: 0.5, thresholds: { error_warning_rate: 2, error_critical_rate: 5 } }, 'fulfilled', 'error');
+    assert.equal(stale.state, 'warn');
+    assert.match(stale.meta, /güncel değil/);
+    assert.equal(context.dashboardOverallHealth(['ok', 'bad', 'unknown'], false).state, 'bad');
+    assert.equal(context.dashboardOverallHealth(['ok', 'unknown'], false).state, 'unknown');
+});
+
+test('push health contract uses explicit no-data instead of a fake zero-percent rate', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'admin.js'), 'utf8');
+    const start = source.indexOf("router.get('/push/health'");
+    const end = source.indexOf("router.get('/push/diagnostics'", start);
+    const route = source.slice(start, end);
+    assert.match(route, /successRate = totalOut > 0[^;]+: null/);
+    assert.match(route, /state: totalOut > 0 \? 'value' : 'no_data'/);
+    assert.match(route, /generatedAt: new Date\(\)\.toISOString\(\)/);
 });
 
 test('admin shell uses one responsive icon navigation and one dashboard hierarchy', () => {
@@ -102,7 +140,8 @@ test('admin shell uses one responsive icon navigation and one dashboard hierarch
     assert.match(dashboard, /Sistem Sağlığı/);
     assert.match(dashboard, /Push Teslimatı/);
     assert.match(dashboard, /Kullanıcı Aktivitesi/);
-    assert.match(dashboard, /performance\.evaluation/);
-    assert.match(dashboard, /performance\.thresholds\?\.p95_warning_ms/);
+    assert.match(dashboard, /performance\?\.data_state/);
+    assert.match(source, /performance\?\.thresholds\?\.p95_warning_ms/);
+    assert.equal((dashboard.match(/healthCard\('/g) || []).length, 4);
     assert.doesNotMatch(dashboard, /Satis Ozeti|Wave 14 minimal/);
 });

@@ -83,7 +83,7 @@ Bildirimler ve Yasal Metinler aynı besteci kabuğunu kullanacak: içerik, kapsa
 | Kod | Ekran | Güncel ana sorun | Hedef kalıp | Öncelik |
 |---|---|---|---|---:|
 | ADM2-00 | Ortak içerik sistemi | Yeni kabuk içinde eski panel/table/form dili | Ortak section, card, filter, table, drawer, state sistemi | P0 |
-| ADM2-01 | Genel Bakış | Teknik kaynak adları ve düşük örneklem dili hâlâ fazla ham | Yönetici dili + açılır teknik kanıt | P1 |
+| ADM2-01 | Genel Bakış | Teknik kaynak adları ve düşük örneklem dili hâlâ fazla ham | Yönetici dili + açılır teknik kanıt — uygulandı ve doğrulandı | P1 |
 | ADM2-02 | Profiller | Filtre zayıf, platform pill'i gereksiz uzuyor, durum/konum teknik | Tarama odaklı liste + detay drawer | P0 |
 | ADM2-03 | Profil Detayı | Etiket/değer birleşiyor, uzun modal, ham oturum/cihaz verisi | Sekmeli responsive drawer | P0 |
 | ADM2-04 | Kullanıcı Raporları | Ham enumlar ve doğrudan üç yaptırım butonu | Vaka kuyruğu + güvenli yaptırım akışı — uygulandı ve doğrulandı | P0 |
@@ -95,13 +95,13 @@ Bildirimler ve Yasal Metinler aynı besteci kabuğunu kullanacak: içerik, kapsa
 | ADM2-10 | Performans | Ham durum satırı ve dakika dakika tablo | Sağlık özeti + grafik + route kanıtı — uygulandı ve doğrulandı | P1 |
 | ADM2-11 | Davranış Analitiği | KPI/funnel tekrar ediyor, dev sıfır tabloları ve raw JSON | Yolculuk/funnel + sapma + kanıt — uygulandı ve doğrulandı | P1 |
 | ADM2-12 | Audit Log | Ham action/entity/payload ve UUID duvarı | İnsan dili aktivite akışı + açılır kanıt — uygulandı ve doğrulandı | P0 |
-| ADM2-13 | Yasal Metinler | Tek dev canlı form, taslak/yayın/diff yok | Belge yayın merkezi | P1 + backend |
+| ADM2-13 | Yasal Metinler | Tek dev canlı form, taslak/yayın/diff yok | Belge yayın merkezi — uygulandı ve doğrulandı | P1 + backend |
 
 ---
 
 ## ADM2-00 — Ortak içerik sistemi
 
-- **Durum:** Ortak temel uygulandı; kalan ekranlar paket sırasıyla bu sisteme taşınacak
+- **Durum:** Uygulandı ve paketler arası regresyonla doğrulandı
 - **Öncelik:** P0
 - **Kapsam:** Bütün ekranlar
 
@@ -126,7 +126,7 @@ Topbar ve sidebar tutarlı olsa da içerik alanında aynı amaç için farklı b
 
 ## ADM2-01 — Genel Bakış son cilası
 
-- **Durum:** Kısmen tamam
+- **Durum:** Uygulandı ve doğrulandı
 - **Öncelik:** P1
 
 ### Canlı bulgu
@@ -387,7 +387,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 6. [x] **Paket F — ADM2-08 Bildirim bestecisi:** önce mevcut sözleşmeyle görsel temel, sonra onaylı backend hedef/dil işi.
 7. [x] **Paket F2 — ADM2-08 Çok dilli hedefli teslimat:** zorunlu TR/EN varyantları, `all/online/mobile` hedefleri, kesin alıcı önizlemesi, locale/fallback sonuçları ve güvenli eski-plan geçişi.
 8. [x] **Paket G — ADM2-13 Yasal yayın merkezi:** backend taslak/yayın modeliyle birlikte.
-9. [ ] **Paket H — ADM2-01 Genel Bakış cilası ve tam regresyon:** teknik kaynak dili, no-data ve son görsel bütünlük.
+9. [x] **Paket H — ADM2-01 Genel Bakış cilası ve tam regresyon:** teknik kaynak dili, no-data ve son görsel bütünlük.
 
 ### Uygulama kaydı — Paket A + Paket B
 
@@ -455,6 +455,15 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 - Editör karakter sayaçları, kaydedilmemiş değişiklik uyarısı, düz metin TR/EN son kullanıcı önizlemesi, yayın farkı ve etki özeti ile geçmiş kanıt görünümünü içerir.
 - Doğrulama: masaüstü ve 320×720 mobil görsel inceleme, sıfır yatay taşma, temiz tarayıcı konsolu, `121/121` tam test ve `69/69` kritik test. Deploy sonrası public Web/Android eşitliği manuel kapanışta doğrulanacaktır.
 
+### Uygulama kaydı — Paket H
+
+- Genel Bakış kartlarının ana yüzeyinden tablo, registry ve proje kimliği gibi implementasyon ayrıntıları çıkarıldı; bunlar varsayılan kapalı teknik kanıt alanlarına taşındı.
+- Sistem sağlığı API P95, API hata oranı, push teslimatı ve Firebase olarak dört ayrı karta ayrıldı. Toplu durum artık gerçek eşiklerden ve kaynak okunabilirliğinden türetiliyor; koşulsuz yeşil durum kullanılmıyor.
+- Push denemesi olmayan pencerede yanıltıcı `%0.0` yerine `Gönderim yok` gösteriliyor. Endpoint bu durumu `successRate: null` ve `state: no_data` sözleşmesiyle açıkça bildiriyor.
+- Veri yok, düşük örneklem, stale/kısmi veri, servis hatası, uyarı ve kritik durumları birbirinden ayrıldı; zaman penceresi ile güncellenme zamanı aynı başlık etiketi sistemine alındı.
+- Üst yenileme eylemi yükleniyor, başarı ve hata geri bildirimi verir; aynı anda ikinci yenilemeyi engeller.
+- Doğrulama: masaüstü ve 390×844 mobil görsel inceleme, sıfır yatay taşma, teknik kanıtların varsayılan kapalı olması, temiz tarayıcı konsolu, `123/123` tam test ve `69/69` kritik test. Deploy sonrası canlı endpoint değer karşılaştırması manuel kapanışta doğrulanacaktır.
+
 ## Paket sınırları
 
 - Her paket kendi otomatik testini ve masaüstü/mobil görsel QA'ini tamamlamadan sonraki pakete geçmez.
@@ -464,7 +473,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Otomatik doğrulama
 
-- [x] `npm test` tam geçer. (`121/121`)
+- [x] `npm test` tam geçer. (`123/123`)
 - [x] `npm run quality:all` geçer. (kritik paket `69/69`; yüksek/kritik güvenlik kaydı yok)
 - [x] Admin HTML kaynak/regresyon testleri ortak drawer/state/table sözleşmesini ve moderasyon onay akışını korur.
 - [x] Ham enum/JSON/teknik kaynak adlarının ana yüzeye sızmasını yakalayan testler vardır.
@@ -519,7 +528,7 @@ Bu sıra, dashboard'a dokunmadan kalan ekranları aynı kalite seviyesine taşı
 
 ## Kapanış
 
-- **İnceleme sonucu:** Kabuk ve dashboard korunacak; kalan ekranların tamamı ortak veri, detay, vaka, besteci ve kanıt kalıplarıyla yeniden ele alınmalı.
-- **İlk uygulanacak paket:** Paket A — ADM2-00 ortak içerik sistemi.
-- **İlk görünür ürün paketi:** Paket B — Profiller ve Profil Detayı.
-- **Deploy kararı:** Bu dosya planlama/inceleme çıktısıdır; ürün kodu değiştirilmedi.
+- **Uygulama sonucu:** Paket A–H tamamlandı; bütün admin ekranları ortak veri, detay, vaka, besteci ve kanıt kalıplarına taşındı.
+- **Otomatik kapanış:** Tam ve kritik test paketleri geçti; Paket H ile Genel Bakışın durum/no-data dili ve son görsel bütünlüğü kapatıldı.
+- **Yerel görsel kapanış:** Masaüstü ve dar ekran kontrolleri, yatay taşma ve tarayıcı konsolu doğrulamaları temiz geçti.
+- **Deploy sonrası kalan:** Canlı endpoint değer karşılaştırması ile yasal public Web/Android eşitliği hızlı manuel smoke turunda doğrulanacak.
