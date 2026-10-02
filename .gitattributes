@@ -1,0 +1,6 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Internal planning and admin visual review evidence are not part of buyer source exports.
+Plans/ export-ignore
+docs/admin-panel-reviews/ export-ignore
