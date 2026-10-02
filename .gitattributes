@@ -1,6 +1,12 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 
-# Internal planning and admin visual review evidence are not part of buyer source exports.
+# Buyer source exports contain the runnable product source, not internal
+# engineering history, review evidence, CI gates, or regression suites.
+.gitattributes export-ignore
+.github/ export-ignore
 Plans/ export-ignore
-docs/admin-panel-reviews/ export-ignore
+docs/ export-ignore
+test/ export-ignore
+test_auth_flow.js export-ignore
+scripts/quality-gate.mjs export-ignore

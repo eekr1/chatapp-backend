@@ -30,13 +30,7 @@ Başlatmadan önce `.env` içindeki `DATABASE_URL`, CORS ve güçlü admin değe
 
 Production deploy sonrasında önce `live`, ardından `ready` kontrol edilir.
 
-## Kalite kapısı
-
-```powershell
-npm run quality:all
-```
-
-Bu akış politika öz testi, JavaScript syntax taraması, çekirdek ve kritik testler ile yüksek önem düzeyindeki production dependency audit adımlarını çalıştırır. Testler canlı PostgreSQL, Firebase veya Brevo hedefine bağlanmaz.
+Satış öncesi test ve kabul kanıtları kaynak arşivinden ayrı olarak due-diligence dosyalarında tutulur.
 
 ## Veritabanı ve migration
 
@@ -69,12 +63,11 @@ Firebase için Render'da JSON veya Base64 ortam değişkeni tercih edilir. `fire
 - `utils/`: güvenlik, push, lifecycle, analitik ve operasyon servisleri
 - `migrations/`: migration runner ve migration dosyaları
 - `admin.html`, `admin.js`: yönetim paneli
-- `test/`: kontrat ve regresyon testleri
-- `docs/`: deploy, backup, lifecycle ve kalite runbook'ları
+- `public/`: yönetim paneli ve statik varlıklar
 
 ## Deploy
 
-Canonical release branch `sale-release` dalıdır. Render web service için build adımı `npm ci`, start komutu `npm start` olarak yapılandırılır. Sağlayıcı ortam değişkenleri repository dışında tutulur. Ayrıntılı gate, rollback ve gözlem sırası için `docs/WAVE04_DEPLOY_RUNBOOK.md` izlenir.
+Canonical release branch `sale-release` dalıdır. Render web service için build adımı `npm ci`, start komutu `npm start` olarak yapılandırılır. Sağlayıcı ortam değişkenleri repository dışında tutulur. Deploy sonrasında `/health/live` ve ardından `/health/ready` kontrol edilir.
 
 ## Güvenlik ve devir
 
@@ -84,3 +77,4 @@ Canonical release branch `sale-release` dalıdır. Render web service için buil
 - Kapanışta buyer-owned secretlar oluşturulur ve satıcının eski erişimleri kaldırılır.
 
 Doğrudan bağımlılık lisans özeti için `THIRD_PARTY_NOTICES.md` dosyasına bakın.
+Kaynak arşivinin kapsamı için `SOURCE_PACKAGE_NOTE.md` dosyasına bakın.
