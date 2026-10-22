@@ -7,6 +7,17 @@ const { createMigrationRunner, checksumMigration, validateMigrations } = require
 const { createHealthState, createLivenessPayload, createReadinessPayload } = require('../utils/health');
 const { resolveDatabaseRuntimeConfig, resolveReleaseIdentity } = require('../utils/runtimeConfig');
 const { buildPerformanceOverview, buildRouteImpact } = require('../utils/performanceContract');
+const { selectSuccessfulRun } = require('../ops/windows/poller.cjs');
+
+test('PC deploy accepts only a new successful push for the current release head', () => {
+    const head='a'.repeat(40), since=Date.parse('2026-10-22T12:00:00Z');
+    const valid={head_sha:head,head_branch:'sale-release',event:'push',conclusion:'success',head_repository:{full_name:'eekr1/chatapp-backend'},created_at:'2026-10-22T12:01:00Z'};
+    assert.equal(selectSuccessfulRun([valid],head,since),valid);
+    for(const override of [{event:'pull_request'},{conclusion:'failure'},{head_branch:'main'},{head_sha:'b'.repeat(40)},{head_repository:{full_name:'attacker/fork'}},{created_at:'2026-10-21T00:00:00Z'}]) {
+        assert.equal(selectSuccessfulRun([{...valid,...override}],head,since),undefined);
+    }
+    assert.equal(selectSuccessfulRun([],head,since),undefined);
+});
 
 const createFakeMigrationPool = ({ failSql = null, initialRows = [] } = {}) => {
     const calls = [];

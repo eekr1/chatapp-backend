@@ -8,4 +8,6 @@ Before starting: current encrypted backup and isolated restore rehearsal, matchi
 
 After cutover, `Deploy.ps1 -Commit <prepared-sha> -ExternalUrl https://api.talkx.chat` switches prepared releases and rolls back on local readiness/CORS/WS or external smoke failure. It does not roll back database schemas. Before using for upgrades, verify migration compatibility and prepare previous release.
 
-The approved future push workflow is GitHub-hosted CI followed by a restricted artifact poller. No self-hosted Actions runner is registered on the personal PC. Automatic deployment is not yet installed.
+`TalkXDeploy` is a LocalService poller. Every two minutes it checks the current `sale-release` head and a successful GitHub-hosted push CI run for that exact SHA, newer than its activation timestamp. It checks out that commit, installs locked production dependencies, verifies database readiness without migrations, switches the stopped service, and checks local readiness plus external HTTPS/CORS/WS. Failed candidates remain for operator inspection. No self-hosted Actions runner is registered on the personal PC.
+
+The poller requires an already healthy current backend and cannot perform the initial cutover. Credentials remain in `C:\TalkX\secrets`; its writable locations are releases, deploy state, logs, and the active-release pointer. Its service control permission applies only to TalkXBackend. Upgrades requiring migrations are stopped by candidate preflight.
