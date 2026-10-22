@@ -82,6 +82,7 @@ onSessionsRevoked((sessions, reason) => connectionRegistry.closeSessions(session
 
 const app = express();
 const port = process.env.PORT || 3000;
+const listenHost = String(process.env.HOST || '').trim() || undefined;
 const releaseIdentity = resolveReleaseIdentity(process.env);
 const realtimeConfig = resolveRealtimeRuntimeConfig(process.env);
 const healthState = createHealthState();
@@ -3843,7 +3844,7 @@ const startServer = async () => {
         assertMatchScopeTopology(realtimeConfig);
         await ensureTables();
         startNotificationScheduler();
-        server.listen(port, () => {
+        server.listen(port, listenHost, () => {
             stopMatchCountryBackfill = startMatchCountryBackfill({ pool, logger });
             console.log(`Backend running on ${port}`);
         });

@@ -1,0 +1,18 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
+const root = process.env.TALKX_HOME || 'C:\\TalkX';
+const release = fs.readFileSync(path.join(root, 'active-release.txt'), 'utf8').trim();
+if (!/^[a-f0-9]{40}$/.test(release)) throw new Error('Invalid active release');
+const cwd = path.join(root, 'releases', release);
+const dotenv = require(path.join(cwd, 'node_modules', 'dotenv'));
+const env = { ...process.env, ...dotenv.parse(fs.readFileSync(path.join(root, 'secrets', 'backend.env'))) };
+Object.assign(env, { HOST: '127.0.0.1', PORT: '3000', NODE_ENV: 'production', APP_ENV: 'production', COMMIT_SHA: release, REALTIME_TOPOLOGY: 'single', INSTANCE_ID: 'talkx-pc', TRUST_CLOUDFLARE_TUNNEL: 'true', TRUST_PROXY_HOPS: '0' });
+env.DB_POOL_MAX ||= '5';
+delete env.RENDER_GIT_COMMIT;
+delete env.RENDER_INSTANCE_ID;
+const child = spawn(process.execPath, ['index.js'], { cwd, env, stdio: 'inherit', windowsHide: true });
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => child.kill(signal));
+child.on('error', () => process.exit(1));
+child.on('exit', code => process.exit(code ?? 1));

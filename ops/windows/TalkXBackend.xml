@@ -1,0 +1,16 @@
+<service>
+  <id>TalkXBackend</id>
+  <name>TalkX Backend</name>
+  <description>TalkX localhost Node.js backend; published through Cloudflare Tunnel.</description>
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>"C:\TalkX\ops\launch.cjs"</arguments>
+  <workingdirectory>C:\TalkX</workingdirectory>
+  <serviceaccount><username>NT AUTHORITY\LocalService</username></serviceaccount>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <onfailure action="restart" delay="10 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>15 sec</stoptimeout>
+  <logpath>C:\TalkX\logs</logpath>
+  <log mode="roll-by-size"><sizeThreshold>10240</sizeThreshold><keepFiles>5</keepFiles></log>
+</service>

@@ -19,6 +19,10 @@ const getTrustedProxyHops = (env = process.env) => {
 
 const resolveClientIp = (req, env = process.env) => {
     const socketIp = normalizeIp(req?.socket?.remoteAddress || req?.connection?.remoteAddress || req?.ip);
+    // Tunnel headers are trusted only when the connector is the loopback peer.
+    if (env.TRUST_CLOUDFLARE_TUNNEL === 'true' && ['127.0.0.1', '::1'].includes(socketIp)) {
+        return normalizeIp(req?.headers?.['cf-connecting-ip']) || socketIp;
+    }
     const hops = getTrustedProxyHops(env);
     if (hops <= 0) return socketIp;
     const forwarded = String(req?.headers?.['x-forwarded-for'] || '')

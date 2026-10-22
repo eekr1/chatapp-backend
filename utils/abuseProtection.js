@@ -1,11 +1,12 @@
 const crypto = require('crypto');
+const { resolveClientIp } = require('./clientIp');
 
 const hashKey = (kind, value) => crypto.createHash('sha256')
     .update(`${kind}:${String(value || 'unknown')}`)
     .digest('hex')
     .slice(0, 24);
 
-const resolvePeerAddress = (req) => String(req?.socket?.remoteAddress || req?.ip || 'unknown').trim().slice(0, 120);
+const resolvePeerAddress = (req) => String(resolveClientIp(req) || 'unknown').trim().slice(0, 120);
 
 class BoundedRateLimiter {
     constructor({ windowMs, max, maxKeys = 10000, now = () => Date.now() }) {

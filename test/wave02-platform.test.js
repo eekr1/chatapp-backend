@@ -14,6 +14,16 @@ const {
 } = require('../utils/sessionService');
 const { ConnectionRegistry, PHASES, normalizeClientContext, safeSend } = require('../utils/socketSecurity');
 const { capabilityFor, parseBasicAuth, safeEqual } = require('../utils/adminSecurity');
+const { resolveClientIp } = require('../utils/clientIp');
+
+test('Cloudflare Tunnel client IP requires an enabled loopback peer', () => {
+    const env = { TRUST_CLOUDFLARE_TUNNEL: 'true', TRUST_PROXY_HOPS: '0' };
+    const req = { socket: { remoteAddress: '::ffff:127.0.0.1' }, headers: { 'cf-connecting-ip': '203.0.113.9' } };
+    assert.equal(resolveClientIp(req, env), '203.0.113.9');
+    assert.equal(resolveClientIp({ ...req, socket: { remoteAddress: '192.168.1.10' } }, env), '192.168.1.10');
+    assert.equal(resolveClientIp(req, { TRUST_PROXY_HOPS: '0' }), '127.0.0.1');
+    assert.equal(resolveClientIp({ ...req, headers: { 'cf-connecting-ip': 'invalid' } }, env), '127.0.0.1');
+});
 
 test('canonical API error keeps legacy aliases and retry metadata', () => {
     const body = buildErrorEnvelope({
