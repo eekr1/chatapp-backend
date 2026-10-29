@@ -46,14 +46,16 @@ const EVENT_SCHEMAS = {
         protocolVersion: optional((value) => value === 1),
         searchId: optional(isUuid),
         commandId: optional(isUuid),
-        scope: optional((value) => value === 'GLOBAL' || value === 'COUNTRY')
+        scope: optional((value) => value === 'GLOBAL' || value === 'COUNTRY'),
+        identityMode: optional((value) => value === 'anon' || value === 'profile')
     },
     changeMatchScope: {
         protocolVersion: field((value) => value === 1),
         fromSearchId: field(isUuid),
         searchId: field(isUuid),
         commandId: field(isUuid),
-        scope: field((value) => value === 'GLOBAL' || value === 'COUNTRY')
+        scope: field((value) => value === 'GLOBAL' || value === 'COUNTRY'),
+        identityMode: optional((value) => value === 'anon' || value === 'profile')
     },
     countryFallbackAction: {
         protocolVersion: field((value) => value === 1),

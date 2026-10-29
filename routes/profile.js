@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { getProfileSummary } = require('../utils/mobileReadModels');
 const { pool } = require('../db');
 const { comparePassword, hashPassword } = require('../utils/security');
 const { authenticate, revokeAllForUser } = require('../utils/sessionService');
@@ -34,6 +35,11 @@ const requireLegalAcceptance = async (req, res, next) => {
 };
 
 // GET /me - Get own profile
+router.get('/me/summary', authenticate, async (req, res) => {
+    try { return res.json({ success:true, summary:await getProfileSummary(pool, req.user.user_id) }); }
+    catch { return sendApiError(req, res, 500, 'SERVER_ERROR'); }
+});
+
 router.get('/me', authenticate, async (req, res) => {
     try {
         const result = await pool.query(
@@ -184,7 +190,7 @@ router.put('/me/profile', authenticate, requireLegalAcceptance, async (req, res)
         const values = [
             display_name || null,
             avatar_url || null,
-            bio || null,
+            bio === undefined ? null : bio,
             tags ? JSON.stringify(tags) : null,
             normalizedLocale || null,
             req.user.user_id

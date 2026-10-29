@@ -1,5 +1,6 @@
 ﻿const express = require('express');
 const router = express.Router();
+const { listConversations, markConversationMessageRead } = require('../utils/mobileReadModels');
 const { pool } = require('../db');
 const { calculateLegalStatus, legalStatusPayload } = require('../utils/legalAcceptance');
 const { sendApiError } = require('../utils/i18n');
@@ -24,6 +25,14 @@ router.use(authenticate);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
 
+// Acknowledge only the exact incoming message shown in this user's active chat.
+router.post('/read', async (req, res) => {
+    const { target_user_id: peerId, message_id: messageId } = req.body || {};
+    if (!isUuid(peerId) || !isUuid(messageId) || peerId === req.user.user_id) return sendApiError(req, res, 400, 'INVALID_INPUT');
+    try { return res.json({ success:true, updated:await markConversationMessageRead(pool, req.user.user_id, peerId, messageId) }); }
+    catch { return sendApiError(req, res, 500, 'SERVER_ERROR'); }
+});
+
 const removeFriendshipAndConversation = async (db, userAId, userBId) => {
     await db.query(`
         DELETE FROM friendships
@@ -42,16 +51,19 @@ const removeFriendshipAndConversation = async (db, userAId, userBId) => {
 
 // Send Friend Request
 router.post('/request', async (req, res) => {
-    const { target_username } = req.body;
+    const { target_username, target_user_id } = req.body;
     const cleanTargetUsername = typeof target_username === 'string' ? target_username.trim().toLowerCase() : '';
-    if (cleanTargetUsername.length < 3 || cleanTargetUsername.length > 32 || !/^[a-z0-9_]+$/.test(cleanTargetUsername)) {
+    const targetId = typeof target_user_id === 'string' && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(target_user_id) ? target_user_id : null;
+    if ((target_user_id !== undefined && !targetId) || (targetId && target_username !== undefined) || (!targetId && (cleanTargetUsername.length < 3 || cleanTargetUsername.length > 32 || !/^[a-z0-9_]+$/.test(cleanTargetUsername)))) {
         return sendApiError(req, res, 400, 'INVALID_INPUT');
     }
 
     const myId = req.user.user_id;
 
     try {
-        const targetRes = await pool.query('SELECT id FROM users WHERE username = $1', [cleanTargetUsername]);
+        const targetRes = targetId
+            ? await pool.query('SELECT id FROM users WHERE id = $1 AND status = $2', [targetId, 'active'])
+            : await pool.query('SELECT id FROM users WHERE username = $1', [cleanTargetUsername]);
         const target = targetRes.rows[0];
 
         if (!target) return sendApiError(req, res, 404, 'USER_NOT_FOUND');
@@ -116,6 +128,11 @@ router.post('/request', async (req, res) => {
 });
 
 // List Friends & Requests
+router.get('/conversations', async (req, res) => {
+    try { return res.json({ success: true, ...await listConversations(pool, req.user.user_id, { limit:req.query.limit, before:req.query.before, query:req.query.q }) }); }
+    catch (error) { return sendApiError(req, res, error.code === 'INVALID_INPUT' ? 400 : 500, error.code === 'INVALID_INPUT' ? 'INVALID_INPUT' : 'SERVER_ERROR'); }
+});
+
 router.get('/list', async (req, res) => {
     const myId = req.user.user_id;
     try {

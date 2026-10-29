@@ -1,3 +1,4 @@
+const { publicMatchIdentity } = require('./matchIdentity');
 const rebindTransientParticipant = ({
     previousConnectionId, connectionId, ws, waitingQueue,
     pendingMatches, userPendingMatchMap, rooms, userRoomMap
@@ -50,6 +51,7 @@ const resolveTransientSnapshot = ({
         phase: queueEntry.phase || 'queued',
         searchRevision: queueEntry.searchRevision || 1,
         requestedScope: queueEntry.requestedScope || 'GLOBAL',
+        identityMode: queueEntry.identityMode,
         effectiveMatchScope: queueEntry.effectiveMatchScope || 'GLOBAL',
         country: queueEntry.country || null,
         scopePolicyVersion: queueEntry.scopePolicyVersion || 'match-country-v1',
@@ -82,7 +84,10 @@ const resolveTransientSnapshot = ({
             autoAcceptAt: pending.autoAcceptAt,
             serverNow: new Date().toISOString(),
             timeoutMs: pending.timeoutMs,
-            peerPublicLabel: String(peer?.username || peer?.nickname || '').trim().slice(0, 40) || 'Anonymous'
+            identityMode: participant?.identityMode,
+            peerIdentityMode: publicMatchIdentity(peer).peerIdentityMode,
+            peerAvatar: publicMatchIdentity(peer).peerAvatar,
+            peerPublicLabel: String(publicMatchIdentity(peer).peerNickname || publicMatchIdentity(peer).peerUsername || 'Anonymous').slice(0, 80)
         };
     }
     const roomId = userRoomMap.get(connectionId);
@@ -91,8 +96,8 @@ const resolveTransientSnapshot = ({
         const peer = room.users.find((item) => item.clientId !== connectionId);
         return {
             kind: 'anonymous_room', roomId,
-            peerNickname: peer?.nickname || null,
-            peerUsername: peer?.username || null,
+            ...publicMatchIdentity(peer),
+            identityMode: room.users.find(item => item.clientId === connectionId)?.identityMode,
             peerId: peer?.dbUserId || null,
             peerConnection: peer && activeClients.has(peer.clientId) ? 'connected' : 'reconnecting'
         };

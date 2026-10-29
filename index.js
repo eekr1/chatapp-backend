@@ -42,6 +42,7 @@ const { createHealthState, createLivenessPayload, createReadinessPayload } = req
 const { RecoveryRegistry, buildRecoverySnapshot } = require('./utils/recoveryState');
 const { createPresenceService } = require('./utils/presenceService');
 const { onUserRuntimeTermination } = require('./utils/userRuntimeTermination');
+const { publicMatchIdentity, resolveSearchIdentity } = require('./utils/matchIdentity');
 const { rebindTransientParticipant, resolveTransientSnapshot } = require('./utils/transientRecovery');
 const { createSearchLifecycle } = require('./utils/searchLifecycle');
 const {
@@ -1602,8 +1603,8 @@ const removeFromQueue = (clientId) => {
 const createRoom = (roomId, conversationId, userA, userB, matchId = null, trigger = 'manual') => {
     rooms.set(roomId, {
         users: [
-            { clientId: userA.clientId, nickname: userA.nickname, username: userA.username, dbUserId: userA.dbUserId },
-            { clientId: userB.clientId, nickname: userB.nickname, username: userB.username, dbUserId: userB.dbUserId }
+            { clientId: userA.clientId, nickname: userA.nickname, username: userA.username, dbUserId: userA.dbUserId, identityMode: userA.identityMode, publicProfile: userA.publicProfile },
+            { clientId: userB.clientId, nickname: userB.nickname, username: userB.username, dbUserId: userB.dbUserId, identityMode: userB.identityMode, publicProfile: userB.publicProfile }
         ],
         sockets: {
             [userA.clientId]: userA.ws,
@@ -1616,8 +1617,8 @@ const createRoom = (roomId, conversationId, userA, userB, matchId = null, trigge
     userRoomMap.set(userA.clientId, roomId);
     userRoomMap.set(userB.clientId, roomId);
 
-    sendJson(userA.ws, { type: 'matched', matchId, roomId, searchId: userA.searchId, queueAttempt: userA.queueAttempt, searchRevision: userA.searchRevision, effectiveMatchScope: userA.effectiveMatchScope, country: userA.country, peerNickname: userB.nickname, peerUsername: userB.username, peerId: userB.dbUserId }); // V13: add peerId
-    sendJson(userB.ws, { type: 'matched', matchId, roomId, searchId: userB.searchId, queueAttempt: userB.queueAttempt, searchRevision: userB.searchRevision, effectiveMatchScope: userB.effectiveMatchScope, country: userB.country, peerNickname: userA.nickname, peerUsername: userA.username, peerId: userA.dbUserId });
+    sendJson(userA.ws, { type: 'matched', matchId, roomId, searchId: userA.searchId, queueAttempt: userA.queueAttempt, searchRevision: userA.searchRevision, effectiveMatchScope: userA.effectiveMatchScope, country: userA.country, ...publicMatchIdentity(userB), identityMode: userA.identityMode, peerId: userB.dbUserId }); // V13: add peerId
+    sendJson(userB.ws, { type: 'matched', matchId, roomId, searchId: userB.searchId, queueAttempt: userB.queueAttempt, searchRevision: userB.searchRevision, effectiveMatchScope: userB.effectiveMatchScope, country: userB.country, ...publicMatchIdentity(userA), identityMode: userB.identityMode, peerId: userA.dbUserId });
 
     trackBehaviorEvent({
         eventName: 'chat_started',
@@ -1795,7 +1796,8 @@ const finalizePendingMatchIfReady = (matchId, options = {}) => {
                 queueAttempt: participant.queueAttempt,
                 searchRevision: participant.searchRevision,
                 effectiveMatchScope: participant.effectiveMatchScope,
-                country: participant.country
+                country: participant.country,
+                identityMode: participant.identityMode, publicProfile: participant.publicProfile
             };
         }).filter(Boolean);
 
@@ -1882,6 +1884,7 @@ const createPendingMatch = (userA, userB) => {
                 clientId: userA.clientId,
                 ws: userA.ws,
                 nickname: userA.nickname,
+                identityMode: userA.identityMode, publicProfile: userA.publicProfile,
                 username: userA.username,
                 dbUserId: userA.dbUserId,
                 searchId: userAOffer.searchId,
@@ -1894,6 +1897,7 @@ const createPendingMatch = (userA, userB) => {
                 clientId: userB.clientId,
                 ws: userB.ws,
                 nickname: userB.nickname,
+                identityMode: userB.identityMode, publicProfile: userB.publicProfile,
                 username: userB.username,
                 dbUserId: userB.dbUserId,
                 searchId: userBOffer.searchId,
@@ -1911,9 +1915,10 @@ const createPendingMatch = (userA, userB) => {
     pending.users.forEach((participant) => {
         const peer = pending.users.find((u) => u.clientId !== participant.clientId);
         if (!peer || participant.ws.readyState !== WebSocket.OPEN) return;
-        const peerPublicLabel = String(peer.username || peer.nickname || '').trim().slice(0, 40) || 'Anonymous';
+        const peerIdentity = publicMatchIdentity(peer);
+        const peerPublicLabel = String(peerIdentity.peerNickname || peerIdentity.peerUsername || 'Anonymous').slice(0, 80);
         sendJson(participant.ws, pendingEvent(pending, participant, 'match_offer', {
-            peerPublicLabel,
+            peerPublicLabel, ...peerIdentity, identityMode: participant.identityMode,
             timeoutMs: MATCH_CONFIRM_TIMEOUT_MS
         }));
         trackBehaviorEvent({
@@ -2090,6 +2095,14 @@ const joinQueue = async (ws, options = {}) => {
         }
     }
 
+    if (scopeContext) {
+        const prior = searchLifecycle.getByConnection(ws.clientId);
+        try {
+            const identity = await resolveSearchIdentity({ pool, userId: clientData.dbUserId, mode: options.identityMode || prior?.identityMode, legacyNickname: clientData.nickname, legacyUsername: clientData.username });
+            scopeContext = { ...scopeContext, identityMode: identity.identityMode, publicProfile: identity.publicProfile };
+        } catch { return sendJson(ws, { type: 'search_error', searchId: options.searchId, commandId: options.commandId, errorCode: 'PROFILE_UNAVAILABLE', retryable: true }); }
+    }
+
     let lifecycleResult;
     if (options.requeue) {
         const requeued = searchLifecycle.requeue({ connectionId: ws.clientId });
@@ -2203,6 +2216,7 @@ const joinQueue = async (ws, options = {}) => {
         clientId: ws.clientId,
         ws,
         nickname: clientData.nickname,
+        identityMode: searchRecord.identityMode, publicProfile: searchRecord.publicProfile,
         username: clientData.username, // V13: Pass username
         dbUserId: clientData.dbUserId,
         searchId: searchRecord.searchId,
@@ -2607,7 +2621,7 @@ wss.on('connection', (ws, req) => {
                 }
             });
 
-            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1', 'matchSearchLifecycleV1', 'matchScopesV1', 'pendingMatchV1'];
+            const capabilities = ['error-envelope-v1', 'session-revoke-v1', 'presence-v1', 'matchSearchLifecycleV1', 'matchScopesV1', 'pendingMatchV1', 'matchIdentityV1'];
             if (realtimeConfig.recoveryEnabled) capabilities.push('recovery-v1');
             let countryState = null;
             try {
@@ -2687,7 +2701,7 @@ wss.on('connection', (ws, req) => {
                     trigger: 'manual',
                     searchId: data.searchId,
                     commandId: data.commandId,
-                    scope: data.scope || 'GLOBAL'
+                    scope: data.scope || 'GLOBAL', identityMode: data.identityMode
                 });
                 break;
 
@@ -2706,7 +2720,7 @@ wss.on('connection', (ws, req) => {
                         replaceFrom: data.fromSearchId,
                         searchId: data.searchId,
                         commandId: data.commandId,
-                        scope: data.scope
+                        scope: data.scope, identityMode: data.identityMode
                     });
                     trackBehaviorEvent({
                         eventName: 'match_scope_change_result',
