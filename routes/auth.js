@@ -24,6 +24,7 @@ router.post('/register', async (req, res) => {
     const {
         username,
         password,
+        ageConfirmed,
         terms_accepted,
         terms_version,
         privacy_version,
@@ -48,6 +49,16 @@ router.post('/register', async (req, res) => {
     }
     if (terms_accepted !== true) {
         return sendApiError(req, res, 400, 'LEGAL_ACCEPT_REQUIRED');
+    }
+    // 18+ age confirmation gate with a transition period. When
+    // REQUIRE_AGE_CONFIRMATION is true the field is mandatory for every
+    // registration. When false (default), legacy clients that omit the field
+    // may still register, but any explicitly sent value that is not the strict
+    // boolean true is rejected with AGE_CONFIRMATION_REQUIRED.
+    const ageConfirmationRequired = String(process.env.REQUIRE_AGE_CONFIRMATION || '').trim().toLowerCase() === 'true';
+    const ageProvided = ageConfirmed !== undefined;
+    if ((ageConfirmationRequired || ageProvided) && ageConfirmed !== true) {
+        return sendApiError(req, res, 400, 'AGE_CONFIRMATION_REQUIRED');
     }
 
     const submittedTermsVersion = String(terms_version || '').trim();

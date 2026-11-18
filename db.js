@@ -965,6 +965,47 @@ const migrations = Object.freeze([
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `
+  }),
+  Object.freeze({
+    version: '011',
+    name: 'match_quota_and_ad_rewards',
+    sql: `
+      CREATE TABLE IF NOT EXISTS match_quota (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        welcome_remaining INTEGER NOT NULL DEFAULT 0 CHECK (welcome_remaining >= 0),
+        day_key TEXT NOT NULL,
+        daily_used INTEGER NOT NULL DEFAULT 0 CHECK (daily_used >= 0),
+        bonus_balance INTEGER NOT NULL DEFAULT 0 CHECK (bonus_balance >= 0),
+        ads_today INTEGER NOT NULL DEFAULT 0 CHECK (ads_today >= 0),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_match_quota_day_key
+        ON match_quota(day_key);
+
+      CREATE TABLE IF NOT EXISTS ad_reward_sessions (
+        nonce TEXT PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_ad_reward_sessions_user_created
+        ON ad_reward_sessions(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ad_reward_sessions_expiry
+        ON ad_reward_sessions(expires_at);
+
+      CREATE TABLE IF NOT EXISTS ad_reward_ledger (
+        id BIGSERIAL PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        transaction_id TEXT NOT NULL UNIQUE,
+        ad_unit TEXT,
+        reward_amount INTEGER NOT NULL DEFAULT 0 CHECK (reward_amount >= 0),
+        nonce TEXT REFERENCES ad_reward_sessions(nonce) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ad_reward_ledger_user_time
+        ON ad_reward_ledger(user_id, created_at DESC);
+    `
   })
 ]);
 

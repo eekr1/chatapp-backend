@@ -3,9 +3,19 @@ const fs=require('node:fs'),path=require('node:path');
 const {spawn}=require('node:child_process');
 const root='C:/TalkX', state=root+'/deploy', repo='eekr1/chatapp-backend';
 const headers={'User-Agent':'TalkX-PC-Deploy','Accept':'application/vnd.github+json'};
-let busy=false;
+const tokenPath=root+'/secrets/github-readonly.token';
+let busy=false,token;
+function readTokenFile(p){try{return fs.readFileSync(p,'utf8').trim()||null;}catch{return null;}}
+function getToken(){if(token===undefined)token=readTokenFile(tokenPath);return token;}
+// Pure helpers: build GitHub API headers and git process env from an optional token.
+// The token only travels in HTTP headers or process env (GIT_CONFIG_*), never in argv or logs.
+// A missing, empty or whitespace-only token means "anonymous": no Authorization header and
+// no git credentials are produced. The token is never read from disk here.
+function normalizeToken(token){return typeof token==='string'?token.trim():'';}
+function buildAuthHeaders(base,token){const h={...base};const t=normalizeToken(token);if(t)h.Authorization='Bearer '+t;return h;}
+function buildGitAuthEnv(token){const t=normalizeToken(token);if(!t)return{};const basic=Buffer.from('x-access-token:'+t,'utf8').toString('base64');return{GIT_CONFIG_COUNT:'1',GIT_CONFIG_KEY_0:'http.extraHeader',GIT_CONFIG_VALUE_0:'Authorization: Basic '+basic};}
 function selectSuccessfulRun(runs, head, notBefore){return runs?.find(r=>r.head_sha===head&&r.head_branch==='sale-release'&&r.event==='push'&&r.conclusion==='success'&&r.head_repository?.full_name===repo&&Date.parse(r.created_at)>=notBefore);}
-async function api(route){const r=await fetch('https://api.github.com/repos/'+repo+route,{headers,signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error('GitHub HTTP '+r.status);return r.json();}
+async function api(route){const r=await fetch('https://api.github.com/repos/'+repo+route,{headers:buildAuthHeaders(headers,getToken()),signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error('GitHub HTTP '+r.status);return r.json();}
 function run(exe,args,cwd,env=process.env){return new Promise((resolve,reject)=>{const p=spawn(exe,args,{cwd,env,windowsHide:true,stdio:'ignore'});p.once('error',reject);p.once('exit',c=>c===0?resolve():reject(new Error(path.basename(exe)+' failed')));});}
 async function ready(sha){for(let n=0;n<20;n++){try{const r=await fetch('http://127.0.0.1:3000/health/ready',{signal:AbortSignal.timeout(4000)});const d=await r.json();if(r.ok&&d.commitSha===sha)return;}catch{}await new Promise(r=>setTimeout(r,1500));}throw new Error('Readiness failed');}
 async function stopped(){for(let n=0;n<30;n++){const p=spawn('C:/Windows/System32/sc.exe',['query','TalkXBackend'],{windowsHide:true});let out='';p.stdout.on('data',b=>out+=b);await new Promise(r=>p.once('exit',r));if(out.includes('STOPPED'))return;await new Promise(r=>setTimeout(r,500));}throw new Error('Stop timeout');}
@@ -24,7 +34,7 @@ async function tick(){if(busy||!fs.existsSync(state+'/enabled'))return;busy=true
   const cwd=root+'/releases/'+sha;
   // Failed candidates are retained. Retry requires operator inspection.
   if(fs.existsSync(cwd))throw new Error('Candidate already exists; inspect it');
-  await run('C:/Program Files/Git/cmd/git.exe',['clone','--no-checkout','https://github.com/'+repo+'.git',cwd],state);
+  await run('C:/Program Files/Git/cmd/git.exe',['clone','--no-checkout','https://github.com/'+repo+'.git',cwd],state,{...process.env,...buildGitAuthEnv(getToken())});
   await run('C:/Program Files/Git/cmd/git.exe',['checkout','--detach',sha],cwd);
   await run('C:/Program Files/nodejs/node.exe',['C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js','ci','--omit=dev'],cwd);
   // Candidate must accept the existing database schema before any stop/switch.
@@ -42,4 +52,4 @@ async function tick(){if(busy||!fs.existsSync(state+'/enabled'))return;busy=true
  }finally{busy=false;}
 }
 if(require.main===module){tick();setInterval(tick,120000);}
-module.exports={selectSuccessfulRun};
+module.exports={selectSuccessfulRun,buildAuthHeaders,buildGitAuthEnv,readTokenFile};

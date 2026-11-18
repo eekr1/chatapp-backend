@@ -16,6 +16,7 @@ module.exports = {
         BAD_CREDENTIALS: 'Kullanici adi veya sifre hatali.',
         WEAK_PASSWORD: 'Sifre en az 6 karakter olmali.',
         LEGAL_ACCEPT_REQUIRED: 'Kayit icin kullanim sartlari ve gizlilik politikasi kabul edilmelidir.',
+        AGE_CONFIRMATION_REQUIRED: 'Kayıt için 18 yaşından büyük olduğunu onaylaman gerekiyor.',
         LEGAL_VERSION_MISMATCH: 'Sozlesme versiyonu guncel degil. Lutfen sayfayi yenileyip tekrar deneyin.',
         PROFILE_NAME_REQUIRED: 'Gorunen isim bos olamaz.',
         DELETE_CONFIRM_REQUIRED: 'Onay metni gecersiz.',
@@ -67,5 +68,6 @@ module.exports = {
     profile: {
         PASSWORD_UPDATED: 'Sifre guncellendi.',
         DELETE_REQUEST_RECEIVED: 'Silme talebiniz alindi.'
-    }
+    },
+    textFiltered: 'Güvenliğin için iletişim bilgileri ve hakaretler anonim sohbette gizlenir.'
 };

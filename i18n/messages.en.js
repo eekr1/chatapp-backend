@@ -16,6 +16,7 @@ module.exports = {
         BAD_CREDENTIALS: 'Invalid username or password.',
         WEAK_PASSWORD: 'Password must be at least 6 characters.',
         LEGAL_ACCEPT_REQUIRED: 'You must accept terms and privacy policy.',
+        AGE_CONFIRMATION_REQUIRED: 'You must confirm that you are 18 or older to create an account.',
         LEGAL_VERSION_MISMATCH: 'Legal version is outdated. Please refresh.',
         PROFILE_NAME_REQUIRED: 'Display name cannot be empty.',
         DELETE_CONFIRM_REQUIRED: 'Confirmation text is invalid.',
@@ -67,5 +68,6 @@ module.exports = {
     profile: {
         PASSWORD_UPDATED: 'Password updated.',
         DELETE_REQUEST_RECEIVED: 'Your deletion request has been received.'
-    }
+    },
+    textFiltered: 'For your safety, contact details and slurs are hidden in anonymous chat.'
 };

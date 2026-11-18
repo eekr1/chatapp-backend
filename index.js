@@ -13,12 +13,15 @@ const http = require('http');
 const { v4: uuidv4 } = require('uuid');
 const { pool, ensureTables, getDatabaseReadiness, closeDatabase } = require('./db');
 const { validateUsername } = require('./moderation');
+const { filterAnonMessage, isEnabled: isTextFilterEnabled } = require('./utils/textFilter');
 const adminRoutes = require('./admin');
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const friendsRoutes = require('./routes/friends');
 const pushRoutes = require('./routes/push');
 const supportRoutes = require('./routes/support');
+const adsRoutes = require('./routes/ads');
+const matchQuota = require('./utils/matchQuota');
 const { sendPushToTokens, getPushDiagnostics } = require('./utils/push');
 const { resolveDeliveryLocale, selectLocalizedPayload } = require('./utils/notificationLocale');
 const {
@@ -553,6 +556,7 @@ app.use('/friends', apiLimiter);
 app.use('/admin', adminRoutes);
 app.use('/auth', authRoutes);
 app.use('/api', profileRoutes); // Mounting profile under /api since it's logical API (e.g. /api/me)
+app.use('/api', adsRoutes); // /api/match-quota + /api/ads/* (quota & AdMob rewarded ads)
 app.use('/api/push', pushRoutes);
 app.use('/friends', friendsRoutes);
 app.use('/support', supportRoutes);
@@ -1849,6 +1853,22 @@ const finalizePendingMatchIfReady = (matchId, options = {}) => {
         createRoom(roomId, conversationId, participants[0], participants[1], matchId, trigger);
         clearPendingMatchById(matchId);
         participants.forEach((participant) => searchLifecycle.terminate(participant.clientId, 'matched'));
+        // Consume one match right per participant (best effort; a quota
+        // failure never breaks the established match).
+        try {
+            for (const participant of participants) {
+                const consumption = await matchQuota.consumeMatch(pool, participant.dbUserId);
+                if (consumption?.quota && participant.ws?.readyState === WebSocket.OPEN) {
+                    sendJson(participant.ws, { type: 'quota_update', quota: consumption.quota });
+                }
+            }
+        } catch (quotaError) {
+            console.error('match quota consumption failed (match preserved)', {
+                matchId,
+                code: quotaError?.code || null,
+                message: quotaError?.message || String(quotaError)
+            });
+        }
         trackBehaviorEvent({
             eventName: 'match_finalization_result',
             matchId,
@@ -2065,6 +2085,39 @@ const joinQueue = async (ws, options = {}) => {
     // Require nickname (V6)
     if (!clientData.nickname) {
         return sendError(ws, 'NO_NICKNAME');
+    }
+
+    // Match quota gate (applies to every queue entry incl. requeue; this only
+    // checks whether a right exists — consumption happens at match finalize).
+    // Remember the client's last search commandId: server-initiated requeues
+    // carry no commandId of their own, so quota errors there echo this one
+    // back (frontend accepts null when none was ever sent).
+    if (typeof options.commandId === 'string' && options.commandId.trim()) {
+        clientData.lastSearchCommandId = options.commandId.trim();
+    }
+    if (matchQuota.isEnabled()) {
+        try {
+            const eligibility = await matchQuota.canStartSearch(pool, clientData.dbUserId);
+            if (!eligibility.ok) {
+                return sendJson(ws, {
+                    type: 'search_error',
+                    protocolVersion: 1,
+                    searchId: options.searchId || null,
+                    commandId: options.commandId || clientData.lastSearchCommandId || null,
+                    errorCode: 'MATCH_QUOTA_EXHAUSTED',
+                    code: 'MATCH_QUOTA_EXHAUSTED',
+                    retryable: false,
+                    quota: eligibility.quota,
+                    serverNow: new Date().toISOString()
+                });
+            }
+        } catch (quotaError) {
+            console.error('match quota check failed', {
+                code: quotaError?.code || null,
+                message: quotaError?.message || String(quotaError)
+            });
+            return sendError(ws, 'SERVER_ERROR');
+        }
     }
 
     let scopeContext = null;
@@ -2405,6 +2458,13 @@ wss.on('connection', (ws, req) => {
     ws.limiter = new BoundedRateLimiter({ windowMs: RATE_LIMIT_WINDOW, max: RATE_LIMIT_MAX * 2, maxKeys: 2 });
     ws.prefLang = resolveLangFromHeaders(req.headers || {});
     connectionRegistry.connect(ws, ws.clientId);
+    ws.on('error', (error) => {
+        console.warn('ws connection error', {
+            clientId: ws.clientId,
+            code: error?.code || null,
+            message: error?.message || String(error)
+        });
+    });
     ws.on('pong', function onPong() {
         heartbeat.call(this);
         if (recoveryRegistry.isCurrentConnection(ws.clientId)) {
@@ -2417,7 +2477,9 @@ wss.on('connection', (ws, req) => {
     broadcastOnlineCount();
     sendJson(ws, { type: 'hello', clientId: ws.clientId });
 
-    ws.on('message', async (raw) => {
+    // Named handler so the wrapper below can catch async rejections without
+    // closing the socket: a single failing event must not kill the connection.
+    const handleWsMessage = async (raw) => {
         let data;
         try {
             data = JSON.parse(raw);
@@ -2569,6 +2631,11 @@ wss.on('connection', (ws, req) => {
                 : null;
             if (recovery.previousConnectionId) {
                 rebindTransientState(recovery.previousConnectionId, ws.clientId, ws);
+                // Carry the last search commandId across the rebind so
+                // server-initiated requeues can still echo it on quota errors.
+                if (previousClient?.lastSearchCommandId) {
+                    activeClients.get(ws.clientId).lastSearchCommandId = previousClient.lastSearchCommandId;
+                }
                 const reboundPending = getPendingMatchForClient(ws.clientId);
                 if (reboundPending && Date.now() >= reboundPending.pending.autoAcceptAt) {
                     const deadline = applyDeadline(reboundPending.pending);
@@ -2825,13 +2892,31 @@ wss.on('connection', (ws, req) => {
                     if (room) {
                         const peerObj = room.users.find(u => u.clientId !== ws.clientId);
                         if (peerObj && room.sockets[peerObj.clientId]) {
+                            // Anonymous room text filter: contact details and slurs are
+                            // masked before the message leaves this server.
+                            let anonText = data.text;
+                            if (isTextFilterEnabled()) {
+                                const filtered = filterAnonMessage(data.text);
+                                if (filtered.masked) {
+                                    anonText = filtered.text;
+                                    if (!ws.textFilterNoticeSent) {
+                                        ws.textFilterNoticeSent = true;
+                                        sendJson(ws, {
+                                            type: 'message_notice',
+                                            code: 'TEXT_FILTERED',
+                                            message: t(resolveWsLang(ws), 'textFiltered', {}, 'Contact details and slurs are hidden in anonymous chat.')
+                                        });
+                                    }
+                                }
+                            }
+
                             // Admin Log
                             if (adminRoutes.logToAdmin) {
                                 adminRoutes.logToAdmin({
                                     type: 'msg',
                                     from: clientData.nickname || 'User',
                                     to: peerObj.nickname || 'Peer',
-                                    content: data.text
+                                    content: anonText
                                 });
                             }
 
@@ -2839,7 +2924,7 @@ wss.on('connection', (ws, req) => {
                                 type: 'message',
                                 roomId,
                                 from: 'peer',
-                                text: data.text
+                                text: anonText
                             });
 
                             // Anonymous room messages are intentionally ephemeral.
@@ -3532,6 +3617,16 @@ wss.on('connection', (ws, req) => {
                 }
                 break;
         }
+    };
+
+    ws.on('message', (raw) => {
+        handleWsMessage(raw).catch((error) => {
+            console.error('ws message handler error', {
+                clientId: ws.clientId,
+                code: error?.code || null,
+                message: error?.message || String(error)
+            });
+        });
     });
 
     ws.on('close', (code, reasonBuffer) => {
@@ -3902,6 +3997,25 @@ const shutdown = (signal) => {
 
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
+
+// Process-level safety nets: a rejected promise must never kill the event
+// loop silently, and an uncaught exception goes through the existing graceful
+// shutdown flow (the process manager restarts the service afterwards).
+process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled promise rejection.', {
+        code: reason?.code || null,
+        message: reason?.message || String(reason)
+    });
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception; starting graceful shutdown.', {
+        code: error?.code || null,
+        message: error?.message || String(error),
+        stack: error?.stack || null
+    });
+    shutdown('uncaughtException');
+});
 
 startServer();
 
