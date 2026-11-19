@@ -30,7 +30,8 @@ const coreTests = [
   'wave12-legal-account.test.js',
   'wave13-locale-notification.test.js',
   'wave14-sale-overview.test.js',
-  'wave15-admin-operations.test.js'
+  'wave15-admin-operations.test.js',
+  'poller-migration.test.js'
 ];
 const criticalTests = [
   'mobile-redesign.test.js',

@@ -10,7 +10,15 @@ After cutover, `Deploy.ps1 -Commit <prepared-sha> -ExternalUrl https://api.talkx
 
 `TalkXDeploy` is a LocalService poller. Every two minutes it checks the current `sale-release` head and a successful GitHub-hosted push CI run for that exact SHA, newer than its activation timestamp. It checks out that commit, installs locked production dependencies, verifies database readiness without migrations, switches the stopped service, and checks local readiness plus external HTTPS/CORS/WS. Failed candidates remain for operator inspection. No self-hosted Actions runner is registered on the personal PC.
 
-The poller requires an already healthy current backend and cannot perform the initial cutover. Credentials remain in `C:\TalkX\secrets`; its writable locations are releases, deploy state, logs, and the active-release pointer. Its service control permission applies only to TalkXBackend. Upgrades requiring migrations are stopped by candidate preflight.
+The poller requires an already healthy current backend and cannot perform the initial cutover. Credentials remain in `C:\TalkX\secrets`; its writable locations are releases, deploy state, logs, and the active-release pointer. Its service control permission applies only to TalkXBackend.
+
+## Deploying versions with new migrations
+
+The poller handles forward-only (additive) database migrations automatically. The sequence is: clone/checkout/install → `migrate-candidate.cjs` (runs `scripts/migrate.js` with production env loaded from `C:\TalkX\secrets\backend.env`) → `preflight.cjs` (verifies the candidate accepts the migrated schema) → stop/switch/start.
+
+When checking the previous release's readiness, if `/health/ready` reports `MIGRATION_NOT_CURRENT` but the database migration head is *ahead* of what the old release expects (i.e., the new migration has already been applied), the poller treats this as acceptable and only requires `/health/live` to return 200.
+
+If a candidate fails at any stage, a `.candidate-failed` marker is written into the candidate directory. On the next tick, the poller skips candidates with this marker (operator inspection required). Candidates without the marker whose git HEAD matches the target SHA are resumed from the migration step onward, avoiding redundant clone/install.
 
 Production endpoint: `https://api.talkx.chat` (WebSocket `wss://api.talkx.chat`). Frontend stays on Render. Push to `sale-release` after local checks; successful GitHub CI makes the exact branch head eligible for the PC poller. A PC shutdown takes the backend offline; Windows service automatic start resumes it after boot. Do not resume the old Render matching backend concurrently.
 
